@@ -499,7 +499,7 @@
   .marquee:hover .string-svg .string, .string-svg .string.twang{ opacity:.95; }
 
   /* curseur médiator sur les marquees */
-  .cursor-pick{ display:none; position:absolute; top:50%; left:50%; width:30px; height:34px; transform: translate(-50%,-50%) rotate(-16deg); }
+  .cursor-pick{ display:none; position:absolute; top:50%; left:50%; width:30px; height:34px; transform: translate(-50%,-50%) rotate(-16deg); transition: transform .13s ease-out; }
   .cursor-pick path{ fill: var(--coral); stroke: #A8331F; stroke-width:2.5; }
   .cursor-ring.is-pick{ border-width: 0 !important; background: transparent !important; width:26px; height:26px; }
   .cursor-ring.is-pick .cursor-label{ display:none; }
@@ -1178,6 +1178,8 @@
   }
 
   /* corde de guitare : pincement + vibration amortie + son */
+  var pickEl = document.querySelector('.cursor-pick');
+  var pickTimeout = null;
   document.querySelectorAll('.marquee').forEach(function(m){
     var ns='http://www.w3.org/2000/svg';
     var svg=document.createElementNS(ns,'svg'); svg.setAttribute('class','string-svg'); svg.setAttribute('viewBox','0 0 1000 100'); svg.setAttribute('preserveAspectRatio','none'); svg.setAttribute('aria-hidden','true');
@@ -1185,7 +1187,7 @@
     svg.appendChild(path); m.appendChild(svg);
     var W=1000, mid=50, raf=null, lastX=0.5, lastStrength=0;
     var ring=document.querySelector('.cursor-ring');
-    m.addEventListener('pointerenter', function(){ if(ring) ring.classList.add('is-pick'); });
+    m.addEventListener('pointerenter', function(){ if(pickTimeout){ clearTimeout(pickTimeout); pickTimeout=null; } if(ring) ring.classList.add('is-pick'); });
     function draw(cx,cy){ path.setAttribute('d','M0,'+mid+' Q'+cx+','+cy+' '+W+','+mid); }
     function twang(startAmp){
       if(raf){ cancelAnimationFrame(raf); raf=null; }
@@ -1200,9 +1202,16 @@
       var cx=((e.clientX-r.left)/r.width)*W, cy=((e.clientY-r.top)/r.height)*100;
       lastX=cx/W; lastStrength=Math.min(1, Math.abs(cy-mid)/mid);
       draw(cx, mid+(cy-mid)*2);
+      // orientation du médiator selon le sens de grattage
+      var vx=e.movementX||0, vy=e.movementY||0;
+      if(pickEl && (vx*vx+vy*vy) > 4){
+        var deg=Math.atan2(vy,vx)*180/Math.PI - 90;
+        pickEl.style.transform='translate(-50%,-50%) rotate('+deg+'deg)';
+      }
     });
     m.addEventListener('pointerleave', function(){
-      if(ring) ring.classList.remove('is-pick');
+      if(pickTimeout) clearTimeout(pickTimeout);
+      pickTimeout=setTimeout(function(){ if(ring) ring.classList.remove('is-pick'); pickTimeout=null; }, 650);
       var mm=/Q([\d.\-]+),([\d.\-]+)/.exec(path.getAttribute('d'));
       var startAmp = mm ? (parseFloat(mm[2])-mid) : 0;
       if(Math.abs(startAmp)>=6) playNote(lastX, lastStrength);
