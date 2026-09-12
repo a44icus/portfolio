@@ -24,9 +24,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Person","name":"Stéphane Donchery","jobTitle":"Graphiste & Web designer","email":"mailto:stephane.donchery@gmail.com","url":"https://stephane-donchery-portfolio.vercel.app/","address":{"@type":"PostalAddress","addressLocality":"Reims","addressRegion":"Grand Est","addressCountry":"FR"},"knowsAbout":["Identité visuelle","Direction artistique","Édition","Web design","Motion design","Packaging"]}
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;800;900&family=Manrope:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts.css">
 <style>
   :root{
     --paper: #FAFAF7;
@@ -958,5 +956,7 @@
   const contactC = document.getElementById('contactCanvas');
   if(contactC) new ShapeField(contactC, { colors: ['#2A2AF0', '#FF5A3C', '#D9FF4A', '#FAFAF7'], alpha: 0.45 });
 </script>
+<!-- Vercel Web Analytics (s'active via le toggle Analytics du projet) -->
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
