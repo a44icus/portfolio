@@ -1177,6 +1177,49 @@
     src.connect(lp); lp.connect(g); g.connect(ctx.destination); src.start(t); src.stop(t+dur);
   }
 
+  /* ---- guitare électrique : overdrive + delay + réverbe ---- */
+  var elecFX=null;
+  function makeIR(ctx, dur, decay){
+    var sr=ctx.sampleRate, len=Math.floor(sr*dur), buf=ctx.createBuffer(2,len,sr);
+    for(var ch=0;ch<2;ch++){ var d=buf.getChannelData(ch); for(var i=0;i<len;i++){ d[i]=(Math.random()*2-1)*Math.pow(1-i/len, decay); } }
+    return buf;
+  }
+  function makeDrive(k){ var n=1024, c=new Float32Array(n); for(var i=0;i<n;i++){ var x=i*2/n-1; c[i]=(1+k)*x/(1+k*Math.abs(x)); } return c; }
+  function getElecFX(ctx){
+    if(elecFX) return elecFX;
+    var input=ctx.createGain();
+    var delay=ctx.createDelay(1.0); delay.delayTime.value=0.3;
+    var fb=ctx.createGain(); fb.gain.value=0.4;
+    var delayMix=ctx.createGain(); delayMix.gain.value=0.34;
+    input.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(delayMix);
+    var conv=ctx.createConvolver(); conv.buffer=makeIR(ctx,2.4,2.4);
+    var revMix=ctx.createGain(); revMix.gain.value=0.5;
+    input.connect(conv); conv.connect(revMix);
+    var dry=ctx.createGain(); dry.gain.value=0.85;
+    input.connect(dry);
+    var out=ctx.createGain(); out.gain.value=0.9;
+    dry.connect(out); delayMix.connect(out); revMix.connect(out); out.connect(ctx.destination);
+    elecFX={ input: input };
+    return elecFX;
+  }
+  function playElectric(xNorm, strength){
+    var ctx=getCtx(); if(!ctx) return;
+    var fx=getElecFX(ctx);
+    var note=OPEN[Math.max(0, Math.min(5, Math.floor(xNorm*6)))];
+    var sr=ctx.sampleRate, dur=2.4, N=Math.max(2, Math.round(sr/note)), len=Math.floor(sr*dur);
+    var buf=ctx.createBuffer(1,len,sr), data=buf.getChannelData(0), line=new Float32Array(N);
+    for(var i=0;i<N;i++) line[i]=Math.random()*2-1;
+    var idx=0, prev=0, decay=0.9975; // sustain plus long = électrique
+    for(var j=0;j<len;j++){ var cur=line[idx]; var out=(cur+prev)*0.5*decay; line[idx]=out; prev=out; data[j]=out; idx=(idx+1)%N; }
+    var src=ctx.createBufferSource(); src.buffer=buf;
+    var shaper=ctx.createWaveShaper(); shaper.curve=makeDrive(10); shaper.oversample='2x';
+    var tone=ctx.createBiquadFilter(); tone.type='lowpass'; tone.frequency.value=2800;
+    var g=ctx.createGain(), vol=Math.max(0.06, Math.min(0.42, 0.1+strength*0.4)), t=ctx.currentTime;
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.006); g.gain.setTargetAtTime(0.0001,t+0.09,0.9);
+    src.connect(shaper); shaper.connect(tone); tone.connect(g); g.connect(fx.input);
+    src.start(t); src.stop(t+dur);
+  }
+
   /* corde de guitare : pincement + vibration amortie + son */
   var pickEl = document.querySelector('.cursor-pick');
   var pickTimeout = null;
@@ -1186,6 +1229,8 @@
     var path=document.createElementNS(ns,'path'); path.setAttribute('class','string'); path.setAttribute('d','M0,50 Q500,50 1000,50');
     svg.appendChild(path); m.appendChild(svg);
     var W=1000, mid=50, raf=null, lastX=0.5, lastStrength=0;
+    var isElectric = m.classList.contains('marquee--rev');
+    var strum = function(x,s){ (isElectric ? playElectric : playNote)(x, s); };
     var ring=document.querySelector('.cursor-ring');
     m.addEventListener('pointerenter', function(){ if(pickTimeout){ clearTimeout(pickTimeout); pickTimeout=null; } if(ring) ring.classList.add('is-pick'); });
     function draw(cx,cy){ path.setAttribute('d','M0,'+mid+' Q'+cx+','+cy+' '+W+','+mid); }
@@ -1214,14 +1259,14 @@
       pickTimeout=setTimeout(function(){ if(ring) ring.classList.remove('is-pick'); pickTimeout=null; }, 650);
       var mm=/Q([\d.\-]+),([\d.\-]+)/.exec(path.getAttribute('d'));
       var startAmp = mm ? (parseFloat(mm[2])-mid) : 0;
-      if(Math.abs(startAmp)>=6) playNote(lastX, lastStrength);
+      if(Math.abs(startAmp)>=6) strum(lastX, lastStrength);
       twang(startAmp);
     });
     m.addEventListener('pointerdown', function(e){
       var r=m.getBoundingClientRect();
       var cx=((e.clientX-r.left)/r.width)*W, cy=((e.clientY-r.top)/r.height)*100;
       path.classList.add('twang');
-      playNote(cx/W, Math.max(0.35, Math.min(1, Math.abs(cy-mid)/mid)));
+      strum(cx/W, Math.max(0.35, Math.min(1, Math.abs(cy-mid)/mid)));
       twang((cy-mid)*2 || 42);
     });
   });
