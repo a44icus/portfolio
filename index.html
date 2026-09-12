@@ -1205,7 +1205,7 @@
       // orientation du médiator selon le sens de grattage
       var vx=e.movementX||0, vy=e.movementY||0;
       if(pickEl && (vx*vx+vy*vy) > 4){
-        var deg=Math.atan2(vy,vx)*180/Math.PI - 90;
+        var deg=Math.atan2(vy,vx)*180/Math.PI + 90;
         pickEl.style.transform='translate(-50%,-50%) rotate('+deg+'deg)';
       }
     });
