@@ -1150,35 +1150,60 @@
     Object.keys(map).forEach(function(id){ var el=document.getElementById(id); if(el) spy.observe(el); });
   }
 
-  /* corde de guitare : pincement + vibration amortie */
+  /* ---- audio : note de guitare folk (synthèse Karplus-Strong) ---- */
+  var actx=null;
+  function getCtx(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(actx.state==='suspended'){ actx.resume(); } return actx; }
+  ['pointerdown','keydown','touchstart'].forEach(function(ev){ document.addEventListener(ev, function unlock(){ getCtx(); document.removeEventListener(ev, unlock); }, {passive:true}); });
+  var OPEN=[82.41,110.0,146.83,196.0,246.94,329.63]; // Mi La Ré Sol Si Mi (accordage standard)
+  function playNote(xNorm, strength){
+    var ctx=getCtx(); if(!ctx) return;
+    var note=OPEN[Math.max(0, Math.min(5, Math.floor(xNorm*6)))];
+    var sr=ctx.sampleRate, dur=2.6, N=Math.max(2, Math.round(sr/note)), len=Math.floor(sr*dur);
+    var buf=ctx.createBuffer(1,len,sr), data=buf.getChannelData(0), line=new Float32Array(N);
+    for(var i=0;i<N;i++) line[i]=Math.random()*2-1;
+    var idx=0, prev=0, decay=0.9966;
+    for(var j=0;j<len;j++){ var cur=line[idx]; var out=(cur+prev)*0.5*decay; line[idx]=out; prev=out; data[j]=out; idx=(idx+1)%N; }
+    var src=ctx.createBufferSource(); src.buffer=buf;
+    var lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=3600;
+    var g=ctx.createGain(), vol=Math.max(0.08, Math.min(0.55, 0.12+strength*0.5)), t=ctx.currentTime;
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.006); g.gain.setTargetAtTime(0.0001,t+0.06,0.8);
+    src.connect(lp); lp.connect(g); g.connect(ctx.destination); src.start(t); src.stop(t+dur);
+  }
+
+  /* corde de guitare : pincement + vibration amortie + son */
   document.querySelectorAll('.marquee').forEach(function(m){
     var ns='http://www.w3.org/2000/svg';
-    var svg=document.createElementNS(ns,'svg');
-    svg.setAttribute('class','string-svg'); svg.setAttribute('viewBox','0 0 1000 100');
-    svg.setAttribute('preserveAspectRatio','none'); svg.setAttribute('aria-hidden','true');
+    var svg=document.createElementNS(ns,'svg'); svg.setAttribute('class','string-svg'); svg.setAttribute('viewBox','0 0 1000 100'); svg.setAttribute('preserveAspectRatio','none'); svg.setAttribute('aria-hidden','true');
     var path=document.createElementNS(ns,'path'); path.setAttribute('class','string'); path.setAttribute('d','M0,50 Q500,50 1000,50');
     svg.appendChild(path); m.appendChild(svg);
-    var W=1000, mid=50, raf=null;
+    var W=1000, mid=50, raf=null, lastX=0.5, lastStrength=0;
     function draw(cx,cy){ path.setAttribute('d','M0,'+mid+' Q'+cx+','+cy+' '+W+','+mid); }
+    function twang(startAmp){
+      if(raf){ cancelAnimationFrame(raf); raf=null; }
+      if(reduced || Math.abs(startAmp)<1){ draw(W/2, mid); path.classList.remove('twang'); return; }
+      var t0=performance.now(), decay=5.5, freq=34;
+      (function vib(now){ var t=(now-t0)/1000; var amp=startAmp*Math.exp(-decay*t)*Math.cos(freq*t); draw(W/2, mid+amp); if(Math.abs(amp)>0.5){ raf=requestAnimationFrame(vib); } else { draw(W/2, mid); path.classList.remove('twang'); raf=null; } })(t0);
+    }
     m.addEventListener('pointermove', function(e){
       if(raf){ cancelAnimationFrame(raf); raf=null; }
       path.classList.add('twang');
       var r=m.getBoundingClientRect();
-      var cx=((e.clientX-r.left)/r.width)*W;
-      var cy=((e.clientY-r.top)/r.height)*100;
+      var cx=((e.clientX-r.left)/r.width)*W, cy=((e.clientY-r.top)/r.height)*100;
+      lastX=cx/W; lastStrength=Math.min(1, Math.abs(cy-mid)/mid);
       draw(cx, mid+(cy-mid)*2);
     });
     m.addEventListener('pointerleave', function(){
       var mm=/Q([\d.\-]+),([\d.\-]+)/.exec(path.getAttribute('d'));
       var startAmp = mm ? (parseFloat(mm[2])-mid) : 0;
-      if(reduced || Math.abs(startAmp)<1){ draw(W/2, mid); path.classList.remove('twang'); return; }
-      var t0=performance.now(), decay=5.5, freq=34;
-      (function vib(now){
-        var t=(now-t0)/1000;
-        var amp=startAmp*Math.exp(-decay*t)*Math.cos(freq*t);
-        draw(W/2, mid+amp);
-        if(Math.abs(amp)>0.5){ raf=requestAnimationFrame(vib); } else { draw(W/2, mid); path.classList.remove('twang'); raf=null; }
-      })(t0);
+      if(Math.abs(startAmp)>=6) playNote(lastX, lastStrength);
+      twang(startAmp);
+    });
+    m.addEventListener('pointerdown', function(e){
+      var r=m.getBoundingClientRect();
+      var cx=((e.clientX-r.left)/r.width)*W, cy=((e.clientY-r.top)/r.height)*100;
+      path.classList.add('twang');
+      playNote(cx/W, Math.max(0.35, Math.min(1, Math.abs(cy-mid)/mid)));
+      twang((cy-mid)*2 || 42);
     });
   });
 })();
