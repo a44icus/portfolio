@@ -498,6 +498,13 @@
   .string-svg .string{ fill:none; stroke: var(--lime); stroke-width:2.5; stroke-linecap:round; vector-effect: non-scaling-stroke; opacity:0; transition: opacity .3s ease; }
   .marquee:hover .string-svg .string, .string-svg .string.twang{ opacity:.95; }
 
+  /* curseur médiator sur les marquees */
+  .cursor-pick{ display:none; position:absolute; top:50%; left:50%; width:30px; height:34px; transform: translate(-50%,-50%) rotate(-16deg); }
+  .cursor-pick path{ fill: var(--coral); stroke: #A8331F; stroke-width:2.5; }
+  .cursor-ring.is-pick{ border-width: 0 !important; background: transparent !important; width:26px; height:26px; }
+  .cursor-ring.is-pick .cursor-label{ display:none; }
+  .cursor-ring.is-pick .cursor-pick{ display:block; }
+
   /* preloader */
   .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
     display:flex; align-items:center; justify-content:center; animation: preOut .5s ease .9s forwards; }
@@ -518,7 +525,7 @@
 </div>
 <div class="progress" id="progress" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
-<div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span></div>
+<div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span><svg class="cursor-pick" viewBox="0 0 64 74" aria-hidden="true"><path d="M32 3 C46 3 61 14 61 30 C61 40 52 55 38 68 C35 71 29 71 26 68 C12 55 3 40 3 30 C3 14 18 3 32 3 Z"/></svg></div>
 
 <header class="nav">
   <a href="#top" class="mark" aria-label="Stéphane Donchery — accueil">
@@ -1177,6 +1184,8 @@
     var path=document.createElementNS(ns,'path'); path.setAttribute('class','string'); path.setAttribute('d','M0,50 Q500,50 1000,50');
     svg.appendChild(path); m.appendChild(svg);
     var W=1000, mid=50, raf=null, lastX=0.5, lastStrength=0;
+    var ring=document.querySelector('.cursor-ring');
+    m.addEventListener('pointerenter', function(){ if(ring) ring.classList.add('is-pick'); });
     function draw(cx,cy){ path.setAttribute('d','M0,'+mid+' Q'+cx+','+cy+' '+W+','+mid); }
     function twang(startAmp){
       if(raf){ cancelAnimationFrame(raf); raf=null; }
@@ -1193,6 +1202,7 @@
       draw(cx, mid+(cy-mid)*2);
     });
     m.addEventListener('pointerleave', function(){
+      if(ring) ring.classList.remove('is-pick');
       var mm=/Q([\d.\-]+),([\d.\-]+)/.exec(path.getAttribute('d'));
       var startAmp = mm ? (parseFloat(mm[2])-mid) : 0;
       if(Math.abs(startAmp)>=6) playNote(lastX, lastStrength);
