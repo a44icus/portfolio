@@ -492,6 +492,12 @@
   /* second marquee */
   .marquee--rev .marquee-track{ animation-direction: reverse; }
 
+  /* corde de guitare (marquee) */
+  .marquee{ position: relative; }
+  .string-svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:3; overflow:visible; }
+  .string-svg .string{ fill:none; stroke: var(--lime); stroke-width:2.5; stroke-linecap:round; vector-effect: non-scaling-stroke; opacity:0; transition: opacity .3s ease; }
+  .marquee:hover .string-svg .string, .string-svg .string.twang{ opacity:.95; }
+
   /* preloader */
   .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
     display:flex; align-items:center; justify-content:center; animation: preOut .5s ease .9s forwards; }
@@ -1143,6 +1149,38 @@
     }, { rootMargin: '-45% 0px -50% 0px' });
     Object.keys(map).forEach(function(id){ var el=document.getElementById(id); if(el) spy.observe(el); });
   }
+
+  /* corde de guitare : pincement + vibration amortie */
+  document.querySelectorAll('.marquee').forEach(function(m){
+    var ns='http://www.w3.org/2000/svg';
+    var svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('class','string-svg'); svg.setAttribute('viewBox','0 0 1000 100');
+    svg.setAttribute('preserveAspectRatio','none'); svg.setAttribute('aria-hidden','true');
+    var path=document.createElementNS(ns,'path'); path.setAttribute('class','string'); path.setAttribute('d','M0,50 Q500,50 1000,50');
+    svg.appendChild(path); m.appendChild(svg);
+    var W=1000, mid=50, raf=null;
+    function draw(cx,cy){ path.setAttribute('d','M0,'+mid+' Q'+cx+','+cy+' '+W+','+mid); }
+    m.addEventListener('pointermove', function(e){
+      if(raf){ cancelAnimationFrame(raf); raf=null; }
+      path.classList.add('twang');
+      var r=m.getBoundingClientRect();
+      var cx=((e.clientX-r.left)/r.width)*W;
+      var cy=((e.clientY-r.top)/r.height)*100;
+      draw(cx, mid+(cy-mid)*2);
+    });
+    m.addEventListener('pointerleave', function(){
+      var mm=/Q([\d.\-]+),([\d.\-]+)/.exec(path.getAttribute('d'));
+      var startAmp = mm ? (parseFloat(mm[2])-mid) : 0;
+      if(reduced || Math.abs(startAmp)<1){ draw(W/2, mid); path.classList.remove('twang'); return; }
+      var t0=performance.now(), decay=5.5, freq=34;
+      (function vib(now){
+        var t=(now-t0)/1000;
+        var amp=startAmp*Math.exp(-decay*t)*Math.cos(freq*t);
+        draw(W/2, mid+amp);
+        if(Math.abs(amp)>0.5){ raf=requestAnimationFrame(vib); } else { draw(W/2, mid); path.classList.remove('twang'); raf=null; }
+      })(t0);
+    });
+  });
 })();
 </script>
 <!-- Vercel Web Analytics (s'active via le toggle Analytics du projet) -->
