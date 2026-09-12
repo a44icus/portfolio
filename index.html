@@ -376,6 +376,19 @@
   .insta{ border-top:1px solid var(--line); }
   .insta .elfsight-app-3bbcad14-8fa4-494d-8c19-4f3e8758d30b{ min-height: 180px; }
 
+  /* parcours / cv */
+  .parcours{ border-top:1px solid var(--line); }
+  .cv-grid{ display:grid; grid-template-columns: 1.4fr 1fr; gap: clamp(1.5rem,4vw,3.5rem); }
+  .cv-h{ font-family:var(--ff-display); font-weight:700; font-size:1.1rem; margin:0 0 .8rem; }
+  .cv-list{ border-top:1px solid var(--line); margin-bottom:2.2rem; }
+  .cv-list li{ display:grid; grid-template-columns: 8.5rem 1fr; gap:1rem; padding:1.1rem 0; border-bottom:1px solid var(--line); }
+  .cv-yr{ font-family:var(--ff-mono); font-size:.8rem; color:var(--muted); }
+  .cv-list li strong{ font-family:var(--ff-body); font-weight:600; display:block; }
+  .cv-list li p{ margin:.35rem 0 0; color:var(--muted); font-size:.95rem; }
+  .cv-langues{ color:var(--muted); font-size:.98rem; }
+  .cv-langues strong{ color:var(--ink); }
+  @media (max-width:760px){ .cv-grid{ grid-template-columns:1fr; gap:1.5rem; } .cv-list li{ grid-template-columns: 6.5rem 1fr; } }
+
   /* contact */
   .contact{
     position:relative; overflow:hidden; background: var(--ink); color: var(--paper);
@@ -433,6 +446,7 @@
       <a href="#approche">Approche</a>
       <a href="#profil">Profil</a>
       <a href="#instagram">Photos</a>
+      <a href="#parcours">Parcours</a>
     </nav>
     <a href="#contact" class="nav-cta">Discutons →</a>
     <button class="nav-toggle" id="navToggle" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="mobileMenu">
@@ -447,6 +461,7 @@
   <a href="#approche">Approche</a>
   <a href="#profil">Profil</a>
   <a href="#instagram">Photos</a>
+  <a href="#parcours">Parcours</a>
   <a href="#contact">Contact</a>
 </div>
 
@@ -692,10 +707,39 @@
   </div>
 </section>
 
+<section id="parcours" class="parcours">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">07 — Parcours</span>
+      <h2>Quinze ans, résumés.</h2>
+    </div>
+    <div class="cv-grid">
+      <div class="cv-col reveal">
+        <h3 class="cv-h">Expériences</h3>
+        <ul class="cv-list">
+          <li><span class="cv-yr">2018 — 2026</span><div><strong>Web designer — Agence ViZualCréa</strong><p>Poste très polyvalent : identités visuelles, supports print &amp; web, impression textile et pressage.</p></div></li>
+          <li><span class="cv-yr">2009 — 2016</span><div><strong>Web designer — Edition DOC</strong><p>Supports print et web, animations et bannières pour les campagnes en ligne.</p></div></li>
+          <li><span class="cv-yr">Débuts</span><div><strong>Infographiste web designer — Digit'art</strong><p>Projets graphiques collectifs et veille créative.</p></div></li>
+          <li><span class="cv-yr">Stages</span><div><strong>Premières expériences</strong><p>Horizon Bleu et Tonna Électronique (Champagne-Ardenne).</p></div></li>
+        </ul>
+      </div>
+      <div class="cv-col reveal">
+        <h3 class="cv-h">Formation</h3>
+        <ul class="cv-list">
+          <li><span class="cv-yr">Pixem Institut</span><div><strong>Infographiste Multimédia / Web Designer</strong></div></li>
+          <li><span class="cv-yr">Pixem Institut</span><div><strong>Formation vidéo</strong></div></li>
+        </ul>
+        <h3 class="cv-h">Langues</h3>
+        <p class="cv-langues"><strong>Français</strong> — langue maternelle<br><strong>Anglais</strong> — notions</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="contact" class="contact">
   <canvas class="shape-field" id="contactCanvas" aria-hidden="true"></canvas>
   <div class="contact-content">
-    <span class="section-tag">07 — Contact</span>
+    <span class="section-tag">08 — Contact</span>
     <h2>Un projet en tête ?<br><em>Écrivez-moi.</em></h2>
     <a class="email-link" href="mailto:stephane.donchery@gmail.com">stephane.donchery@gmail.com</a>
     <ul class="socials">
