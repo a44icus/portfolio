@@ -337,14 +337,17 @@
   }
 
   /* distinctions */
-  .press{ border-top:1px solid var(--line); }
+  .press{ border-top:1px solid var(--line); background: var(--ink); color: var(--paper); }
+  .press h2{ color: var(--paper); }
+  .press .section-tag{ color: var(--lime); }
   .press-list li{
     display:grid; grid-template-columns: auto 1fr auto; gap:1.2rem; align-items:baseline;
-    padding: 1.15rem 0; border-bottom:1px solid var(--line); font-size:1rem;
+    padding: 1.15rem 0; border-bottom:1px solid rgba(250,250,247,0.16); font-size:1rem;
   }
-  .press-list li .yr{ font-family: var(--ff-mono); font-size:.85rem; color: var(--muted); }
-  .press-list li .what{ font-weight:600; }
-  .press-list li .who{ color: var(--muted); font-size:.9rem; text-align:right; }
+  .press-list li:first-child{ border-top:1px solid rgba(250,250,247,0.16); }
+  .press-list li .yr{ font-family: var(--ff-mono); font-size:.85rem; color: rgba(250,250,247,0.55); }
+  .press-list li .what{ font-weight:600; color: var(--paper); }
+  .press-list li .who{ color: rgba(250,250,247,0.55); font-size:.9rem; text-align:right; }
   @media (max-width: 640px){ .press-list li{ grid-template-columns: auto 1fr; } .press-list li .who{ grid-column: 1 / -1; text-align:left; } }
 
   /* approche */
@@ -782,7 +785,7 @@
       el.addEventListener('mouseleave', ()=> ring.classList.remove('is-view'));
     });
     // curseur clair sur les sections à fond foncé
-    document.querySelectorAll('.contact').forEach(el=>{
+    document.querySelectorAll('.contact, .press').forEach(el=>{
       el.addEventListener('mouseenter', ()=> ring.classList.add('on-dark'));
       el.addEventListener('mouseleave', ()=> ring.classList.remove('on-dark'));
     });
