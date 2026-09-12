@@ -371,6 +371,10 @@
   .quote .by strong{ color: var(--ink); display:block; font-family: var(--ff-body); }
   @media (max-width: 900px){ .quotes{ grid-template-columns: 1fr; } }
 
+  /* instagram */
+  .insta{ border-top:1px solid var(--line); }
+  .insta .elfsight-app-3bbcad14-8fa4-494d-8c19-4f3e8758d30b{ min-height: 180px; }
+
   /* contact */
   .contact{
     position:relative; overflow:hidden; background: var(--ink); color: var(--paper);
@@ -427,6 +431,7 @@
       <a href="#services">Services</a>
       <a href="#approche">Approche</a>
       <a href="#profil">Profil</a>
+      <a href="#instagram">Photos</a>
     </nav>
     <a href="#contact" class="nav-cta">Discutons →</a>
     <button class="nav-toggle" id="navToggle" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="mobileMenu">
@@ -440,6 +445,7 @@
   <a href="#services">Services</a>
   <a href="#approche">Approche</a>
   <a href="#profil">Profil</a>
+  <a href="#instagram">Photos</a>
   <a href="#contact">Contact</a>
 </div>
 
@@ -673,10 +679,22 @@
   </div>
 </section>
 
+<section id="instagram" class="insta">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">06 — Instagram</span>
+      <h2>Derniers clichés.</h2>
+    </div>
+    <!-- Elfsight Social Feed | Untitled Social Feed -->
+    <script src="https://elfsightcdn.com/platform.js" async></script>
+    <div class="elfsight-app-3bbcad14-8fa4-494d-8c19-4f3e8758d30b" data-elfsight-app-lazy></div>
+  </div>
+</section>
+
 <section id="contact" class="contact">
   <canvas class="shape-field" id="contactCanvas" aria-hidden="true"></canvas>
   <div class="contact-content">
-    <span class="section-tag">06 — Contact</span>
+    <span class="section-tag">07 — Contact</span>
     <h2>Un projet en tête ?<br><em>Écrivez-moi.</em></h2>
     <a class="email-link" href="mailto:stephane.donchery@gmail.com">stephane.donchery@gmail.com</a>
     <ul class="socials">
