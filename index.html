@@ -105,6 +105,7 @@
   }
   .cursor-ring.is-view{ width: 74px; height:74px; background: var(--cobalt); border-color: var(--cobalt); }
   .cursor-ring.is-view .cursor-label{ opacity:1; }
+  .cursor-ring.on-dark{ border-color: var(--paper); }
 
   /* nav */
   .nav{
@@ -759,6 +760,11 @@
     document.querySelectorAll('.project').forEach(el=>{
       el.addEventListener('mouseenter', ()=> ring.classList.add('is-view'));
       el.addEventListener('mouseleave', ()=> ring.classList.remove('is-view'));
+    });
+    // curseur clair sur les sections à fond foncé
+    document.querySelectorAll('.contact').forEach(el=>{
+      el.addEventListener('mouseenter', ()=> ring.classList.add('on-dark'));
+      el.addEventListener('mouseleave', ()=> ring.classList.remove('on-dark'));
     });
   }
 
