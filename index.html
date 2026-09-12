@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){try{var t=localStorage.getItem('theme');if(!t){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
+</script>
 <title>Stéphane Donchery — Graphiste & Web designer</title>
 <meta name="description" content="Portfolio de Stéphane Donchery, graphiste et web designer basé près de Reims. Identité visuelle, direction artistique, édition, web et production graphique.">
 <meta name="author" content="Stéphane Donchery">
@@ -424,10 +427,91 @@
   .to-top{ text-decoration:none; font-weight:600; color: var(--ink); display:inline-flex; align-items:center; gap:.4rem; }
   .to-top:hover{ color: var(--cobalt); }
 </style>
+<style>
+  /* ===== Dark mode + nouvelles fonctionnalités ===== */
+  :root{
+    --panel: #17171E; --panel-fg: #FAFAF7;
+    --nav-bg: rgba(250,250,247,0.72);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"]{
+    --paper: #14141A; --paper-dim: #1E1E27; --ink: #F2F1EC; --muted: #9A9AA6;
+    --line: rgba(242,241,236,0.16);
+    --panel: #0E0E13; --nav-bg: rgba(20,20,26,0.72);
+    color-scheme: dark;
+  }
+  /* panneaux à fond foncé fixe (indépendants du thème) */
+  .nav{ background: var(--nav-bg); }
+  .marquee{ background: var(--panel); color: var(--panel-fg); }
+  .marquee-item.hollow{ -webkit-text-stroke-color: var(--panel-fg); }
+  .press{ background: var(--panel); color: var(--panel-fg); }
+  .press h2{ color: var(--panel-fg); }
+  .press-list li .what{ color: var(--panel-fg); }
+  .contact{ background: var(--panel); color: var(--panel-fg); }
+  .email-link{ color: var(--panel-fg); }
+  .contact-aside strong{ color: var(--panel-fg); }
+  .project{ color: var(--panel-fg); }
+  .quote{ background: var(--paper-dim); }
+  .pill{ background: transparent; }
+
+  /* bouton thème */
+  .theme-toggle{ background:none; border:0; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; color:var(--ink); transition: background .2s ease; padding:0; }
+  .theme-toggle:hover{ background: rgba(127,127,127,.16); }
+  .theme-toggle svg{ width:20px; height:20px; }
+  .theme-toggle .moon{ display:none; }
+  :root[data-theme="dark"] .theme-toggle .sun{ display:none; }
+  :root[data-theme="dark"] .theme-toggle .moon{ display:block; }
+
+  /* barre de progression */
+  .progress{ position:fixed; top:0; left:0; height:3px; width:0%; z-index:200;
+    background: linear-gradient(90deg, var(--cobalt), var(--coral), var(--lime)); }
+
+  /* numéros filigranes */
+  section{ position:relative; }
+  section > .wrap{ position:relative; z-index:1; }
+  .watermark{ position:absolute; top:.02em; right:.05em; font-family:var(--ff-display); font-weight:900;
+    font-size: clamp(6rem,16vw,15rem); line-height:1; color:transparent; -webkit-text-stroke:1.5px currentColor;
+    opacity:.06; pointer-events:none; z-index:0; user-select:none; }
+
+  /* traitement bichromie/tint sur les projets */
+  .project-visual::before{ content:''; position:absolute; inset:0;
+    background: linear-gradient(135deg, var(--cobalt), var(--coral));
+    mix-blend-mode: color; opacity:.16; transition: opacity .5s ease; pointer-events:none; }
+  .project:hover .project-visual::before{ opacity:.5; }
+
+  /* scrollspy */
+  .nav-links a.active{ color: var(--cobalt); }
+  .nav-links a.active::after{ width:100%; }
+
+  /* bouton copier l'email */
+  .copy-email{ margin-left:.8rem; font-family:var(--ff-mono); font-size:.7rem; letter-spacing:.05em; text-transform:uppercase;
+    border:1px solid rgba(250,250,247,0.4); color:var(--panel-fg); background:none; padding:.4rem .75rem; border-radius:100px;
+    vertical-align:middle; cursor:pointer; transition: background .2s ease, color .2s ease, border-color .2s ease; }
+  .copy-email:hover, .copy-email.copied{ background:var(--lime); color:var(--ink); border-color:var(--lime); }
+
+  /* second marquee */
+  .marquee--rev{ border-top:0; }
+  .marquee--rev .marquee-track{ animation-direction: reverse; }
+
+  /* preloader */
+  .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; animation: preOut .5s ease .9s forwards; }
+  .preloader svg{ width:56px; height:56px; animation: prefloat 1.1s ease-in-out infinite alternate; }
+  @keyframes preOut{ to{ opacity:0; visibility:hidden; } }
+  @keyframes prefloat{ from{ transform:scale(.9); opacity:.55;} to{ transform:scale(1.06); opacity:1;} }
+  @media (prefers-reduced-motion: reduce){ .preloader{ display:none; } }
+</style>
 </head>
 <body>
 
 <a class="skip" href="#top">Aller au contenu</a>
+<div class="preloader" id="preloader" aria-hidden="true">
+  <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="16" r="9" stroke="currentColor" stroke-width="2"/>
+    <path d="M18 6 L28 26 L8 26 Z" stroke="#FF5A3C" stroke-width="2" stroke-linejoin="round"/>
+  </svg>
+</div>
+<div class="progress" id="progress" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
 <div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span></div>
 
@@ -448,6 +532,10 @@
       <a href="#instagram">Photos</a>
       <a href="#parcours">Parcours</a>
     </nav>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Basculer le thème clair / sombre">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.5A8.5 8.5 0 1 1 11.5 3 6.5 6.5 0 0 0 21 12.5z"/></svg>
+    </button>
     <a href="#contact" class="nav-cta">Discutons →</a>
     <button class="nav-toggle" id="navToggle" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="mobileMenu">
       <span></span><span></span><span></span>
@@ -490,6 +578,13 @@
   <div class="marquee-track">
     <span class="marquee-item">Identité visuelle <span class="star">✳</span> Direction artistique <span class="star">✳</span> Édition <span class="star">✳</span> Motion &amp; vidéo <span class="star">✳</span> Web design <span class="star">✳</span> Packaging <span class="star">✳</span> Signalétique <span class="star">✳</span></span>
     <span class="marquee-item">Identité visuelle <span class="star">✳</span> Direction artistique <span class="star">✳</span> Édition <span class="star">✳</span> Motion &amp; vidéo <span class="star">✳</span> Web design <span class="star">✳</span> Packaging <span class="star">✳</span> Signalétique <span class="star">✳</span></span>
+  </div>
+</div>
+
+<div class="marquee marquee--rev" aria-hidden="true">
+  <div class="marquee-track">
+    <span class="marquee-item hollow">Illustrator <span class="star">✳</span> Photoshop <span class="star">✳</span> InDesign <span class="star">✳</span> After Effects <span class="star">✳</span> Premiere <span class="star">✳</span> Figma <span class="star">✳</span> Blender <span class="star">✳</span></span>
+    <span class="marquee-item hollow">Illustrator <span class="star">✳</span> Photoshop <span class="star">✳</span> InDesign <span class="star">✳</span> After Effects <span class="star">✳</span> Premiere <span class="star">✳</span> Figma <span class="star">✳</span> Blender <span class="star">✳</span></span>
   </div>
 </div>
 
@@ -741,7 +836,7 @@
   <div class="contact-content">
     <span class="section-tag">08 — Contact</span>
     <h2>Un projet en tête ?<br><em>Écrivez-moi.</em></h2>
-    <a class="email-link" href="mailto:stephane.donchery@gmail.com">stephane.donchery@gmail.com</a>
+    <a class="email-link" href="mailto:stephane.donchery@gmail.com">stephane.donchery@gmail.com</a><button class="copy-email" type="button" data-email="stephane.donchery@gmail.com" aria-label="Copier l'adresse email">Copier</button>
     <ul class="socials">
       <li><a href="https://www.flickr.com/photos/cliiiche/" target="_blank" rel="noopener">Flickr ↗</a></li>
       <li><a href="https://www.instagram.com/stephane.donchery/" target="_blank" rel="noopener">Instagram ↗</a></li>
@@ -999,6 +1094,57 @@
   if(heroC) new ShapeField(heroC, { alpha: 0.5 });
   const contactC = document.getElementById('contactCanvas');
   if(contactC) new ShapeField(contactC, { colors: ['#2A2AF0', '#FF5A3C', '#D9FF4A', '#FAFAF7'], alpha: 0.45 });
+</script>
+<script>
+(function(){
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* preloader : filet de sécurité (le CSS le masque déjà) */
+  var pre = document.getElementById('preloader');
+  if(pre){ window.addEventListener('load', function(){ setTimeout(function(){ if(pre) pre.remove(); }, 1600); }); }
+
+  /* barre de progression */
+  var bar = document.getElementById('progress');
+  if(bar){
+    var upd = function(){ var h=document.documentElement; var max=h.scrollHeight-h.clientHeight; bar.style.width=(max>0?(h.scrollTop/max*100):0)+'%'; };
+    upd(); addEventListener('scroll', upd, {passive:true}); addEventListener('resize', upd);
+  }
+
+  /* bascule de thème */
+  var tt = document.getElementById('themeToggle');
+  if(tt){ tt.addEventListener('click', function(){
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if(dark){ document.documentElement.removeAttribute('data-theme'); } else { document.documentElement.setAttribute('data-theme','dark'); }
+    try{ localStorage.setItem('theme', dark ? 'light' : 'dark'); }catch(e){}
+  }); }
+
+  /* copier l'email */
+  document.querySelectorAll('.copy-email').forEach(function(b){
+    b.addEventListener('click', function(){
+      var em = b.getAttribute('data-email');
+      var done = function(){ var prev=b.textContent; b.textContent='Copié !'; b.classList.add('copied'); setTimeout(function(){ b.textContent=prev; b.classList.remove('copied'); },1600); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(em).then(done, done); } else { done(); }
+    });
+  });
+
+  /* numéros filigranes */
+  document.querySelectorAll('section.services, section.travaux, section.press, section.approche, section.voix, section.parcours').forEach(function(s){
+    var tag = s.querySelector('.section-tag'); if(!tag) return;
+    var m = tag.textContent.match(/\d+/); if(!m) return;
+    var w = document.createElement('span'); w.className='watermark'; w.setAttribute('aria-hidden','true'); w.textContent = m[0];
+    s.insertBefore(w, s.firstChild);
+  });
+
+  /* scrollspy : lien de nav actif */
+  var links = [].slice.call(document.querySelectorAll('.nav-links a[href^="#"]'));
+  var map = {}; links.forEach(function(a){ var el=document.getElementById(a.getAttribute('href').slice(1)); if(el) map[el.id]=a; });
+  if('IntersectionObserver' in window){
+    var spy = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ links.forEach(function(a){a.classList.remove('active');}); if(map[e.target.id]) map[e.target.id].classList.add('active'); } });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    Object.keys(map).forEach(function(id){ var el=document.getElementById(id); if(el) spy.observe(el); });
+  }
+})();
 </script>
 <!-- Vercel Web Analytics (s'active via le toggle Analytics du projet) -->
 <script defer src="/_vercel/insights/script.js"></script>
