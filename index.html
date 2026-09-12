@@ -504,6 +504,8 @@
   .cursor-ring.is-pick{ border-width: 0 !important; background: transparent !important; width:26px; height:26px; }
   .cursor-ring.is-pick .cursor-label{ display:none; }
   .cursor-ring.is-pick .cursor-pick{ display:block; }
+  .pick-note{ display:none; position:absolute; top:48%; left:50%; transform:translate(-50%,-50%); font-family: var(--ff-display); font-weight:800; font-size:12px; line-height:1; color:#17171E; pointer-events:none; }
+  .cursor-ring.is-pick .pick-note{ display:block; }
 
   /* preloader */
   .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
@@ -525,7 +527,7 @@
 </div>
 <div class="progress" id="progress" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
-<div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span><svg class="cursor-pick" viewBox="0 0 64 74" aria-hidden="true"><path d="M32 3 C46 3 61 14 61 30 C61 40 52 55 38 68 C35 71 29 71 26 68 C12 55 3 40 3 30 C3 14 18 3 32 3 Z"/></svg></div>
+<div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span><svg class="cursor-pick" viewBox="0 0 64 74" aria-hidden="true"><path d="M32 3 C46 3 61 14 61 30 C61 40 52 55 38 68 C35 71 29 71 26 68 C12 55 3 40 3 30 C3 14 18 3 32 3 Z"/></svg><span class="pick-note" aria-hidden="true"></span></div>
 
 <header class="nav">
   <a href="#top" class="mark" aria-label="Stéphane Donchery — accueil">
@@ -1162,6 +1164,7 @@
   function getCtx(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(actx.state==='suspended'){ actx.resume(); } return actx; }
   ['pointerdown','keydown','touchstart'].forEach(function(ev){ document.addEventListener(ev, function unlock(){ getCtx(); document.removeEventListener(ev, unlock); }, {passive:true}); });
   var OPEN=[82.41,110.0,146.83,196.0,246.94,329.63]; // Mi La Ré Sol Si Mi (accordage standard)
+  var NOTE_LETTERS=['E','A','D','G','B','E'];
   function playNote(xNorm, strength){
     var ctx=getCtx(); if(!ctx) return;
     var note=OPEN[Math.max(0, Math.min(5, Math.floor(xNorm*6)))];
@@ -1225,6 +1228,7 @@
 
   /* corde de guitare : pincement + vibration amortie + son */
   var pickEl = document.querySelector('.cursor-pick');
+  var noteEl = document.querySelector('.pick-note');
   var pickTimeout = null;
   document.querySelectorAll('.marquee').forEach(function(m){
     var ns='http://www.w3.org/2000/svg';
@@ -1249,6 +1253,7 @@
       var r=m.getBoundingClientRect();
       var cx=((e.clientX-r.left)/r.width)*W, cy=((e.clientY-r.top)/r.height)*100;
       lastX=cx/W; lastStrength=Math.min(1, Math.abs(cy-mid)/mid);
+      if(noteEl){ noteEl.textContent = NOTE_LETTERS[Math.max(0, Math.min(5, Math.floor(lastX*6)))]; }
       draw(cx, mid+(cy-mid)*2);
       // orientation du médiator selon le sens de grattage
       var vx=e.movementX||0, vy=e.movementY||0;
