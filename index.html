@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>
-(function(){try{var t=localStorage.getItem('theme');if(!t){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
+(function(){try{var t=localStorage.getItem('theme')||'dark';if(t==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
 </script>
 <title>Stéphane Donchery — Graphiste & Web designer</title>
 <meta name="description" content="Portfolio de Stéphane Donchery, graphiste et web designer basé près de Reims. Identité visuelle, direction artistique, édition, web et production graphique.">
@@ -504,6 +504,12 @@
     --line: rgba(242,241,236,0.16);
     --panel: #0E0E13; --nav-bg: rgba(20,20,26,0.72);
     color-scheme: dark;
+  }
+  /* en mode sombre, la section services reste un îlot clair crème */
+  :root[data-theme="dark"] #services{
+    background:#fffbf3;
+    --paper:#fffbf3; --paper-dim:#f1f0eb; --ink:#17171E; --muted:#6B6B75; --line:rgba(23,23,30,0.14);
+    color:var(--ink);
   }
   /* panneaux à fond foncé fixe (indépendants du thème) */
   .nav{ background: var(--nav-bg); }
