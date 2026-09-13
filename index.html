@@ -604,7 +604,7 @@
   /* inactivité : main qui fait coucou + bulle */
   .idle-wave{ position:fixed; top:0; left:0; z-index:1100; pointer-events:none; opacity:0; transition:opacity .25s ease; will-change:transform; }
   .idle-wave.on{ opacity:1; }
-  .idle-hand{ display:block; width:44px; height:auto; transform-origin:50% 88%; animation:idleWave .7s ease-in-out infinite; filter:drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
+  .idle-hand{ display:block; width:30px; height:auto; transform-origin:50% 88%; animation:idleWave .7s ease-in-out infinite; filter:drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
   @keyframes idleWave{ 0%,100%{ transform:rotate(-22deg);} 50%{ transform:rotate(22deg);} }
   .idle-bubble{ position:absolute; bottom:100%; left:50%; transform:translate(-50%,-8px); white-space:nowrap; background:var(--ink); color:var(--paper); font-family:var(--ff-body); font-weight:700; font-size:.84rem; padding:.5rem .85rem; border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,.4); }
   .idle-bubble::after{ content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:7px solid transparent; border-top-color:var(--ink); }
@@ -1502,7 +1502,7 @@
   wrap.innerHTML='<span class="idle-bubble"></span><img class="idle-hand" src="images/cursor/grab.png" alt="">';
   document.body.appendChild(wrap);
   var bubble=wrap.querySelector('.idle-bubble');
-  var PHRASES=['Hey ! Tu es toujours là ?!','Psst… on continue la visite ?','Toujours dans le coin ? 👋'];
+  var PHRASES=['Hey ! Tu es toujours là ?!','Psst… on continue la visite ?','Toujours dans le coin ?'];
   var pi=0;
   var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null;
   function position(){ wrap.style.transform='translate('+mx+'px,'+my+'px) translate(-50%,-50%)'; }
