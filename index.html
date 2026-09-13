@@ -524,6 +524,7 @@
     filter: drop-shadow(0 4px 10px rgba(0,0,0,.28)); transition: transform .15s ease, filter .15s ease;
   }
   .sound-toggle:hover{ transform: translateY(-2px); }
+  body:not(.no-hands) .sound-toggle{ cursor: url('images/cursor/ok.png') 11 6, pointer; }
   body.sound-off .sound-toggle{ background-image:url('images/buttons/switch-off.png'); }
   @media (max-width:600px){ .sound-toggle{ width:38px; height:68px; } }
 </style>
