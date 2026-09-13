@@ -105,7 +105,7 @@
   var SB_KEY='sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i';
   var BUCKET='portfolio-carousel';
   var ADMINS=['stephane.donchery@gmail.com','vizualcrea@gmail.com'];
-  var sb=window.supabase.createClient(SB_URL,SB_KEY);
+  var sb=window.supabase.createClient(SB_URL,SB_KEY,{ auth:{ flowType:'pkce', detectSessionInUrl:true, persistSession:true, autoRefreshToken:true } });
 
   var loginView=document.getElementById('loginView');
   var managerView=document.getElementById('managerView');
