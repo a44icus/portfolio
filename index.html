@@ -432,8 +432,10 @@
   .travel-map{ width:100%; height:clamp(300px,40vh,400px); overflow:hidden; background:transparent; margin-top:.2rem; }
   .travel-map canvas{ outline:none; }
   .travel-hint{ color:var(--muted); font-size:.82rem; margin:.6rem 0 0; }
-  .trip-marker{ width:15px; height:15px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--coral); border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.5); cursor:pointer; transition:transform .15s ease; }
-  .trip-marker:hover{ transform:rotate(-45deg) scale(1.28); }
+  .trip-marker{ width:16px; height:16px; cursor:pointer; }
+  .trip-marker i{ display:block; width:16px; height:16px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--coral); border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.5); transition:transform .15s ease; }
+  .trip-marker:hover i{ transform:rotate(-45deg) scale(1.28); }
+  .travel-map .maplibregl-ctrl-bottom-right{ display:none; }
   .maplibregl-popup.trip-pop .maplibregl-popup-content{ padding:.7rem .7rem .6rem; border-radius:12px; background:var(--paper); color:var(--ink); box-shadow:0 16px 44px -12px rgba(0,0,0,.55); }
   .maplibregl-popup.trip-pop .maplibregl-popup-tip{ border-top-color:var(--paper); border-bottom-color:var(--paper); }
   .maplibregl-popup.trip-pop .maplibregl-popup-close-button{ color:var(--muted); font-size:1.1rem; }
@@ -1488,7 +1490,7 @@
   });
   map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
   map.on('style.load', function(){ try{ map.setProjection({type:'globe'}); }catch(e){} });
-  map.on('load', function(){ setTimeout(function(){ map.resize(); },200); });
+  map.on('load', function(){ setTimeout(function(){ map.resize(); var w=map.getContainer().offsetWidth; map.setPadding({top:0,bottom:0,left:0,right:Math.round(w*0.42)}); },200); });
 
   // lightbox partagé
   var lb=document.createElement('div'); lb.className='trip-lb';
@@ -1504,7 +1506,7 @@
     if(!places.length){ if(hint) hint.textContent='Bientôt mes lieux préférés ✨'; return; }
     places.forEach(function(pl){
       if(pl.lat==null || pl.lng==null) return;
-      var mk=document.createElement('div'); mk.className='trip-marker'; mk.title=pl.name||'';
+      var mk=document.createElement('div'); mk.className='trip-marker'; mk.title=pl.name||''; mk.innerHTML='<i></i>';
       var photos=byPlace[pl.id]||[];
       var html='<div class="trip-pop"><h4>'+esc(pl.name)+'</h4>';
       if(photos.length){
