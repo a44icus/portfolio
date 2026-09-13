@@ -957,8 +957,8 @@
       el.addEventListener('mouseleave', ()=> ring.classList.remove('on-dark'));
     });
     document.querySelectorAll('.carousel-sec').forEach(el=>{
-      el.addEventListener('mouseenter', ()=> ring.classList.add('is-gallery'));
-      el.addEventListener('mouseleave', ()=> ring.classList.remove('is-gallery'));
+      el.addEventListener('mouseenter', ()=>{ ring.classList.add('is-gallery'); ring.style.width='66px'; ring.style.height='66px'; ring.style.background='#D9FF4A'; ring.style.borderColor='#D9FF4A'; });
+      el.addEventListener('mouseleave', ()=>{ ring.classList.remove('is-gallery'); ring.style.width=''; ring.style.height=''; ring.style.background=''; ring.style.borderColor=''; });
     });
   }
 
