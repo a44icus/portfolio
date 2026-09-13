@@ -351,10 +351,11 @@
   .carousel-head .section-tag{ color: var(--lime); }
   .carousel-head h2{ color: var(--panel-fg); }
   .carousel{ position:relative; width:100%; overflow:hidden; background:#000; }
-  .carousel-track{ display:flex; height: clamp(320px, 68vh, 720px); transition: transform .6s cubic-bezier(.2,.8,.2,1); will-change: transform; }
-  .carousel-slide{ position:relative; flex:0 0 100%; width:100%; height:100%; }
+  .carousel-track{ position:relative; height: clamp(320px, 68vh, 720px); }
+  .carousel-slide{ position:absolute; inset:0; width:100%; height:100%; opacity:0; transition: opacity 1s ease; will-change: opacity; }
+  .carousel-slide.active{ opacity:1; }
   .carousel-slide img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .carousel-empty{ display:flex; align-items:center; justify-content:center; color: rgba(250,250,247,0.5); font-family: var(--ff-display); font-weight:600; font-size:1.1rem; }
+  .carousel-empty{ opacity:1; display:flex; align-items:center; justify-content:center; color: rgba(250,250,247,0.5); font-family: var(--ff-display); font-weight:600; font-size:1.1rem; }
   .carousel-nav{ position:absolute; top:50%; transform:translateY(-50%); z-index:3; width:52px; height:52px; border-radius:50%; border:0; background: rgba(250,250,247,0.14); color:#fff; font-size:1.8rem; line-height:1; cursor:pointer; backdrop-filter: blur(6px); transition: background .2s ease; display:grid; place-items:center; }
   .carousel-nav:hover{ background: rgba(250,250,247,0.3); }
   .carousel-nav.prev{ left: clamp(.6rem,2vw,1.4rem); }
@@ -517,11 +518,11 @@
   .cursor-ring.is-pick .cursor-pick{ display:block; }
   .pick-note{ display:none; position:absolute; top:48%; left:50%; transform:translate(-50%,-50%); font-family: var(--ff-display); font-weight:800; font-size:12px; line-height:1; color:#17171E; pointer-events:none; }
   .cursor-ring.is-pick .pick-note{ display:block; }
-  /* curseur galerie photo */
+  /* curseur galerie photo : grande icône appareil photo citron */
   .cursor-cam{ display:none; position:absolute; top:50%; left:50%; width:26px; height:26px; transform:translate(-50%,-50%); }
-  .cursor-ring.is-gallery{ width:66px !important; height:66px !important; background:var(--lime) !important; border-color:var(--lime) !important; }
+  .cursor-ring.is-gallery{ border-width:0 !important; }
   .cursor-ring.is-gallery .cursor-label, .cursor-ring.is-gallery .cursor-pick, .cursor-ring.is-gallery .pick-note{ display:none; }
-  .cursor-ring.is-gallery .cursor-cam{ display:block; }
+  .cursor-ring.is-gallery .cursor-cam{ display:block; width:48px; height:48px; stroke:#D9FF4A; filter: drop-shadow(0 1px 4px rgba(0,0,0,.4)); }
 
   /* preloader */
   .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
@@ -957,8 +958,8 @@
       el.addEventListener('mouseleave', ()=> ring.classList.remove('on-dark'));
     });
     document.querySelectorAll('.carousel-sec').forEach(el=>{
-      el.addEventListener('mouseenter', ()=>{ ring.classList.add('is-gallery'); ring.style.width='66px'; ring.style.height='66px'; ring.style.background='#D9FF4A'; ring.style.borderColor='#D9FF4A'; });
-      el.addEventListener('mouseleave', ()=>{ ring.classList.remove('is-gallery'); ring.style.width=''; ring.style.height=''; ring.style.background=''; ring.style.borderColor=''; });
+      el.addEventListener('mouseenter', ()=> ring.classList.add('is-gallery'));
+      el.addEventListener('mouseleave', ()=> ring.classList.remove('is-gallery'));
     });
   }
 
@@ -1320,7 +1321,7 @@
   function go(i){
     if(!slides.length) return;
     idx=(i+slides.length)%slides.length;
-    track.style.transform='translateX(-'+(idx*100)+'%)';
+    [].forEach.call(track.children,function(s,si){ s.classList.toggle('active',si===idx); });
     [].forEach.call(dotsEl.children,function(d,di){ d.classList.toggle('active',di===idx); });
     capEl.textContent = slides[idx] ? (slides[idx].caption||'') : '';
     restart();
