@@ -274,28 +274,14 @@
   /* travaux */
   .travaux{ border-top:1px solid var(--line); }
   .grid{
-    display:grid; grid-template-columns: repeat(6, 1fr); gap: 1rem;
-    grid-auto-rows: 250px;
-    grid-template-areas:
-      "radar radar radar boreal boreal boreal"
-      "radar radar radar boreal boreal boreal"
-      "argile argile lueur lueur ourse ourse"
-      "transit transit transit freq freq freq"
-      "halo halo halo freq freq freq";
+    display:grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
+    grid-auto-rows: 320px;
   }
   .project{
     position:relative; border-radius: 8px; overflow:hidden;
-    text-decoration:none; color: var(--paper);
-    display:block; grid-area: auto;
+    text-decoration:none; color: var(--panel-fg);
+    display:block;
   }
-  .project--radar{ grid-area: radar; }
-  .project--boreal{ grid-area: boreal; }
-  .project--argile{ grid-area: argile; }
-  .project--lueur{ grid-area: lueur; }
-  .project--ourse{ grid-area: ourse; }
-  .project--transit{ grid-area: transit; }
-  .project--freq{ grid-area: freq; }
-  .project--halo{ grid-area: halo; }
 
   .project-visual{ position:absolute; inset:0; transition: transform .8s cubic-bezier(.2,.8,.2,1); }
   .project:hover .project-visual{ transform: scale(1.05); }
@@ -319,14 +305,6 @@
 
   /* --- project cover photos --- */
   .project-visual{ background-size: cover; background-position: center; background-repeat: no-repeat; background-color: #1A1A22; }
-  .project--radar .project-visual{ background-image: url('images/radar.jpg'); }
-  .project--boreal .project-visual{ background-image: url('images/boreal.jpg'); }
-  .project--argile .project-visual{ background-image: url('images/argile.jpg'); }
-  .project--lueur  .project-visual{ background-image: url('images/lueur.jpg'); }
-  .project--ourse  .project-visual{ background-image: url('images/ourse.jpg'); }
-  .project--transit .project-visual{ background-image: url('images/transit.jpg'); }
-  .project--freq   .project-visual{ background-image: url('images/freq.jpg'); }
-  .project--halo   .project-visual{ background-image: url('images/halo.jpg'); }
   .project-visual::after{
     content:''; position:absolute; inset:0;
     background: linear-gradient(180deg, rgba(23,23,30,0.06) 0%, rgba(23,23,30,0.32) 100%);
@@ -335,12 +313,10 @@
   .project:hover .project-visual::after{ background: linear-gradient(180deg, rgba(23,23,30,0) 0%, rgba(23,23,30,0.12) 100%); }
 
   @media (max-width: 900px){
-    .grid{ grid-template-columns: 1fr 1fr; grid-auto-rows: 220px;
-      grid-template-areas: "radar radar" "boreal boreal" "argile lueur" "ourse ourse" "transit transit" "freq freq" "halo halo"; }
+    .grid{ grid-template-columns: 1fr 1fr; grid-auto-rows: 260px; }
   }
   @media (max-width: 600px){
-    .grid{ grid-template-columns: 1fr; grid-auto-rows: 240px;
-      grid-template-areas: "radar" "boreal" "argile" "lueur" "ourse" "transit" "freq" "halo"; }
+    .grid{ grid-template-columns: 1fr; grid-auto-rows: 280px; }
     .project-info{ transform: translateY(0); background: linear-gradient(to top, rgba(23,23,30,0.75), rgba(23,23,30,0.25)); }
     .project-meta{ opacity:.9; transform:none; }
   }
@@ -1370,6 +1346,79 @@
     }catch(e){ render([]); }
   }
   if(document.readyState!=='loading') load(); else document.addEventListener('DOMContentLoaded',load);
+})();
+</script>
+
+<!-- Contenu dynamique (CMS Supabase) -->
+<script>
+(function(){
+  if(!window.supabase) return;
+  var sb=window.supabase.createClient('https://iqnjgvhmeflczvftyter.supabase.co','sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i');
+  var E=function(s){ return (s==null?'':String(s)); };
+  var A=function(s){ return E(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var ATTR=function(s){ return A(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); };
+
+  function applySettings(rows){
+    var m={}; rows.forEach(function(r){ m[r.key]=r.value; });
+    function txt(sel,v){ if(v==null) return; var el=document.querySelector(sel); if(el) el.textContent=v; }
+    txt('.hero-sub', m.hero_sub);
+    if(m.hero_availability!=null){ var pill=document.querySelector('.pill'); if(pill) pill.innerHTML='<span class="dot"></span>'+A(m.hero_availability); }
+    var ps=document.querySelectorAll('.profil-text > p');
+    if(ps[0] && m.profil_p1!=null) ps[0].textContent=m.profil_p1;
+    if(ps[1] && m.profil_p2!=null) ps[1].textContent=m.profil_p2;
+    if(m.signature_name!=null){ var sig=document.querySelector('.signature'); if(sig) sig.innerHTML=A(m.signature_name)+'<span>'+A(m.signature_role)+'</span>'; }
+    if(m.contact_email){ var em=document.querySelector('.email-link'); if(em){ em.href='mailto:'+m.contact_email; em.textContent=m.contact_email; } var cb=document.querySelector('.copy-email'); if(cb) cb.setAttribute('data-email',m.contact_email); }
+    var as=document.querySelectorAll('.contact-aside div strong');
+    if(as[0] && m.contact_availability!=null) as[0].textContent=m.contact_availability;
+    if(as[1] && m.contact_location!=null) as[1].textContent=m.contact_location;
+    if(as[2] && m.contact_phone!=null) as[2].textContent=m.contact_phone;
+    var soc=[['social_flickr'],['social_instagram'],['social_linkedin'],['social_behance'],['social_arena']];
+    var links=document.querySelectorAll('.socials li a');
+    soc.forEach(function(p,i){ var a=links[i]; if(!a) return; var u=m[p[0]]; var li=a.parentNode; if(u){ a.href=u; li.style.display=''; } else { li.style.display='none'; } });
+  }
+  function applyProjects(rows){
+    if(!rows||!rows.length) return; var g=document.querySelector('.grid'); if(!g) return; g.innerHTML='';
+    rows.forEach(function(p,i){
+      var a=document.createElement('a'); a.className='project'; a.href=p.link||'#'; a.setAttribute('aria-label',E(p.title)+' — projet');
+      a.innerHTML='<div class="project-visual" style="background-image:url(\''+ATTR(p.image_url)+'\')"></div>'+
+        '<span class="project-idx">'+('0'+(i+1)).slice(-2)+' / '+A(p.category)+'</span>'+
+        '<span class="project-arrow" aria-hidden="true">↗</span>'+
+        '<div class="project-info"><p class="project-title">'+A(p.title)+'</p><p class="project-meta">'+A(p.meta)+'</p></div>';
+      if((p.link||'#')==='#') a.addEventListener('click',function(e){ e.preventDefault(); });
+      g.appendChild(a);
+    });
+  }
+  function applyServices(rows){
+    if(!rows||!rows.length) return; var l=document.querySelector('.svc-list'); if(!l) return; l.innerHTML='';
+    rows.forEach(function(s,i){ var d=document.createElement('div'); d.className='svc';
+      d.innerHTML='<span class="svc-idx">'+('0'+(i+1)).slice(-2)+'</span><span class="svc-name">'+A(s.name)+'</span><span class="svc-tags">'+A(s.tags)+'</span>';
+      l.appendChild(d); });
+  }
+  function applyParcours(rows){
+    if(!rows||!rows.length) return; var uls=document.querySelectorAll('.cv-list'); if(uls.length<2) return;
+    function fill(ul,items){ ul.innerHTML=''; items.forEach(function(r){ var li=document.createElement('li'); li.innerHTML='<span class="cv-yr">'+A(r.period)+'</span><div><strong>'+A(r.title)+'</strong>'+(r.detail?'<p>'+A(r.detail)+'</p>':'')+'</div>'; ul.appendChild(li); }); }
+    fill(uls[0], rows.filter(function(r){return r.kind!=='formation';}));
+    fill(uls[1], rows.filter(function(r){return r.kind==='formation';}));
+  }
+  function applyTestimonials(rows){
+    if(!rows||!rows.length) return; var q=document.querySelector('.quotes'); if(!q) return; q.innerHTML='';
+    rows.forEach(function(t){ var f=document.createElement('figure'); f.className='quote';
+      f.innerHTML='<div class="mk" aria-hidden="true">“</div><p>'+A(t.quote)+'</p><figcaption class="by"><strong>'+A(t.author)+'</strong>'+A(t.role)+'</figcaption>';
+      q.appendChild(f); });
+  }
+  Promise.all([
+    sb.from('portfolio_settings').select('key,value'),
+    sb.from('portfolio_projects').select('*').order('position'),
+    sb.from('portfolio_services').select('*').order('position'),
+    sb.from('portfolio_parcours').select('*').order('position'),
+    sb.from('portfolio_testimonials').select('*').order('position')
+  ]).then(function(r){
+    try{ if(r[0].data) applySettings(r[0].data); }catch(e){}
+    try{ applyProjects(r[1].data); }catch(e){}
+    try{ applyServices(r[2].data); }catch(e){}
+    try{ applyParcours(r[3].data); }catch(e){}
+    try{ applyTestimonials(r[4].data); }catch(e){}
+  });
 })();
 </script>
 
