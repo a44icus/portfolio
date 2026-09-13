@@ -1499,11 +1499,14 @@
 (function(){
   if(!matchMedia('(pointer:fine)').matches) return;
   var wrap=document.createElement('div'); wrap.className='idle-wave'; wrap.setAttribute('aria-hidden','true');
-  wrap.innerHTML='<span class="idle-bubble">Hey ! Tu es toujours là ?!</span><img class="idle-hand" src="images/cursor/grab.png" alt="">';
+  wrap.innerHTML='<span class="idle-bubble"></span><img class="idle-hand" src="images/cursor/grab.png" alt="">';
   document.body.appendChild(wrap);
+  var bubble=wrap.querySelector('.idle-bubble');
+  var PHRASES=['Hey ! Tu es toujours là ?!','Psst… on continue la visite ?','Toujours dans le coin ? 👋'];
+  var pi=0;
   var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null;
   function position(){ wrap.style.transform='translate('+mx+'px,'+my+'px) translate(-50%,-50%)'; }
-  function show(){ if(shown) return; shown=true; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
+  function show(){ if(shown) return; shown=true; bubble.textContent=PHRASES[pi%PHRASES.length]; pi++; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
   function hide(){ if(!shown) return; shown=false; wrap.classList.remove('on'); document.body.classList.remove('idle-active'); }
   function arm(){ clearTimeout(timer); timer=setTimeout(show, 10000); }
   window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
