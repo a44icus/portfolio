@@ -517,6 +517,11 @@
   .cursor-ring.is-pick .cursor-pick{ display:block; }
   .pick-note{ display:none; position:absolute; top:48%; left:50%; transform:translate(-50%,-50%); font-family: var(--ff-display); font-weight:800; font-size:12px; line-height:1; color:#17171E; pointer-events:none; }
   .cursor-ring.is-pick .pick-note{ display:block; }
+  /* curseur galerie photo */
+  .cursor-cam{ display:none; position:absolute; top:50%; left:50%; width:26px; height:26px; transform:translate(-50%,-50%); }
+  .cursor-ring.is-gallery{ width:66px !important; height:66px !important; background:var(--lime) !important; border-color:var(--lime) !important; }
+  .cursor-ring.is-gallery .cursor-label, .cursor-ring.is-gallery .cursor-pick, .cursor-ring.is-gallery .pick-note{ display:none; }
+  .cursor-ring.is-gallery .cursor-cam{ display:block; }
 
   /* preloader */
   .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
@@ -538,7 +543,7 @@
 </div>
 <div class="progress" id="progress" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
-<div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span><svg class="cursor-pick" viewBox="0 0 64 74" aria-hidden="true"><path d="M32 3 C46 3 61 14 61 30 C61 40 52 55 38 68 C35 71 29 71 26 68 C12 55 3 40 3 30 C3 14 18 3 32 3 Z"/></svg><span class="pick-note" aria-hidden="true"></span></div>
+<div class="cursor-ring" aria-hidden="true"><span class="cursor-label">Voir</span><svg class="cursor-pick" viewBox="0 0 64 74" aria-hidden="true"><path d="M32 3 C46 3 61 14 61 30 C61 40 52 55 38 68 C35 71 29 71 26 68 C12 55 3 40 3 30 C3 14 18 3 32 3 Z"/></svg><span class="pick-note" aria-hidden="true"></span><svg class="cursor-cam" viewBox="0 0 24 24" fill="none" stroke="#17171E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
 
 <header class="nav">
   <a href="#top" class="mark" aria-label="Stéphane Donchery — accueil">
@@ -947,9 +952,13 @@
       el.addEventListener('mouseleave', ()=> ring.classList.remove('is-view'));
     });
     // curseur clair sur les sections à fond foncé
-    document.querySelectorAll('.contact, .carousel-sec').forEach(el=>{
+    document.querySelectorAll('.contact').forEach(el=>{
       el.addEventListener('mouseenter', ()=> ring.classList.add('on-dark'));
       el.addEventListener('mouseleave', ()=> ring.classList.remove('on-dark'));
+    });
+    document.querySelectorAll('.carousel-sec').forEach(el=>{
+      el.addEventListener('mouseenter', ()=> ring.classList.add('is-gallery'));
+      el.addEventListener('mouseleave', ()=> ring.classList.remove('is-gallery'));
     });
   }
 
