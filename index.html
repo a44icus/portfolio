@@ -600,6 +600,16 @@
   body:not(.no-hands) .sound-toggle{ cursor: url('images/cursor/ok.png') 11 6, pointer; }
   body.sound-off .sound-toggle{ background-image:url('images/buttons/switch-off.png'); }
   @media (max-width:600px){ .sound-toggle{ width:38px; height:68px; } }
+
+  /* inactivité : main qui fait coucou + bulle */
+  .idle-wave{ position:fixed; top:0; left:0; z-index:1100; pointer-events:none; opacity:0; transition:opacity .25s ease; will-change:transform; }
+  .idle-wave.on{ opacity:1; }
+  .idle-hand{ display:block; width:44px; height:auto; transform-origin:50% 88%; animation:idleWave .7s ease-in-out infinite; filter:drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
+  @keyframes idleWave{ 0%,100%{ transform:rotate(-22deg);} 50%{ transform:rotate(22deg);} }
+  .idle-bubble{ position:absolute; bottom:100%; left:50%; transform:translate(-50%,-8px); white-space:nowrap; background:var(--ink); color:var(--paper); font-family:var(--ff-body); font-weight:700; font-size:.84rem; padding:.5rem .85rem; border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,.4); }
+  .idle-bubble::after{ content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:7px solid transparent; border-top-color:var(--ink); }
+  body.idle-active, body.idle-active *{ cursor:none !important; }
+  @media (prefers-reduced-motion: reduce){ .idle-hand{ animation:none; } }
 </style>
 </head>
 <body>
@@ -1481,6 +1491,25 @@
     }catch(e){ render([]); }
   }
   if(document.readyState!=='loading') load(); else document.addEventListener('DOMContentLoaded',load);
+})();
+</script>
+
+<!-- Inactivité : main qui fait coucou -->
+<script>
+(function(){
+  if(!matchMedia('(pointer:fine)').matches) return;
+  var wrap=document.createElement('div'); wrap.className='idle-wave'; wrap.setAttribute('aria-hidden','true');
+  wrap.innerHTML='<span class="idle-bubble">Hey ! Tu es toujours là ?!</span><img class="idle-hand" src="images/cursor/grab.png" alt="">';
+  document.body.appendChild(wrap);
+  var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null;
+  function position(){ wrap.style.transform='translate('+mx+'px,'+my+'px) translate(-50%,-50%)'; }
+  function show(){ if(shown) return; shown=true; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
+  function hide(){ if(!shown) return; shown=false; wrap.classList.remove('on'); document.body.classList.remove('idle-active'); }
+  function arm(){ clearTimeout(timer); timer=setTimeout(show, 10000); }
+  window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
+  window.addEventListener('scroll', function(){ hide(); arm(); }, {passive:true});
+  ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, function(){ hide(); arm(); }, {passive:true}); });
+  arm();
 })();
 </script>
 
