@@ -1404,7 +1404,7 @@
     if(m.contact_title_1!=null || m.contact_title_2!=null){ var ch=document.querySelector('#contact h2'); if(ch) ch.innerHTML=A(m.contact_title_1||'')+'<br><em>'+A(m.contact_title_2||'')+'</em>'; }
     // étapes approche
     var steps=document.querySelectorAll('#approche .step');
-    for(var s=0;s<4;s++){ if(steps[s]){ var h=steps[s].querySelector('h3'), pp=steps[s].querySelector('p'); if(h && m['step'+(s+1)+'_title']!=null) h.textContent=m['step'+(s+1)+'_title']; if(pp && m['step'+(s+1)+'_text']!=null) pp.textContent=m['step'+(s+1)+'_text']; } }
+    for(var s=0;s<4;s++){ if(steps[s]){ var h=steps[s].querySelector('h3'), pp=steps[s].querySelector('p:not(.step-num)'); if(h && m['step'+(s+1)+'_title']!=null) h.textContent=m['step'+(s+1)+'_title']; if(pp && m['step'+(s+1)+'_text']!=null) pp.textContent=m['step'+(s+1)+'_text']; } }
     // chiffres
     var stats=document.querySelectorAll('.stats .stat');
     for(var st=0;st<4;st++){ if(stats[st]){ var num=stats[st].querySelector('.num'), lbl=stats[st].querySelector('.lbl'); if(num && m['stat'+(st+1)+'_num']!=null){ num.setAttribute('data-count', m['stat'+(st+1)+'_num']); var sp=num.querySelector('span'); if(sp) sp.textContent=m['stat'+(st+1)+'_num']; } if(lbl && m['stat'+(st+1)+'_label']!=null) lbl.textContent=m['stat'+(st+1)+'_label']; } }
