@@ -1502,19 +1502,19 @@
   wrap.innerHTML='<span class="idle-bubble"></span><img class="idle-hand" src="images/cursor/grab.png" alt="">';
   document.body.appendChild(wrap);
   var bubble=wrap.querySelector('.idle-bubble');
-  var PHRASES=['Hey ! Tu es toujours là ?!','Psst… on continue la visite ?','Toujours dans le coin ?'];
+  window.__idleMsgs=window.__idleMsgs||{welcome:'Hey ! Bienvenue sur mon site.',phrases:['Hey ! Tu es toujours là ?!','Psst… on continue la visite ?','Toujours dans le coin ?']};
   var pi=0;
   var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null;
   function position(){ wrap.style.transform='translate('+mx+'px,'+my+'px) translate(-50%,-50%)'; }
   var welcomeTimer=null;
-  function show(text){ if(shown) return; shown=true; bubble.textContent=(text!=null)?text:PHRASES[pi++%PHRASES.length]; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
+  function show(text){ if(shown) return; shown=true; var ph=(window.__idleMsgs&&window.__idleMsgs.phrases&&window.__idleMsgs.phrases.length)?window.__idleMsgs.phrases:['…']; bubble.textContent=(text!=null)?text:ph[pi++%ph.length]; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
   function hide(){ if(!shown) return; shown=false; wrap.classList.remove('on'); document.body.classList.remove('idle-active'); }
   function arm(){ clearTimeout(timer); timer=setTimeout(function(){ show(); }, 10000); }
   function dismiss(){ hide(); arm(); }
   window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
   window.addEventListener('scroll', dismiss, {passive:true});
   ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, dismiss, {passive:true}); });
-  welcomeTimer=setTimeout(function(){ show('Hey ! Bienvenue sur mon site.'); }, 3000);
+  welcomeTimer=setTimeout(function(){ show((window.__idleMsgs&&window.__idleMsgs.welcome)||'Bienvenue !'); }, 3000);
   arm();
 })();
 </script>
@@ -1603,6 +1603,11 @@
     if(ccss){ var cst=document.getElementById('cms-colors'); if(!cst){ cst=document.createElement('style'); cst.id='cms-colors'; document.head.appendChild(cst); } cst.textContent=ccss; }
     // curseur personnalisé on/off
     if(m.cursor_custom==='off'){ document.body.classList.add('no-hands'); var cr=document.querySelector('.cursor-ring'); if(cr) cr.style.display='none'; } else { document.body.classList.remove('no-hands'); }
+    // messages "coucou" (bienvenue + inactivité)
+    window.__idleMsgs = window.__idleMsgs || {};
+    if(m.idle_welcome!=null && m.idle_welcome!=='') window.__idleMsgs.welcome=m.idle_welcome;
+    var idlePh=[]; if(m.idle_phrase1) idlePh.push(m.idle_phrase1); if(m.idle_phrase2) idlePh.push(m.idle_phrase2); if(m.idle_phrase3) idlePh.push(m.idle_phrase3);
+    if(idlePh.length) window.__idleMsgs.phrases=idlePh;
     function txt(sel,v){ if(v==null) return; var el=document.querySelector(sel); if(el) el.textContent=v; }
     txt('.hero-sub', m.hero_sub);
     if(m.hero_availability!=null){ var pill=document.querySelector('.pill'); if(pill) pill.innerHTML='<span class="dot"></span>'+A(m.hero_availability); }
