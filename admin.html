@@ -61,6 +61,8 @@
   .photo img{ width:80px; height:58px; object-fit:cover; border-radius:6px; background:var(--paper-dim); }
   .photo .actions{ display:flex; gap:.3rem; align-items:center; }
   @media(max-width:560px){ .photo{ grid-template-columns:60px 1fr; } .photo .actions{ grid-column:1/-1; justify-content:flex-end; } }
+  .set-group{ font-family:var(--ff-display); font-weight:700; font-size:1rem; margin:1.4rem 0 .2rem; padding-top:1rem; border-top:1px solid var(--line); color:var(--ink); }
+  .set-group:first-child{ border-top:0; padding-top:0; margin-top:0; }
   footer{ margin-top:2rem; color:var(--muted); font-size:.85rem; }
 </style>
 </head>
@@ -235,21 +237,59 @@
 
   /* ---- Settings ---- */
   var SETTINGS_FIELDS=[
-    {key:'hero_sub',label:'Accroche (héros)',type:'textarea'},
-    {key:'hero_availability',label:'Pastille disponibilité (héros)'},
-    {key:'profil_p1',label:'Profil — paragraphe 1',type:'textarea'},
-    {key:'profil_p2',label:'Profil — paragraphe 2',type:'textarea'},
+    {group:'Héros'},
+    {key:'hero_line1',label:'Titre — ligne 1'},
+    {key:'hero_line2_prefix',label:'Titre — ligne 2 (avant le mot animé)'},
+    {key:'hero_words',label:'Mots animés (séparés par des virgules)'},
+    {key:'hero_sub',label:'Accroche',type:'textarea'},
+    {key:'hero_availability',label:'Pastille disponibilité'},
+    {group:'Titres de sections'},
+    {key:'title_services',label:'Titre — Services'},
+    {key:'title_travaux',label:'Titre — Travaux'},
+    {key:'title_galerie',label:'Titre — Galerie'},
+    {key:'title_approche',label:'Titre — Approche'},
+    {key:'title_voix',label:'Titre — Témoignages'},
+    {key:'title_instagram',label:'Titre — Instagram'},
+    {key:'title_parcours',label:'Titre — Parcours'},
+    {key:'contact_title_1',label:'Titre Contact — ligne 1'},
+    {key:'contact_title_2',label:'Titre Contact — ligne 2 (accent coral)'},
+    {group:'Profil'},
+    {key:'profil_p1',label:'Paragraphe 1',type:'textarea'},
+    {key:'profil_p2',label:'Paragraphe 2',type:'textarea'},
     {key:'signature_name',label:'Signature — nom'},
     {key:'signature_role',label:'Signature — rôle'},
-    {key:'contact_email',label:'Email de contact'},
+    {key:'fact1_label',label:'Fait 1 — libellé'},{key:'fact1_text',label:'Fait 1 — texte'},
+    {key:'fact2_label',label:'Fait 2 — libellé'},{key:'fact2_text',label:'Fait 2 — texte'},
+    {key:'fact3_label',label:'Fait 3 — libellé'},{key:'fact3_text',label:'Fait 3 — texte'},
+    {key:'fact4_label',label:'Fait 4 — libellé'},{key:'fact4_text',label:'Fait 4 — texte'},
+    {group:'Chiffres'},
+    {key:'stat1_num',label:'Chiffre 1 — nombre'},{key:'stat1_label',label:'Chiffre 1 — libellé'},
+    {key:'stat2_num',label:'Chiffre 2 — nombre'},{key:'stat2_label',label:'Chiffre 2 — libellé'},
+    {key:'stat3_num',label:'Chiffre 3 — nombre'},{key:'stat3_label',label:'Chiffre 3 — libellé'},
+    {key:'stat4_num',label:'Chiffre 4 — nombre'},{key:'stat4_label',label:'Chiffre 4 — libellé'},
+    {group:'Approche — étapes'},
+    {key:'step1_title',label:'Étape 1 — titre'},{key:'step1_text',label:'Étape 1 — texte',type:'textarea'},
+    {key:'step2_title',label:'Étape 2 — titre'},{key:'step2_text',label:'Étape 2 — texte',type:'textarea'},
+    {key:'step3_title',label:'Étape 3 — titre'},{key:'step3_text',label:'Étape 3 — texte',type:'textarea'},
+    {key:'step4_title',label:'Étape 4 — titre'},{key:'step4_text',label:'Étape 4 — texte',type:'textarea'},
+    {group:'Langues'},
+    {key:'langue1',label:'Langue 1'},{key:'langue2',label:'Langue 2'},
+    {group:'Bandeaux défilants (séparés par des virgules)'},
+    {key:'marquee_services',label:'Bandeau 1 — services'},
+    {key:'marquee_tools',label:'Bandeau 2 — logiciels'},
+    {group:'Contact'},
+    {key:'contact_email',label:'Email'},
     {key:'contact_phone',label:'Téléphone'},
-    {key:'contact_availability',label:'Disponibilité (contact)'},
-    {key:'contact_location',label:'Localisation (contact)'},
-    {key:'social_flickr',label:'Lien Flickr'},
-    {key:'social_instagram',label:'Lien Instagram'},
-    {key:'social_linkedin',label:'Lien LinkedIn (vide = masqué)'},
-    {key:'social_behance',label:'Lien Behance (vide = masqué)'},
-    {key:'social_arena',label:'Lien Are.na (vide = masqué)'}
+    {key:'contact_availability',label:'Disponibilité'},
+    {key:'contact_location',label:'Localisation'},
+    {group:'Réseaux (laisser vide = masqué)'},
+    {key:'social_flickr',label:'Flickr'},
+    {key:'social_instagram',label:'Instagram'},
+    {key:'social_linkedin',label:'LinkedIn'},
+    {key:'social_behance',label:'Behance'},
+    {key:'social_arena',label:'Are.na'},
+    {group:'Pied de page'},
+    {key:'footer_copyright',label:'Copyright'}
   ];
   function initSettings(){
     var form=document.getElementById('settingsForm');
@@ -257,6 +297,7 @@
       var m={}; (r.data||[]).forEach(function(x){ m[x.key]=x.value; });
       form.innerHTML='';
       SETTINGS_FIELDS.forEach(function(f){
+        if(f.group){ var h=document.createElement('div'); h.className='set-group'; h.textContent=f.group; form.appendChild(h); return; }
         var g=document.createElement('div'); var lb=document.createElement('label'); lb.textContent=f.label; g.appendChild(lb);
         var el=f.type==='textarea'?document.createElement('textarea'):document.createElement('input'); if(el.tagName==='INPUT') el.type='text';
         el.value=m[f.key]==null?'':m[f.key]; el.setAttribute('data-key',f.key); g.appendChild(el); form.appendChild(g);
