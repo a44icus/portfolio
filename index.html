@@ -492,13 +492,13 @@
   .cursor-ring.is-pick{ border-width: 0 !important; background: transparent !important; width:26px; height:26px; }
   .cursor-ring.is-pick .cursor-label{ display:none; }
   .cursor-ring.is-pick .cursor-pick{ display:block; }
-  .pick-note{ display:none; position:absolute; top:48%; left:50%; transform:translate(-50%,-50%); font-family: var(--ff-display); font-weight:800; font-size:12px; line-height:1; color:#17171E; pointer-events:none; }
+  .pick-note{ display:none; position:absolute; top:48%; left:50%; transform:translate(-50%,-50%); font-family: var(--ff-display); font-weight:800; font-size:12px; line-height:1; color:var(--ink); pointer-events:none; }
   .cursor-ring.is-pick .pick-note{ display:block; }
   /* curseur galerie photo : grande icône appareil photo citron */
   .cursor-cam{ display:none; position:absolute; top:50%; left:50%; width:26px; height:26px; transform:translate(-50%,-50%); }
   .cursor-ring.is-gallery{ border-width:0 !important; }
   .cursor-ring.is-gallery .cursor-label, .cursor-ring.is-gallery .cursor-pick, .cursor-ring.is-gallery .pick-note{ display:none; }
-  .cursor-ring.is-gallery .cursor-cam{ display:block; width:48px; height:48px; stroke:#D9FF4A; filter: drop-shadow(0 1px 4px rgba(0,0,0,.4)); }
+  .cursor-ring.is-gallery .cursor-cam{ display:block; width:48px; height:48px; stroke:var(--lime); filter: drop-shadow(0 1px 4px rgba(0,0,0,.4)); }
 
   /* preloader */
   .preloader{ position:fixed; inset:0; z-index:1000; background:var(--paper); color:var(--ink);
@@ -1360,6 +1360,13 @@
 
   function applySettings(rows){
     var m={}; rows.forEach(function(r){ m[r.key]=r.value; });
+    // charte couleur (accents = 2 thèmes ; fond/texte/gris = thème clair uniquement)
+    var light=[]; if(m.color_paper) light.push('--paper:'+m.color_paper); if(m.color_ink) light.push('--ink:'+m.color_ink); if(m.color_muted) light.push('--muted:'+m.color_muted);
+    var acc=[]; if(m.color_cobalt) acc.push('--cobalt:'+m.color_cobalt); if(m.color_coral) acc.push('--coral:'+m.color_coral); if(m.color_lime) acc.push('--lime:'+m.color_lime);
+    var ccss=''; if(light.length) ccss+=':root:not([data-theme="dark"]){'+light.join(';')+'}'; if(acc.length) ccss+=':root{'+acc.join(';')+'}';
+    if(ccss){ var cst=document.getElementById('cms-colors'); if(!cst){ cst=document.createElement('style'); cst.id='cms-colors'; document.head.appendChild(cst); } cst.textContent=ccss; }
+    // curseur personnalisé on/off
+    if(m.cursor_custom==='off'){ document.body.classList.remove('has-cursor'); var cr=document.querySelector('.cursor-ring'); if(cr) cr.style.display='none'; }
     function txt(sel,v){ if(v==null) return; var el=document.querySelector(sel); if(el) el.textContent=v; }
     txt('.hero-sub', m.hero_sub);
     if(m.hero_availability!=null){ var pill=document.querySelector('.pill'); if(pill) pill.innerHTML='<span class="dot"></span>'+A(m.hero_availability); }

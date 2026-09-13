@@ -61,6 +61,7 @@
   .photo img{ width:80px; height:58px; object-fit:cover; border-radius:6px; background:var(--paper-dim); }
   .photo .actions{ display:flex; gap:.3rem; align-items:center; }
   @media(max-width:560px){ .photo{ grid-template-columns:60px 1fr; } .photo .actions{ grid-column:1/-1; justify-content:flex-end; } }
+  input[type=color]{ width:64px; height:42px; padding:3px; cursor:pointer; }
   .set-group{ font-family:var(--ff-display); font-weight:700; font-size:1rem; margin:1.4rem 0 .2rem; padding-top:1rem; border-top:1px solid var(--line); color:var(--ink); }
   .set-group:first-child{ border-top:0; padding-top:0; margin-top:0; }
   footer{ margin-top:2rem; color:var(--muted); font-size:.85rem; }
@@ -237,6 +238,14 @@
 
   /* ---- Settings ---- */
   var SETTINGS_FIELDS=[
+    {group:'Charte couleur & curseur'},
+    {key:'color_paper',label:'Fond (thème clair)',type:'color'},
+    {key:'color_ink',label:'Texte / foncé (thème clair)',type:'color'},
+    {key:'color_muted',label:'Gris secondaire (thème clair)',type:'color'},
+    {key:'color_cobalt',label:'Accent bleu — cobalt (2 thèmes)',type:'color'},
+    {key:'color_coral',label:'Accent corail (2 thèmes)',type:'color'},
+    {key:'color_lime',label:'Accent citron (2 thèmes)',type:'color'},
+    {key:'cursor_custom',label:'Curseur personnalisé',type:'select',options:[{value:'on',label:'Activé'},{value:'off',label:'Désactivé'}]},
     {group:'Héros'},
     {key:'hero_line1',label:'Titre — ligne 1'},
     {key:'hero_line2_prefix',label:'Titre — ligne 2 (avant le mot animé)'},
@@ -299,7 +308,10 @@
       SETTINGS_FIELDS.forEach(function(f){
         if(f.group){ var h=document.createElement('div'); h.className='set-group'; h.textContent=f.group; form.appendChild(h); return; }
         var g=document.createElement('div'); var lb=document.createElement('label'); lb.textContent=f.label; g.appendChild(lb);
-        var el=f.type==='textarea'?document.createElement('textarea'):document.createElement('input'); if(el.tagName==='INPUT') el.type='text';
+        var el;
+        if(f.type==='textarea'){ el=document.createElement('textarea'); }
+        else if(f.type==='select'){ el=document.createElement('select'); f.options.forEach(function(o){ var op=document.createElement('option'); op.value=o.value; op.textContent=o.label; el.appendChild(op); }); }
+        else { el=document.createElement('input'); el.type=(f.type==='color'?'color':'text'); }
         el.value=m[f.key]==null?'':m[f.key]; el.setAttribute('data-key',f.key); g.appendChild(el); form.appendChild(g);
       });
     });
