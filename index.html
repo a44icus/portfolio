@@ -436,6 +436,13 @@
   .trip-marker i{ display:block; width:16px; height:16px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--coral); border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.5); transition:transform .15s ease; }
   .trip-marker:hover i{ transform:rotate(-45deg) scale(1.28); }
   .travel-map .maplibregl-ctrl-bottom-right{ display:none; }
+  /* boutons de zoom — dark design */
+  .travel-map .maplibregl-ctrl-group{ background:#17171E; border:1px solid rgba(255,255,255,.14); box-shadow:0 2px 12px rgba(0,0,0,.45); border-radius:8px; overflow:hidden; }
+  .travel-map .maplibregl-ctrl-group button{ background:transparent; width:30px; height:30px; }
+  .travel-map .maplibregl-ctrl-group button+button{ border-top:1px solid rgba(255,255,255,.14); }
+  .travel-map .maplibregl-ctrl-group button:hover{ background:rgba(255,255,255,.12); }
+  .travel-map .maplibregl-ctrl-group button .maplibregl-ctrl-icon{ filter:invert(1); }
+  .travel-map .maplibregl-ctrl-group button:disabled .maplibregl-ctrl-icon{ opacity:.35; }
   .maplibregl-popup.trip-pop .maplibregl-popup-content{ padding:.7rem .7rem .6rem; border-radius:12px; background:var(--paper); color:var(--ink); box-shadow:0 16px 44px -12px rgba(0,0,0,.55); }
   .maplibregl-popup.trip-pop .maplibregl-popup-tip{ border-top-color:var(--paper); border-bottom-color:var(--paper); }
   .maplibregl-popup.trip-pop .maplibregl-popup-close-button{ color:var(--muted); font-size:1.1rem; }
@@ -1490,7 +1497,7 @@
   });
   map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
   map.on('style.load', function(){ try{ map.setProjection({type:'globe'}); }catch(e){} });
-  map.on('load', function(){ setTimeout(function(){ map.resize(); var w=map.getContainer().offsetWidth; map.setPadding({top:0,bottom:0,left:0,right:Math.round(w*0.42)}); },200); });
+  map.on('load', function(){ setTimeout(function(){ map.resize(); },200); });
 
   // lightbox partagé
   var lb=document.createElement('div'); lb.className='trip-lb';
