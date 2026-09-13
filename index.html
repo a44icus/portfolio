@@ -102,8 +102,7 @@
   body:not(.no-hands) a, body:not(.no-hands) button, body:not(.no-hands) .svc,
   body:not(.no-hands) .project, body:not(.no-hands) summary, body:not(.no-hands) label,
   body:not(.no-hands) [role="button"], body:not(.no-hands) input[type="submit"]{ cursor: url('images/cursor/pointer.png') 9 2, pointer; }
-  body:not(.no-hands) .carousel-sec{ cursor: url('images/cursor/grab.png') 14 16, grab; }
-  body:not(.no-hands) .carousel-sec:active{ cursor: url('images/cursor/grabbing.png') 13 15, grabbing; }
+  body:not(.no-hands) #carousel .carousel-track{ cursor: url('images/cursor/magic.png') 4 3, pointer; }
   /* la bande marquee masque le curseur natif pour laisser place au médiator */
   body:not(.no-hands) .marquee{ cursor: none; }
   /* l'anneau ne sert plus que de support au médiator guitare */
@@ -1321,6 +1320,8 @@
   }
 
   prevB.addEventListener('click',prev); nextB.addEventListener('click',next);
+  // clic sur la photo (baguette magique) : on change de photo
+  track.addEventListener('click',function(){ if(slides.length>1) next(); });
   car.addEventListener('mouseenter',function(){ if(timer){clearInterval(timer);timer=null;} });
   car.addEventListener('mouseleave',start);
   var x0=null;
