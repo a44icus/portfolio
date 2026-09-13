@@ -28,6 +28,7 @@
 {"@context":"https://schema.org","@type":"Person","name":"Stéphane Donchery","jobTitle":"Graphiste & Web designer","email":"mailto:stephane.donchery@gmail.com","url":"https://stephane-donchery-portfolio.vercel.app/","address":{"@type":"PostalAddress","addressLocality":"Reims","addressRegion":"Grand Est","addressCountry":"FR"},"knowsAbout":["Identité visuelle","Direction artistique","Édition","Web design","Motion design","Packaging"]}
 </script>
 <link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css">
 <style>
   :root{
     --paper: #FAFAF7;
@@ -427,6 +428,24 @@
   .cv-list li p{ margin:.35rem 0 0; color:var(--muted); font-size:.95rem; }
   .cv-langues{ color:var(--muted); font-size:.98rem; }
   .cv-langues strong{ color:var(--ink); }
+  /* globe voyages */
+  .travel-map{ width:100%; height:clamp(300px,40vh,400px); border-radius:14px; overflow:hidden; border:1px solid var(--line); background:#0a0f1e; margin-top:.2rem; }
+  .travel-map canvas{ outline:none; }
+  .travel-hint{ color:var(--muted); font-size:.82rem; margin:.6rem 0 0; }
+  .trip-marker{ width:15px; height:15px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--coral); border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.5); cursor:pointer; transition:transform .15s ease; }
+  .trip-marker:hover{ transform:rotate(-45deg) scale(1.28); }
+  .maplibregl-popup.trip-pop .maplibregl-popup-content{ padding:.7rem .7rem .6rem; border-radius:12px; background:var(--paper); color:var(--ink); box-shadow:0 16px 44px -12px rgba(0,0,0,.55); }
+  .maplibregl-popup.trip-pop .maplibregl-popup-tip{ border-top-color:var(--paper); border-bottom-color:var(--paper); }
+  .maplibregl-popup.trip-pop .maplibregl-popup-close-button{ color:var(--muted); font-size:1.1rem; }
+  .trip-pop h4{ font-family:var(--ff-display); font-size:1rem; margin:0 0 .5rem; color:var(--ink); }
+  .trip-thumbs{ display:grid; grid-template-columns:repeat(3,58px); gap:5px; }
+  .trip-thumbs img{ width:58px; height:58px; object-fit:cover; border-radius:6px; cursor:pointer; transition:transform .12s ease; }
+  .trip-thumbs img:hover{ transform:scale(1.07); }
+  .trip-noimg{ color:var(--muted); font-size:.85rem; margin:0; }
+  .trip-lb{ position:fixed; inset:0; z-index:1200; background:rgba(0,0,0,.87); display:none; align-items:center; justify-content:center; padding:24px; }
+  .trip-lb.open{ display:flex; }
+  .trip-lb img{ max-width:92vw; max-height:86vh; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  .trip-lb-close{ position:absolute; top:14px; right:20px; font-size:2.2rem; color:#fff; background:none; border:0; cursor:pointer; line-height:1; }
   @media (max-width:760px){ .cv-grid{ grid-template-columns:1fr; gap:1.5rem; } .cv-list li{ grid-template-columns: 6.5rem 1fr; } }
 
   /* contact */
@@ -900,8 +919,9 @@
           <li><span class="cv-yr">Pixem Institut</span><div><strong>Infographiste Multimédia / Web Designer</strong></div></li>
           <li><span class="cv-yr">Pixem Institut</span><div><strong>Formation vidéo</strong></div></li>
         </ul>
-        <h3 class="cv-h">Langues</h3>
-        <p class="cv-langues"><strong>Français</strong> — langue maternelle<br><strong>Anglais</strong> — notions</p>
+        <h3 class="cv-h">Mes voyages</h3>
+        <div id="travelMap" class="travel-map" role="img" aria-label="Globe de mes lieux de voyage préférés"></div>
+        <p class="travel-hint">Cliquez un marqueur pour voir les photos.</p>
       </div>
     </div>
   </div>
@@ -1379,6 +1399,7 @@
 </script>
 <!-- Carrousel photo (Supabase) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js"></script>
 <script>
 (function(){
   var SB_URL='https://iqnjgvhmeflczvftyter.supabase.co';
@@ -1446,6 +1467,72 @@
     }catch(e){ render([]); }
   }
   if(document.readyState!=='loading') load(); else document.addEventListener('DOMContentLoaded',load);
+})();
+</script>
+
+<!-- Globe des voyages (MapLibre + Supabase) -->
+<script>
+(function(){
+  var el=document.getElementById('travelMap');
+  if(!el || !window.maplibregl || !window.supabase) return;
+  var sb=window.supabase.createClient('https://iqnjgvhmeflczvftyter.supabase.co','sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i');
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var map=new maplibregl.Map({
+    container:'travelMap',
+    style:{ version:8,
+      sources:{ osm:{ type:'raster', tiles:['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png','https://b.tile.openstreetmap.org/{z}/{x}/{y}.png','https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'© OpenStreetMap' } },
+      layers:[{ id:'osm', type:'raster', source:'osm' }]
+    },
+    center:[6,32], zoom:1.25, minZoom:0.6, scrollZoom:false, attributionControl:{compact:true}
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+  map.on('style.load', function(){ try{ map.setProjection({type:'globe'}); }catch(e){} });
+  map.on('load', function(){ setTimeout(function(){ map.resize(); },200); });
+
+  // lightbox partagé
+  var lb=document.createElement('div'); lb.className='trip-lb';
+  lb.innerHTML='<button class="trip-lb-close" type="button" aria-label="Fermer">×</button><img alt="">';
+  document.body.appendChild(lb);
+  var lbImg=lb.querySelector('img');
+  function closeLB(){ lb.classList.remove('open'); lbImg.removeAttribute('src'); }
+  lb.addEventListener('click', function(e){ if(e.target===lb || e.target.classList.contains('trip-lb-close')) closeLB(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeLB(); });
+
+  function build(places, byPlace){
+    var hint=document.querySelector('.travel-hint');
+    if(!places.length){ if(hint) hint.textContent='Bientôt mes lieux préférés ✨'; return; }
+    places.forEach(function(pl){
+      if(pl.lat==null || pl.lng==null) return;
+      var mk=document.createElement('div'); mk.className='trip-marker'; mk.title=pl.name||'';
+      var photos=byPlace[pl.id]||[];
+      var html='<div class="trip-pop"><h4>'+esc(pl.name)+'</h4>';
+      if(photos.length){
+        html+='<div class="trip-thumbs">';
+        photos.forEach(function(ph){ if(ph.url) html+='<img src="'+esc(ph.url)+'" alt="'+esc(ph.caption||pl.name)+'" data-full="'+esc(ph.url)+'" loading="lazy">'; });
+        html+='</div>';
+      } else { html+='<p class="trip-noimg">Pas encore de photo.</p>'; }
+      html+='</div>';
+      var pop=new maplibregl.Popup({offset:16, className:'trip-pop', maxWidth:'220px'}).setHTML(html);
+      pop.on('open', function(){
+        var c=pop.getElement(); if(!c) return;
+        c.querySelectorAll('.trip-thumbs img').forEach(function(img){
+          img.addEventListener('click', function(){ lbImg.src=img.getAttribute('data-full'); lb.classList.add('open'); });
+        });
+      });
+      new maplibregl.Marker({element:mk, anchor:'bottom'}).setLngLat([pl.lng,pl.lat]).setPopup(pop).addTo(map);
+    });
+  }
+
+  Promise.all([
+    sb.from('portfolio_places').select('*').order('position',{ascending:true}),
+    sb.from('portfolio_place_photos').select('*').order('position',{ascending:true})
+  ]).then(function(res){
+    var places=(res[0]&&res[0].data)||[];
+    var photos=(res[1]&&res[1].data)||[];
+    var by={}; photos.forEach(function(p){ (by[p.place_id]=by[p.place_id]||[]).push(p); });
+    build(places, by);
+  }).catch(function(){});
 })();
 </script>
 

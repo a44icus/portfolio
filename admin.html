@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FAFAF7'/%3E%3Ccircle cx='12' cy='16' r='9' fill='none' stroke='%2317171E' stroke-width='2'/%3E%3Cpath d='M18 6 L28 26 L8 26 Z' fill='none' stroke='%23FF5A3C' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css">
 <style>
   :root{ --paper:#FAFAF7; --paper-dim:#F1F0EB; --ink:#17171E; --muted:#6B6B75; --cobalt:#2A2AF0; --coral:#FF5A3C; --lime:#D9FF4A; --line:rgba(23,23,30,0.14);
     --ff-display:'Unbounded',sans-serif; --ff-body:'Manrope',sans-serif; --ff-mono:'Space Mono',monospace; }
@@ -91,6 +92,7 @@
       <button class="tab" data-tab="services">Services</button>
       <button class="tab" data-tab="parcours">Parcours</button>
       <button class="tab" data-tab="testimonials">Témoignages</button>
+      <button class="tab" data-tab="places">Voyages</button>
       <button class="tab" data-tab="settings">Textes &amp; contacts</button>
     </div>
 
@@ -122,6 +124,13 @@
       <div id="tesList"></div>
     </div>
 
+    <div class="panel" data-panel="places">
+      <div class="toolbar"><span class="count" id="plCount">—</span><button class="btn small" id="plAdd" type="button">+ Ajouter un lieu</button></div>
+      <div id="plMap" style="height:340px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a0f1e;"></div>
+      <p style="font-size:.82rem;color:var(--muted);margin:.5rem 0 1.1rem;">Sélectionne un lieu (bouton « Placer ») puis clique sur la carte, ou fais glisser son marqueur. Tu peux aussi saisir les coordonnées à la main.</p>
+      <div id="plList"></div>
+    </div>
+
     <div class="panel" data-panel="settings">
       <div class="card"><div id="settingsForm" class="fields"></div><div style="margin-top:1.2rem;"><button class="btn" id="settingsSave" type="button">Enregistrer les textes</button></div></div>
     </div>
@@ -133,6 +142,7 @@
 <div class="msg" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js"></script>
 <script>
 (function(){
   var SB_URL='https://iqnjgvhmeflczvftyter.supabase.co';
@@ -169,10 +179,11 @@
     var b=e.target.closest('.tab'); if(!b) return;
     document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active',t===b); });
     document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-panel')===b.getAttribute('data-tab')); });
+    if(b.getAttribute('data-tab')==='places' && window.__plResize) window.__plResize();
   });
 
   var started=false;
-  function initAll(){ if(started) return; started=true; initCarousel(); initCollections(); initSettings(); }
+  function initAll(){ if(started) return; started=true; initCarousel(); initCollections(); initPlaces(); initSettings(); }
 
   /* ---- Généric collection editor ---- */
   function editor(cfg){
@@ -349,6 +360,115 @@
       function step(){ done++; if(done===l.length){ toast(err?err+' erreur(s).':'Ajouté ✓', err?'err':'ok'); load(); } } }
     dz.onclick=function(){ fi.click(); }; fi.onchange=function(){ upload(fi.files); fi.value=''; };
     dz.ondragover=function(e){ e.preventDefault(); dz.classList.add('drag'); }; dz.ondragleave=function(){ dz.classList.remove('drag'); }; dz.ondrop=function(e){ e.preventDefault(); dz.classList.remove('drag'); upload(e.dataTransfer.files); };
+    load();
+  }
+
+  /* ---- Voyages (globe + lieux + photos) ---- */
+  function initPlaces(){
+    var listEl=document.getElementById('plList'), countEl=document.getElementById('plCount');
+    var places=[], photosByPlace={}, markers={}, coordInputs={}, armedId=null, map=null;
+
+    function ensureMap(){
+      if(map || !window.maplibregl) return;
+      map=new maplibregl.Map({ container:'plMap',
+        style:{ version:8, sources:{ osm:{ type:'raster', tiles:['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png','https://b.tile.openstreetmap.org/{z}/{x}/{y}.png','https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'© OpenStreetMap' } }, layers:[{ id:'osm', type:'raster', source:'osm' }] },
+        center:[6,30], zoom:1.1 });
+      map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+      map.on('style.load', function(){ try{ map.setProjection({type:'globe'}); }catch(e){} });
+      map.on('click', function(e){ if(!armedId) return; var pl=places.filter(function(p){return p.id===armedId;})[0]; if(pl) setCoords(pl, e.lngLat.lat, e.lngLat.lng); });
+    }
+    window.__plResize=function(){ ensureMap(); if(map) setTimeout(function(){ map.resize(); },60); };
+
+    function setCoords(pl, lat, lng){
+      pl.lat=lat; pl.lng=lng;
+      sb.from('portfolio_places').update({lat:lat,lng:lng}).eq('id',pl.id).then(function(){ toast('Position enregistrée ✓','ok'); });
+      placeMarker(pl); var ci=coordInputs[pl.id]; if(ci){ ci.lat.value=(+lat).toFixed(5); ci.lng.value=(+lng).toFixed(5); }
+    }
+    function placeMarker(pl){
+      if(pl.lat==null||pl.lng==null||!map) return;
+      if(markers[pl.id]){ markers[pl.id].setLngLat([pl.lng,pl.lat]); return; }
+      var em=document.createElement('div'); em.style.cssText='width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--coral);border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:grab;';
+      var mk=new maplibregl.Marker({element:em,draggable:true,anchor:'bottom'}).setLngLat([pl.lng,pl.lat]).addTo(map);
+      mk.on('dragend', function(){ var ll=mk.getLngLat(); setCoords(pl, ll.lat, ll.lng); });
+      markers[pl.id]=mk;
+    }
+    function clearMarkers(){ Object.keys(markers).forEach(function(k){ markers[k].remove(); }); markers={}; }
+
+    function load(){
+      Promise.all([
+        sb.from('portfolio_places').select('*').order('position',{ascending:true}),
+        sb.from('portfolio_place_photos').select('*').order('position',{ascending:true})
+      ]).then(function(res){
+        places=(res[0]&&res[0].data)||[];
+        var ph=(res[1]&&res[1].data)||[]; photosByPlace={}; ph.forEach(function(p){ (photosByPlace[p.place_id]=photosByPlace[p.place_id]||[]).push(p); });
+        render();
+      });
+    }
+    function addPlace(){
+      var pos=places.length?Math.max.apply(null,places.map(function(p){return p.position||0;}))+1:0;
+      var c=map?map.getCenter():{lat:20,lng:0};
+      sb.from('portfolio_places').insert({name:'Nouveau lieu', lat:c.lat, lng:c.lng, position:pos}).then(function(r){ if(r.error) toast(r.error.message,'err'); else load(); });
+    }
+    function delPlace(pl){
+      if(!confirm('Supprimer ce lieu et ses photos ?')) return;
+      var paths=(photosByPlace[pl.id]||[]).map(function(p){return p.path;}).filter(Boolean);
+      var after=function(){ sb.from('portfolio_places').delete().eq('id',pl.id).then(function(){ if(markers[pl.id]){ markers[pl.id].remove(); delete markers[pl.id]; } load(); toast('Lieu supprimé.','ok'); }); };
+      if(paths.length) sb.storage.from(BUCKET).remove(paths).then(after,after); else after();
+    }
+    function move(i,d){ var j=i+d; if(j<0||j>=places.length) return; var a=places[i],b=places[j]; Promise.all([sb.from('portfolio_places').update({position:b.position}).eq('id',a.id),sb.from('portfolio_places').update({position:a.position}).eq('id',b.id)]).then(load); }
+
+    function uploadPhotos(pl, files){
+      var l=[].slice.call(files).filter(function(f){return /^image\//.test(f.type);}); if(!l.length) return;
+      var cur=photosByPlace[pl.id]||[]; var base=cur.length?Math.max.apply(null,cur.map(function(p){return p.position||0;}))+1:0;
+      toast('Téléversement…','info'); var done=0,err=0;
+      function step(){ done++; if(done===l.length){ toast(err?('Terminé ('+err+' échec).'):'Photos ajoutées ✓', err?'err':'ok'); load(); } }
+      l.forEach(function(f,k){ var path='places/'+Date.now()+'-'+k+'-'+slug(f.name); sb.storage.from(BUCKET).upload(path,f).then(function(u){ if(u.error){ err++; step(); return; } var url=sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; sb.from('portfolio_place_photos').insert({place_id:pl.id,url:url,path:path,position:base+k}).then(function(){ step(); },function(){ err++; step(); }); },function(){ err++; step(); }); });
+    }
+    function delPhoto(ph){ var after=function(){ sb.from('portfolio_place_photos').delete().eq('id',ph.id).then(load); }; if(ph.path) sb.storage.from(BUCKET).remove([ph.path]).then(after,after); else after(); }
+
+    function render(){
+      countEl.textContent=places.length+' '+(places.length>1?'lieux':'lieu');
+      clearMarkers(); coordInputs={}; listEl.innerHTML='';
+      places.forEach(function(pl,i){
+        placeMarker(pl);
+        var it=document.createElement('div'); it.className='item';
+        var head=document.createElement('div'); head.className='item-head';
+        var title=document.createElement('strong'); title.textContent=pl.name||'Lieu';
+        var acts=document.createElement('div'); acts.className='actions';
+        var pbtn=document.createElement('button'); pbtn.className='iconbtn'; pbtn.textContent=armedId===pl.id?'📍 clique la carte':'📍 Placer'; pbtn.style.width='auto'; pbtn.style.padding='0 .6rem'; if(armedId===pl.id){ pbtn.style.background='var(--coral)'; pbtn.style.color='#fff'; } pbtn.onclick=function(){ armedId=(armedId===pl.id?null:pl.id); render(); if(armedId&&pl.lat!=null&&map) map.flyTo({center:[pl.lng,pl.lat],zoom:3}); };
+        var up=document.createElement('button'); up.className='iconbtn'; up.textContent='↑'; up.disabled=i===0; up.onclick=function(){ move(i,-1); };
+        var dn=document.createElement('button'); dn.className='iconbtn'; dn.textContent='↓'; dn.disabled=i===places.length-1; dn.onclick=function(){ move(i,1); };
+        var rm=document.createElement('button'); rm.className='btn danger small'; rm.textContent='Suppr.'; rm.onclick=function(){ delPlace(pl); };
+        acts.appendChild(pbtn); acts.appendChild(up); acts.appendChild(dn); acts.appendChild(rm);
+        head.appendChild(title); head.appendChild(acts); it.appendChild(head);
+
+        var fw=document.createElement('div'); fw.className='fields two';
+        var g1=document.createElement('div'); var l1=document.createElement('label'); l1.textContent='Nom du lieu'; var i1=document.createElement('input'); i1.type='text'; i1.value=pl.name||''; i1.onchange=function(){ pl.name=i1.value; sb.from('portfolio_places').update({name:i1.value}).eq('id',pl.id).then(function(){ title.textContent=i1.value||'Lieu'; if(markers[pl.id]) markers[pl.id].getElement().title=i1.value; toast('Enregistré ✓','ok'); }); }; g1.appendChild(l1); g1.appendChild(i1); fw.appendChild(g1);
+        var g2=document.createElement('div'); var l2=document.createElement('label'); l2.textContent='Légende (option)'; var i2=document.createElement('input'); i2.type='text'; i2.value=pl.caption||''; i2.onchange=function(){ sb.from('portfolio_places').update({caption:i2.value}).eq('id',pl.id).then(function(){ toast('Enregistré ✓','ok'); }); }; g2.appendChild(l2); g2.appendChild(i2); fw.appendChild(g2);
+        var g3=document.createElement('div'); var l3=document.createElement('label'); l3.textContent='Latitude'; var i3=document.createElement('input'); i3.type='number'; i3.step='any'; i3.value=pl.lat==null?'':pl.lat; g3.appendChild(l3); g3.appendChild(i3); fw.appendChild(g3);
+        var g4=document.createElement('div'); var l4=document.createElement('label'); l4.textContent='Longitude'; var i4=document.createElement('input'); i4.type='number'; i4.step='any'; i4.value=pl.lng==null?'':pl.lng; g4.appendChild(l4); g4.appendChild(i4); fw.appendChild(g4);
+        coordInputs[pl.id]={lat:i3,lng:i4};
+        function commit(){ var la=parseFloat(i3.value), lo=parseFloat(i4.value); if(isNaN(la)||isNaN(lo)) return; setCoords(pl,la,lo); }
+        i3.onchange=commit; i4.onchange=commit;
+        it.appendChild(fw);
+
+        var pl2=document.createElement('label'); pl2.textContent='Photos (mini-galerie au clic sur le marqueur)'; pl2.style.cssText='display:block;margin:.7rem 0 .35rem;font-size:.85rem;color:var(--muted);'; it.appendChild(pl2);
+        var strip=document.createElement('div'); strip.style.cssText='display:flex;flex-wrap:wrap;gap:6px;align-items:center;';
+        (photosByPlace[pl.id]||[]).forEach(function(ph){
+          var w=document.createElement('div'); w.style.cssText='position:relative;';
+          var im=document.createElement('img'); im.src=ph.url; im.style.cssText='width:64px;height:64px;object-fit:cover;border-radius:6px;display:block;';
+          var x=document.createElement('button'); x.textContent='×'; x.title='Supprimer'; x.style.cssText='position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:0;background:#e23;color:#fff;cursor:pointer;line-height:1;'; x.onclick=function(){ if(confirm('Supprimer cette photo ?')) delPhoto(ph); };
+          w.appendChild(im); w.appendChild(x); strip.appendChild(w);
+        });
+        var addp=document.createElement('button'); addp.className='btn small'; addp.textContent='+ photos'; var fin=document.createElement('input'); fin.type='file'; fin.accept='image/*'; fin.multiple=true; fin.hidden=true; addp.onclick=function(){ fin.click(); }; fin.onchange=function(){ uploadPhotos(pl, fin.files); fin.value=''; };
+        strip.appendChild(addp); strip.appendChild(fin); it.appendChild(strip);
+
+        listEl.appendChild(it);
+      });
+    }
+
+    ensureMap();
+    document.getElementById('plAdd').addEventListener('click', addPlace);
     load();
   }
 })();
