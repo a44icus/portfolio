@@ -514,11 +514,24 @@
   @keyframes preOut{ to{ opacity:0; visibility:hidden; } }
   @keyframes prefloat{ from{ transform:scale(.9); opacity:.55;} to{ transform:scale(1.06); opacity:1;} }
   @media (prefers-reduced-motion: reduce){ .preloader{ display:none; } }
+
+  /* interrupteur son guitare (bas gauche) */
+  .sound-toggle{
+    position:fixed; left:clamp(.7rem,2vw,1.1rem); bottom:clamp(.7rem,2vw,1.1rem); z-index:900;
+    width:44px; height:78px; border:0; padding:0; background:transparent;
+    background-image:url('images/buttons/switch-on.png'); background-size:contain;
+    background-repeat:no-repeat; background-position:center bottom;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.28)); transition: transform .15s ease, filter .15s ease;
+  }
+  .sound-toggle:hover{ transform: translateY(-2px); }
+  body.sound-off .sound-toggle{ background-image:url('images/buttons/switch-off.png'); }
+  @media (max-width:600px){ .sound-toggle{ width:38px; height:68px; } }
 </style>
 </head>
 <body>
 
 <a class="skip" href="#top">Aller au contenu</a>
+<button id="soundToggle" class="sound-toggle" type="button" aria-pressed="true" aria-label="Activer ou désactiver le son de la guitare" title="Son guitare : activé"></button>
 <div class="preloader" id="preloader" aria-hidden="true">
   <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="12" cy="16" r="9" stroke="currentColor" stroke-width="2"/>
@@ -1151,9 +1164,27 @@
   var actx=null;
   function getCtx(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(actx.state==='suspended'){ actx.resume(); } return actx; }
   ['pointerdown','keydown','touchstart'].forEach(function(ev){ document.addEventListener(ev, function unlock(){ getCtx(); document.removeEventListener(ev, unlock); }, {passive:true}); });
+  /* interrupteur son guitare */
+  (function(){
+    var btn=document.getElementById('soundToggle'); if(!btn) return;
+    var stored=null; try{ stored=localStorage.getItem('guitarSound'); }catch(e){}
+    var on = stored!=='off';
+    function apply(){
+      document.body.classList.toggle('sound-off', !on);
+      btn.setAttribute('aria-pressed', on?'true':'false');
+      btn.title = on ? 'Son guitare : activé' : 'Son guitare : coupé';
+    }
+    apply();
+    btn.addEventListener('click', function(){
+      on=!on; apply();
+      try{ localStorage.setItem('guitarSound', on?'on':'off'); }catch(e){}
+      if(on){ var c=getCtx(); if(c) playNote(0.6, 0.7); } // petit retour sonore à l'activation
+    });
+  })();
   var OPEN=[82.41,110.0,146.83,196.0,246.94,329.63]; // Mi La Ré Sol Si Mi (accordage standard)
   var NOTE_LETTERS=['E','A','D','G','B','E'];
   function playNote(xNorm, strength){
+    if(document.body.classList.contains('sound-off')) return;
     var ctx=getCtx(); if(!ctx) return;
     var note=OPEN[Math.max(0, Math.min(5, Math.floor(xNorm*6)))];
     var sr=ctx.sampleRate, dur=2.6, N=Math.max(2, Math.round(sr/note)), len=Math.floor(sr*dur);
@@ -1194,6 +1225,7 @@
     return elecFX;
   }
   function playElectric(xNorm, strength){
+    if(document.body.classList.contains('sound-off')) return;
     var ctx=getCtx(); if(!ctx) return;
     var fx=getElecFX(ctx);
     var note=OPEN[Math.max(0, Math.min(5, Math.floor(xNorm*6)))];
