@@ -1510,7 +1510,7 @@
   function show(text){ if(shown) return; shown=true; bubble.textContent=(text!=null)?text:PHRASES[pi++%PHRASES.length]; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
   function hide(){ if(!shown) return; shown=false; wrap.classList.remove('on'); document.body.classList.remove('idle-active'); }
   function arm(){ clearTimeout(timer); timer=setTimeout(function(){ show(); }, 10000); }
-  function dismiss(){ clearTimeout(welcomeTimer); hide(); arm(); }
+  function dismiss(){ hide(); arm(); }
   window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
   window.addEventListener('scroll', dismiss, {passive:true});
   ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, dismiss, {passive:true}); });
