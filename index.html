@@ -345,19 +345,25 @@
     .project-meta{ opacity:.9; transform:none; }
   }
 
-  /* distinctions */
-  .press{ border-top:1px solid var(--line); background: var(--ink); color: var(--paper); }
-  .press h2{ color: var(--paper); }
-  .press .section-tag{ color: var(--lime); }
-  .press-list li{
-    display:grid; grid-template-columns: auto 1fr auto; gap:1.2rem; align-items:baseline;
-    padding: 1.15rem 0; border-bottom:1px solid rgba(250,250,247,0.16); font-size:1rem;
-  }
-  .press-list li:first-child{ border-top:1px solid rgba(250,250,247,0.16); }
-  .press-list li .yr{ font-family: var(--ff-mono); font-size:.85rem; color: rgba(250,250,247,0.55); }
-  .press-list li .what{ font-weight:600; color: var(--paper); }
-  .press-list li .who{ color: rgba(250,250,247,0.55); font-size:.9rem; text-align:right; }
-  @media (max-width: 640px){ .press-list li{ grid-template-columns: auto 1fr; } .press-list li .who{ grid-column: 1 / -1; text-align:left; } }
+  /* carrousel photo pleine largeur */
+  .carousel-sec{ border-top:1px solid var(--line); background: var(--panel); color: var(--panel-fg); padding-left:0; padding-right:0; }
+  .carousel-head{ padding: 0 clamp(1.2rem,5vw,4rem) 2rem; }
+  .carousel-head .section-tag{ color: var(--lime); }
+  .carousel-head h2{ color: var(--panel-fg); }
+  .carousel{ position:relative; width:100%; overflow:hidden; background:#000; }
+  .carousel-track{ display:flex; height: clamp(320px, 68vh, 720px); transition: transform .6s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+  .carousel-slide{ position:relative; flex:0 0 100%; width:100%; height:100%; }
+  .carousel-slide img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .carousel-empty{ display:flex; align-items:center; justify-content:center; color: rgba(250,250,247,0.5); font-family: var(--ff-display); font-weight:600; font-size:1.1rem; }
+  .carousel-nav{ position:absolute; top:50%; transform:translateY(-50%); z-index:3; width:52px; height:52px; border-radius:50%; border:0; background: rgba(250,250,247,0.14); color:#fff; font-size:1.8rem; line-height:1; cursor:pointer; backdrop-filter: blur(6px); transition: background .2s ease; display:grid; place-items:center; }
+  .carousel-nav:hover{ background: rgba(250,250,247,0.3); }
+  .carousel-nav.prev{ left: clamp(.6rem,2vw,1.4rem); }
+  .carousel-nav.next{ right: clamp(.6rem,2vw,1.4rem); }
+  .carousel-cap{ position:absolute; left:0; right:0; bottom:2.4rem; margin:0; text-align:center; z-index:3; color:#fff; font-weight:600; font-size:clamp(.95rem,2vw,1.2rem); text-shadow:0 2px 14px rgba(0,0,0,.6); padding:0 4rem; pointer-events:none; }
+  .carousel-dots{ position:absolute; left:0; right:0; bottom:1.1rem; z-index:3; display:flex; gap:.5rem; justify-content:center; }
+  .carousel-dots button{ width:9px; height:9px; border-radius:50%; border:0; padding:0; background: rgba(255,255,255,0.4); cursor:pointer; transition: background .2s ease, transform .2s ease; }
+  .carousel-dots button.active{ background:#fff; transform:scale(1.25); }
+  @media (max-width:600px){ .carousel-nav{ width:42px; height:42px; font-size:1.4rem; } .carousel-cap{ bottom:2rem; padding:0 2rem; } }
 
   /* approche */
   .approche{ border-top:1px solid var(--line); }
@@ -452,9 +458,6 @@
   .nav{ background: var(--nav-bg); }
   .marquee{ background: var(--panel); color: var(--panel-fg); }
   .marquee-item.hollow{ -webkit-text-stroke-color: var(--panel-fg); }
-  .press{ background: var(--panel); color: var(--panel-fg); }
-  .press h2{ color: var(--panel-fg); }
-  .press-list li .what{ color: var(--panel-fg); }
   .contact{ background: var(--panel); color: var(--panel-fg); }
   .email-link{ color: var(--panel-fg); }
   .contact-aside strong{ color: var(--panel-fg); }
@@ -729,19 +732,19 @@
   </div>
 </section>
 
-<section id="press" class="press">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="section-tag">03 — Reconnaissance</span>
-      <h2>Distinctions & publications.</h2>
+<section id="carrousel" class="carousel-sec" aria-label="Galerie photo">
+  <div class="carousel-head reveal">
+    <span class="section-tag">03 — Galerie</span>
+    <h2>En images.</h2>
+  </div>
+  <div class="carousel" id="carousel">
+    <div class="carousel-track" id="carouselTrack">
+      <div class="carousel-slide carousel-empty">Chargement…</div>
     </div>
-    <ul class="press-list">
-      <li class="reveal"><span class="yr">2026</span><span class="what">Awwwards — Honorable Mention (projet Boréal)</span><span class="who">Awwwards</span></li>
-      <li class="reveal"><span class="yr">2025</span><span class="what">Lauréat, catégorie Identité — Prix du design du Grand Est</span><span class="who">Région Grand Est</span></li>
-      <li class="reveal"><span class="yr">2025</span><span class="what">Portfolio publié dans le dossier « Nouvelles typographies »</span><span class="who">Revue Étapes</span></li>
-      <li class="reveal"><span class="yr">2024</span><span class="what">Sélection officielle — Festival International de l'Affiche, Chaumont</span><span class="who">Le Signe</span></li>
-      <li class="reveal"><span class="yr">2023</span><span class="what">CSS Design Awards — Site of the Day (Lueur)</span><span class="who">CSSDA</span></li>
-    </ul>
+    <button class="carousel-nav prev" id="carPrev" type="button" aria-label="Photo précédente">‹</button>
+    <button class="carousel-nav next" id="carNext" type="button" aria-label="Photo suivante">›</button>
+    <p class="carousel-cap" id="carouselCap"></p>
+    <div class="carousel-dots" id="carouselDots" role="tablist" aria-label="Sélection de photo"></div>
   </div>
 </section>
 
@@ -944,7 +947,7 @@
       el.addEventListener('mouseleave', ()=> ring.classList.remove('is-view'));
     });
     // curseur clair sur les sections à fond foncé
-    document.querySelectorAll('.contact, .press').forEach(el=>{
+    document.querySelectorAll('.contact, .carousel-sec').forEach(el=>{
       el.addEventListener('mouseenter', ()=> ring.classList.add('on-dark'));
       el.addEventListener('mouseleave', ()=> ring.classList.remove('on-dark'));
     });
@@ -1290,6 +1293,76 @@
   });
 })();
 </script>
+<!-- Carrousel photo (Supabase) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var SB_URL='https://iqnjgvhmeflczvftyter.supabase.co';
+  var SB_KEY='sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i';
+  var track=document.getElementById('carouselTrack');
+  if(!track) return;
+  var dotsEl=document.getElementById('carouselDots');
+  var capEl=document.getElementById('carouselCap');
+  var prevB=document.getElementById('carPrev');
+  var nextB=document.getElementById('carNext');
+  var car=document.getElementById('carousel');
+  var slides=[], idx=0, timer=null, reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function go(i){
+    if(!slides.length) return;
+    idx=(i+slides.length)%slides.length;
+    track.style.transform='translateX(-'+(idx*100)+'%)';
+    [].forEach.call(dotsEl.children,function(d,di){ d.classList.toggle('active',di===idx); });
+    capEl.textContent = slides[idx] ? (slides[idx].caption||'') : '';
+    restart();
+  }
+  function next(){ go(idx+1); }
+  function prev(){ go(idx-1); }
+  function start(){ if(!reduced && slides.length>1){ timer=setInterval(next,5000); } }
+  function restart(){ if(timer){ clearInterval(timer); timer=null; } start(); }
+
+  function render(photos){
+    if(!photos || !photos.length){
+      track.innerHTML='<div class="carousel-slide carousel-empty">Bientôt des photos ✨</div>';
+      prevB.style.display=nextB.style.display='none'; dotsEl.style.display='none'; capEl.textContent='';
+      return;
+    }
+    slides=photos; track.innerHTML=''; dotsEl.innerHTML='';
+    photos.forEach(function(p,i){
+      var s=document.createElement('div'); s.className='carousel-slide';
+      var img=document.createElement('img'); img.src=p.url; img.alt=p.caption||('Photo '+(i+1));
+      img.loading=i===0?'eager':'lazy'; img.decoding='async';
+      s.appendChild(img); track.appendChild(s);
+      var b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.setAttribute('aria-label','Photo '+(i+1));
+      b.addEventListener('click', function(){ go(i); });
+      dotsEl.appendChild(b);
+    });
+    var multi=photos.length>1;
+    prevB.style.display=nextB.style.display= multi?'grid':'none';
+    dotsEl.style.display= multi?'flex':'none';
+    go(0);
+  }
+
+  prevB.addEventListener('click',prev); nextB.addEventListener('click',next);
+  car.addEventListener('mouseenter',function(){ if(timer){clearInterval(timer);timer=null;} });
+  car.addEventListener('mouseleave',start);
+  var x0=null;
+  car.addEventListener('touchstart',function(e){ x0=e.touches[0].clientX; },{passive:true});
+  car.addEventListener('touchend',function(e){ if(x0===null)return; var dx=e.changedTouches[0].clientX-x0; if(Math.abs(dx)>40){ dx<0?next():prev(); } x0=null; },{passive:true});
+
+  function load(){
+    if(!window.supabase){ render([]); return; }
+    try{
+      var sb=window.supabase.createClient(SB_URL,SB_KEY);
+      sb.from('portfolio_carousel').select('url,caption,position').order('position',{ascending:true}).then(function(res){
+        render((res && res.data) ? res.data : []);
+      }, function(){ render([]); });
+    }catch(e){ render([]); }
+  }
+  if(document.readyState!=='loading') load(); else document.addEventListener('DOMContentLoaded',load);
+})();
+</script>
+
 <!-- Vercel Web Analytics (s'active via le toggle Analytics du projet) -->
 <script defer src="/_vercel/insights/script.js"></script>
 </body>
