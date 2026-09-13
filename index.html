@@ -1506,12 +1506,15 @@
   var pi=0;
   var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null;
   function position(){ wrap.style.transform='translate('+mx+'px,'+my+'px) translate(-50%,-50%)'; }
-  function show(){ if(shown) return; shown=true; bubble.textContent=PHRASES[pi%PHRASES.length]; pi++; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
+  var welcomeTimer=null;
+  function show(text){ if(shown) return; shown=true; bubble.textContent=(text!=null)?text:PHRASES[pi++%PHRASES.length]; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
   function hide(){ if(!shown) return; shown=false; wrap.classList.remove('on'); document.body.classList.remove('idle-active'); }
-  function arm(){ clearTimeout(timer); timer=setTimeout(show, 10000); }
+  function arm(){ clearTimeout(timer); timer=setTimeout(function(){ show(); }, 10000); }
+  function dismiss(){ clearTimeout(welcomeTimer); hide(); arm(); }
   window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
-  window.addEventListener('scroll', function(){ hide(); arm(); }, {passive:true});
-  ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, function(){ hide(); arm(); }, {passive:true}); });
+  window.addEventListener('scroll', dismiss, {passive:true});
+  ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, dismiss, {passive:true}); });
+  welcomeTimer=setTimeout(function(){ show('Hey ! Bienvenue sur mon site.'); }, 3000);
   arm();
 })();
 </script>
