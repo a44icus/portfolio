@@ -1460,7 +1460,7 @@
 (function(){
   var SB_URL='https://iqnjgvhmeflczvftyter.supabase.co';
   var SB_KEY='sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i';
-  window.__imgTx = window.__imgTx || function(u,w,q){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+w+'&quality='+(q||72) : u; };
+  window.__imgTx = window.__imgTx || function(u,s,q,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(q||72) : u; };
   var track=document.getElementById('carouselTrack');
   if(!track) return;
   var dotsEl=document.getElementById('carouselDots');
@@ -1492,7 +1492,7 @@
     slides=photos; track.innerHTML=''; dotsEl.innerHTML='';
     photos.forEach(function(p,i){
       var s=document.createElement('div'); s.className='carousel-slide';
-      var img=document.createElement('img'); img.src=window.__imgTx(p.url,1920,74); img.alt=p.caption||('Photo '+(i+1));
+      var img=document.createElement('img'); img.src=window.__imgTx(p.url,1920,74,'contain'); img.alt=p.caption||('Photo '+(i+1));
       img.loading=i===0?'eager':'lazy'; img.decoding='async';
       s.appendChild(img); track.appendChild(s);
       var b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.setAttribute('aria-label','Photo '+(i+1));
@@ -1660,7 +1660,7 @@
   var el=document.getElementById('travelMap');
   if(!el || !window.maplibregl || !window.supabase) return;
   var sb=window.supabase.createClient('https://iqnjgvhmeflczvftyter.supabase.co','sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i');
-  window.__imgTx = window.__imgTx || function(u,w,q){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+w+'&quality='+(q||72) : u; };
+  window.__imgTx = window.__imgTx || function(u,s,q,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(q||72) : u; };
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   var map=new maplibregl.Map({
@@ -1707,7 +1707,7 @@
       var html='<div class="trip-pop"><h4>'+esc(pl.name)+'</h4>';
       if(photos.length){
         html+='<div class="trip-thumbs">';
-        photos.forEach(function(ph){ if(ph.url) html+='<img src="'+esc(window.__imgTx(ph.url,160,60))+'" alt="'+esc(ph.caption||pl.name)+'" loading="lazy">'; });
+        photos.forEach(function(ph){ if(ph.url) html+='<img src="'+esc(window.__imgTx(ph.url,200,60,'cover'))+'" alt="'+esc(ph.caption||pl.name)+'" loading="lazy">'; });
         html+='</div>';
       } else { html+='<p class="trip-noimg">Pas encore de photo.</p>'; }
       html+='</div>';
@@ -1715,7 +1715,7 @@
       pop.on('open', function(){
         var c=pop.getElement(); if(!c) return;
         var withUrl=photos.filter(function(p){return p.url;});
-        var urls=withUrl.map(function(p){return window.__imgTx(p.url,1600,72);});
+        var urls=withUrl.map(function(p){return window.__imgTx(p.url,1600,72,'contain');});
         var caps=withUrl.map(function(p){return p.caption||pl.name;});
         c.querySelectorAll('.trip-thumbs img').forEach(function(img,ii){
           img.addEventListener('click', function(){ openLB(urls, caps, ii); });
