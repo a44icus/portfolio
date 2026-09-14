@@ -93,6 +93,7 @@
       <button class="tab" data-tab="parcours">Parcours</button>
       <button class="tab" data-tab="testimonials">Témoignages</button>
       <button class="tab" data-tab="places">Voyages</button>
+      <button class="tab" data-tab="method">Méthode</button>
       <button class="tab" data-tab="settings">Textes &amp; contacts</button>
     </div>
 
@@ -129,6 +130,22 @@
       <div id="plMap" style="height:340px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a0f1e;"></div>
       <p style="font-size:.82rem;color:var(--muted);margin:.5rem 0 1.1rem;">Sélectionne un lieu (bouton « Placer ») puis clique sur la carte, ou fais glisser son marqueur. Tu peux aussi saisir les coordonnées à la main.</p>
       <div id="plList"></div>
+    </div>
+
+    <div class="panel" data-panel="method">
+      <div class="toolbar">
+        <select id="mStepSel" style="padding:.5rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--paper);font:inherit;">
+          <option value="ecoute">Écoute</option>
+          <option value="exploration">Exploration</option>
+          <option value="construction">Construction</option>
+          <option value="livraison">Livraison</option>
+        </select>
+        <span class="count" id="mCount">—</span>
+        <div class="dropzone" id="mDrop" style="flex:1;min-width:220px;"><strong>+ Ajouter des éléments</strong><br><span style="font-size:.85rem;">clique ou glisse-dépose (PNG détourés)</span><input type="file" id="mFile" accept="image/*" multiple hidden></div>
+      </div>
+      <p style="font-size:.82rem;color:var(--muted);margin:.2rem 0 1rem;">Glisse un élément pour le déplacer. Clique-le pour régler taille, rotation, profondeur (parallaxe) et ordre d'apparition.</p>
+      <div id="mStage" style="position:relative;width:100%;max-width:560px;aspect-ratio:1 / .92;margin:0 auto;background:radial-gradient(600px 360px at 80% 80%,rgba(96,74,168,.35),transparent),#14121f;border:1px solid var(--line);border-radius:12px;overflow:hidden;touch-action:none;"></div>
+      <div id="mCtrls" style="max-width:560px;margin:1rem auto 0;"></div>
     </div>
 
     <div class="panel" data-panel="settings">
@@ -183,7 +200,7 @@
   });
 
   var started=false;
-  function initAll(){ if(started) return; started=true; initCarousel(); initCollections(); initPlaces(); initSettings(); }
+  function initAll(){ if(started) return; started=true; initCarousel(); initCollections(); initPlaces(); initMethod(); initSettings(); }
 
   /* ---- Généric collection editor ---- */
   function editor(cfg){
@@ -474,6 +491,80 @@
 
     ensureMap();
     document.getElementById('plAdd').addEventListener('click', addPlace);
+    load();
+  }
+
+  /* ---- Méthode : éditeur de collages (positionnement des éléments) ---- */
+  function initMethod(){
+    var stage=document.getElementById('mStage'), ctrls=document.getElementById('mCtrls'), countEl=document.getElementById('mCount');
+    var sel=document.getElementById('mStepSel'), drop=document.getElementById('mDrop'), file=document.getElementById('mFile');
+    var step=sel.value, pieces=[], selId=null;
+
+    function load(){ sb.from('portfolio_method_pieces').select('*').eq('step',step).order('position',{ascending:true}).then(function(r){ pieces=r.data||[]; render(); }); }
+    function save(row,patch){ Object.assign(row,patch); sb.from('portfolio_method_pieces').update(patch).eq('id',row.id).then(function(res){ if(res.error) toast(res.error.message,'err'); }); }
+    function markSel(){ [].forEach.call(stage.children,function(c){ c.style.outline=(c.dataset.id===selId)?'2px solid var(--coral)':'none'; c.style.outlineOffset='2px'; }); renderCtrls(); }
+
+    function render(){
+      countEl.textContent=pieces.length+' élément'+(pieces.length>1?'s':'');
+      stage.innerHTML='';
+      pieces.forEach(function(row){
+        var el=document.createElement('div'); el.className='mp'; el.dataset.id=row.id;
+        el.style.cssText='position:absolute;left:'+row.x+'%;top:'+row.y+'%;width:'+row.w+'%;transform:translate(-50%,-50%) rotate('+row.rot+'deg);cursor:grab;touch-action:none;';
+        var img=document.createElement('img'); img.src=row.url; img.draggable=false; img.style.cssText='display:block;width:100%;height:auto;pointer-events:none;user-select:none;-webkit-user-drag:none;filter:drop-shadow(0 6px 12px rgba(0,0,0,.45));';
+        el.appendChild(img); el._row=row; makeDraggable(el); stage.appendChild(el);
+      });
+      markSel();
+    }
+
+    function makeDraggable(el){
+      el.addEventListener('pointerdown',function(e){
+        e.preventDefault(); selId=el._row.id; markSel();
+        try{ el.setPointerCapture(e.pointerId); }catch(_){ }
+        el.style.cursor='grabbing'; var r=stage.getBoundingClientRect(); var row=el._row;
+        function mv(ev){ var nx=(ev.clientX-r.left)/r.width*100, ny=(ev.clientY-r.top)/r.height*100; nx=Math.max(0,Math.min(100,nx)); ny=Math.max(0,Math.min(100,ny)); row.x=+nx.toFixed(1); row.y=+ny.toFixed(1); el.style.left=row.x+'%'; el.style.top=row.y+'%'; }
+        function up(){ el.style.cursor='grab'; el.removeEventListener('pointermove',mv); el.removeEventListener('pointerup',up); el.removeEventListener('pointercancel',up); save(row,{x:row.x,y:row.y}); }
+        el.addEventListener('pointermove',mv); el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up);
+      });
+    }
+
+    function applyLive(row){ var el=stage.querySelector('.mp[data-id="'+row.id+'"]'); if(el){ el.style.width=row.w+'%'; el.style.transform='translate(-50%,-50%) rotate('+row.rot+'deg)'; } }
+    function swap(i,j){ var a=pieces[i],b=pieces[j]; Promise.all([sb.from('portfolio_method_pieces').update({position:b.position}).eq('id',a.id),sb.from('portfolio_method_pieces').update({position:a.position}).eq('id',b.id)]).then(load); }
+    function delPiece(row){ if(!confirm('Supprimer cet élément ?')) return; var after=function(){ sb.from('portfolio_method_pieces').delete().eq('id',row.id).then(function(){ if(selId===row.id) selId=null; load(); }); }; if(row.path) sb.storage.from(BUCKET).remove([row.path]).then(after,after); else after(); }
+
+    function renderCtrls(){
+      var row=pieces.filter(function(p){return p.id===selId;})[0];
+      if(!row){ ctrls.innerHTML='<p style="color:var(--muted);font-size:.85rem;">Sélectionne un élément (clique dessus) pour régler taille, rotation, profondeur et ordre.</p>'; return; }
+      var i=pieces.indexOf(row); ctrls.innerHTML='';
+      var name=document.createElement('div'); name.style.cssText='font-weight:600;margin-bottom:.4rem;font-size:.9rem;word-break:break-all;'; name.textContent=(row.url||'').split('/').pop(); ctrls.appendChild(name);
+      function slider(label,key,min,max,st,unit){
+        var g=document.createElement('div'); g.style.margin='.45rem 0';
+        var l=document.createElement('label'); l.style.cssText='display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);'; l.textContent=label; var val=document.createElement('span'); val.textContent=row[key]+(unit||''); l.appendChild(val); g.appendChild(l);
+        var inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=st; inp.value=row[key]; inp.style.width='100%';
+        inp.oninput=function(){ var v=+inp.value; row[key]=v; val.textContent=v+(unit||''); applyLive(row); };
+        inp.onchange=function(){ var patch={}; patch[key]=row[key]; save(row,patch); };
+        g.appendChild(inp); ctrls.appendChild(g);
+      }
+      slider('Taille','w',3,100,0.5,' %');
+      slider('Rotation','rot',-60,60,1,' °');
+      slider('Profondeur (parallaxe)','d',0,30,0.5,'');
+      var a=document.createElement('div'); a.style.cssText='display:flex;gap:.5rem;margin-top:.7rem;flex-wrap:wrap;';
+      var dn=document.createElement('button'); dn.className='btn small'; dn.textContent='↓ Reculer (avant)'; dn.title='Apparaît plus tôt / dessous'; dn.disabled=i===0; dn.onclick=function(){ swap(i,i-1); };
+      var up=document.createElement('button'); up.className='btn small'; up.textContent='↑ Avancer (après)'; up.title='Apparaît plus tard / dessus'; up.disabled=i===pieces.length-1; up.onclick=function(){ swap(i,i+1); };
+      var del=document.createElement('button'); del.className='btn danger small'; del.textContent='Supprimer'; del.onclick=function(){ delPiece(row); };
+      a.appendChild(dn); a.appendChild(up); a.appendChild(del); ctrls.appendChild(a);
+    }
+
+    function upload(files){
+      var l=[].slice.call(files).filter(function(f){return /^image\//.test(f.type);}); if(!l.length) return;
+      var base=pieces.length?Math.max.apply(null,pieces.map(function(p){return p.position||0;}))+1:0;
+      toast('Téléversement…','info'); var done=0,err=0;
+      function fin(){ done++; if(done===l.length){ toast(err?('Terminé ('+err+' échec)'):'Éléments ajoutés ✓',err?'err':'ok'); load(); } }
+      l.forEach(function(f,k){ var path='method/'+step+'/'+Date.now()+'-'+k+'-'+slug(f.name); sb.storage.from(BUCKET).upload(path,f).then(function(u){ if(u.error){ err++; fin(); return; } var url=sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; sb.from('portfolio_method_pieces').insert({step:step,url:url,path:path,x:50,y:50,w:20,rot:0,d:8,position:base+k}).then(function(){ fin(); },function(){ err++; fin(); }); },function(){ err++; fin(); }); });
+    }
+
+    sel.onchange=function(){ step=sel.value; selId=null; load(); };
+    drop.onclick=function(){ file.click(); }; file.onchange=function(){ upload(file.files); file.value=''; };
+    drop.ondragover=function(e){ e.preventDefault(); drop.classList.add('drag'); }; drop.ondragleave=function(){ drop.classList.remove('drag'); }; drop.ondrop=function(e){ e.preventDefault(); drop.classList.remove('drag'); upload(e.dataTransfer.files); };
     load();
   }
 })();
