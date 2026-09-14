@@ -485,6 +485,9 @@
   .socials a:hover{ border-color: var(--lime); }
   .contact-aside{ margin-top:2.6rem; display:flex; gap:2.5rem; flex-wrap:wrap; font-size:.9rem; color: rgba(250,250,247,0.6); }
   .contact-aside strong{ display:block; color: var(--paper); font-weight:600; }
+  @media (max-width:600px){
+    .email-link{ font-size: clamp(.8rem, 4vw, 1.3rem); overflow-wrap:anywhere; max-width:100%; }
+  }
 
   footer{
     padding: 2rem clamp(1.2rem, 5vw, 4rem); color: var(--muted); font-size: .85rem;
