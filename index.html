@@ -132,7 +132,7 @@
   }
   .nav.scrolled{ border-color: var(--line); padding-top:.85rem; padding-bottom:.85rem; }
   .mark{ display:flex; align-items:center; gap:.6rem; text-decoration:none; font-family: var(--ff-display); font-weight:700; font-size: 1rem; }
-  .mark svg{ width:auto; height:24px; }
+  .mark svg{ width:auto; height:30px; }
   .nav-right{ display:flex; align-items:center; gap: clamp(1rem, 3vw, 2.2rem); }
   .nav-links{ display:flex; gap: clamp(1rem, 3vw, 2.2rem); }
   .nav-links a{ text-decoration:none; font-weight:500; font-size:.95rem; position:relative; padding: .2rem 0; }
@@ -515,6 +515,16 @@
     --paper:#fffbf3; --paper-dim:#f1f0eb; --ink:#17171E; --muted:#6B6B75; --line:rgba(23,23,30,0.14);
     color:var(--ink);
   }
+  /* contact en clair (crème) en mode sombre */
+  :root[data-theme="dark"] #contact{
+    --panel:#fffbf3; --panel-fg:#17171E;
+    --paper:#fffbf3; --paper-dim:#f1f0eb; --ink:#17171E; --muted:#6B6B75; --line:rgba(23,23,30,0.14);
+    background:#fffbf3; color:#17171E;
+  }
+  :root[data-theme="dark"] #contact .section-tag{ color:var(--coral); }
+  :root[data-theme="dark"] #contact .contact-aside{ color:rgba(23,23,30,.6); }
+  :root[data-theme="dark"] #contact .socials a{ border-bottom-color:rgba(23,23,30,.28); }
+  :root[data-theme="dark"] #contact .socials a:hover{ border-color:var(--coral); }
   /* panneaux à fond foncé fixe (indépendants du thème) */
   .nav{ background: var(--nav-bg); }
   .marquee{ background: var(--panel); color: var(--panel-fg); }
@@ -646,7 +656,6 @@
     <svg viewBox="0 0 180.38 131.63" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <path fill="#f6406b" d="M178.91,80.13c0-.09.03-.18.03-.27V7c0-2.38-1.93-4.31-4.31-4.31s-4.31,1.93-4.31,4.31v47.92c-8.81-12.63-23.09-20.33-39.41-20.51-4.18-.05-8.36.52-12.37,1.68-14.9,4.28-25.53,14.34-31.03,26.52-1.49,3.3-1.19,7.14.66,10.25l3.8,6.38c1-12.24,7.69-23.85,19.02-30.6,6.16-3.67,13.04-5.55,20.03-5.55,3.24,0,6.5.4,9.71,1.22,10.17,2.58,18.72,8.96,24.09,17.97,3.63,6.09,5.55,13.04,5.54,20.09-.01,13.77-7.36,26.7-19.18,33.74-9.01,5.37-19.57,6.91-29.74,4.33-10.17-2.58-18.72-8.96-24.09-17.97-.43-.73-13.99-23.64-13.99-23.64,0,.03-17.78-29.83-17.78-29.83-.36-.59-9-14.52-27.88-14.52S5.75,46.22,5.75,61.79s14.76,19.95,26.61,23.47c1.37.41,5.83,1.77,5.83,1.77,14.18,4.4,22.86,7.52,22.86,15.91,0,10.66-10.81,18.7-25.15,18.7s-21.85-10.01-22.17-10.49c-1.29-1.99-3.95-2.55-5.94-1.27-2,1.29-2.58,3.96-1.29,5.96.38.59,9.52,14.42,29.4,14.42s33.77-11.74,33.77-27.32-14.71-19.72-28.93-24.14c0,0-4.52-1.39-5.93-1.81-12.72-3.77-20.44-6.67-20.44-15.2,0-10.83,9.82-18.69,23.35-18.69s20.26,9.96,20.49,10.34c0,0,31.68,53.33,31.75,53.44,6.55,10.99,16.98,18.77,29.38,21.91,3.93.99,7.9,1.49,11.85,1.49,8.52,0,16.91-2.29,24.42-6.77,14.41-8.58,23.37-24.35,23.39-41.14,0-.75-.04-1.5-.07-2.25Z"/>
     </svg>
-    Stéphane Donchery
   </a>
   <div class="nav-right">
     <nav class="nav-links" aria-label="Navigation principale">
@@ -1621,18 +1630,23 @@
   document.body.appendChild(wrap);
   var bubble=wrap.querySelector('.idle-bubble');
   window.__idleMsgs=window.__idleMsgs||{welcome:'Hey ! Bienvenue sur mon site.',phrases:['Hey ! Tu es toujours là ?!','Psst… on continue la visite ?','Toujours dans le coin ?']};
+  if(window.__idleMsgs.welcomeDelay==null) window.__idleMsgs.welcomeDelay=3;
+  if(window.__idleMsgs.idleDelay==null) window.__idleMsgs.idleDelay=10;
   var pi=0;
-  var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null;
+  var mx=window.innerWidth/2, my=window.innerHeight*0.4, shown=false, timer=null, welcomeTimer=null, welcomeDone=false;
   function position(){ wrap.style.transform='translate('+mx+'px,'+my+'px) translate(-50%,-50%)'; }
-  var welcomeTimer=null;
   function show(text){ if(shown) return; shown=true; var ph=(window.__idleMsgs&&window.__idleMsgs.phrases&&window.__idleMsgs.phrases.length)?window.__idleMsgs.phrases:['…']; bubble.textContent=(text!=null)?text:ph[pi++%ph.length]; position(); wrap.classList.add('on'); document.body.classList.add('idle-active'); }
   function hide(){ if(!shown) return; shown=false; wrap.classList.remove('on'); document.body.classList.remove('idle-active'); }
-  function arm(){ clearTimeout(timer); timer=setTimeout(function(){ show(); }, 10000); }
+  function idleMs(){ var s=parseFloat(window.__idleMsgs.idleDelay); return (isNaN(s)?10:Math.max(1,s))*1000; }
+  function welMs(){ var s=parseFloat(window.__idleMsgs.welcomeDelay); return (isNaN(s)?3:Math.max(0,s))*1000; }
+  function arm(){ clearTimeout(timer); timer=setTimeout(function(){ show(); }, idleMs()); }
+  function scheduleWelcome(){ if(welcomeDone) return; clearTimeout(welcomeTimer); welcomeTimer=setTimeout(function(){ welcomeDone=true; show((window.__idleMsgs&&window.__idleMsgs.welcome)||'Bienvenue !'); }, welMs()); }
   function dismiss(){ hide(); arm(); }
   window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
   window.addEventListener('scroll', dismiss, {passive:true});
   ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, dismiss, {passive:true}); });
-  welcomeTimer=setTimeout(function(){ show((window.__idleMsgs&&window.__idleMsgs.welcome)||'Bienvenue !'); }, 3000);
+  window.__idleReinit=function(){ scheduleWelcome(); arm(); };
+  scheduleWelcome();
   arm();
 })();
 </script>
@@ -1742,6 +1756,9 @@
     if(m.idle_welcome!=null && m.idle_welcome!=='') window.__idleMsgs.welcome=m.idle_welcome;
     var idlePh=[]; if(m.idle_phrase1) idlePh.push(m.idle_phrase1); if(m.idle_phrase2) idlePh.push(m.idle_phrase2); if(m.idle_phrase3) idlePh.push(m.idle_phrase3);
     if(idlePh.length) window.__idleMsgs.phrases=idlePh;
+    if(m.idle_welcome_delay!=null && m.idle_welcome_delay!=='') window.__idleMsgs.welcomeDelay=parseFloat(m.idle_welcome_delay);
+    if(m.idle_delay!=null && m.idle_delay!=='') window.__idleMsgs.idleDelay=parseFloat(m.idle_delay);
+    if(window.__idleReinit) window.__idleReinit();
     function txt(sel,v){ if(v==null) return; var el=document.querySelector(sel); if(el) el.textContent=v; }
     txt('.hero-sub', m.hero_sub);
     if(m.hero_availability!=null){ var pill=document.querySelector('.pill'); if(pill) pill.innerHTML='<span class="dot"></span>'+A(m.hero_availability); }
