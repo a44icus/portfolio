@@ -505,8 +505,9 @@
     --panel: #0E0E13; --nav-bg: rgba(20,20,26,0.72);
     color-scheme: dark;
   }
-  /* en mode sombre, la section services reste un îlot clair crème */
-  :root[data-theme="dark"] #services{
+  /* en mode sombre, certaines sections restent des îlots clairs crème */
+  :root[data-theme="dark"] #services,
+  :root[data-theme="dark"] #voix{
     background:#fffbf3;
     --paper:#fffbf3; --paper-dim:#f1f0eb; --ink:#17171E; --muted:#6B6B75; --line:rgba(23,23,30,0.14);
     color:var(--ink);
