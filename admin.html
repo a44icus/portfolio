@@ -547,6 +547,12 @@
       slider('Taille','w',3,100,0.5,' %');
       slider('Rotation','rot',-60,60,1,' °');
       slider('Profondeur (parallaxe)','d',0,30,0.5,'');
+      var ag=document.createElement('div'); ag.style.margin='.55rem 0 .2rem';
+      var al=document.createElement('label'); al.style.cssText='display:block;font-size:.8rem;color:var(--muted);margin-bottom:.25rem;'; al.textContent="Animation d'apparition"; ag.appendChild(al);
+      var asel=document.createElement('select'); asel.style.cssText='width:100%;padding:.45rem;border:1px solid var(--line);border-radius:8px;background:var(--paper);font:inherit;';
+      [['fade','Fondu'],['up','Depuis le bas'],['down','Depuis le haut'],['left','Depuis la gauche'],['right','Depuis la droite'],['zoom','Zoom avant'],['pop','Pop'],['rotate','Rotation']].forEach(function(o){ var op=document.createElement('option'); op.value=o[0]; op.textContent=o[1]; if((row.anim||'')===o[0]) op.selected=true; asel.appendChild(op); });
+      asel.onchange=function(){ row.anim=asel.value; save(row,{anim:row.anim}); };
+      ag.appendChild(asel); ctrls.appendChild(ag);
       var a=document.createElement('div'); a.style.cssText='display:flex;gap:.5rem;margin-top:.7rem;flex-wrap:wrap;';
       var dn=document.createElement('button'); dn.className='btn small'; dn.textContent='↓ Reculer (avant)'; dn.title='Apparaît plus tôt / dessous'; dn.disabled=i===0; dn.onclick=function(){ swap(i,i-1); };
       var up=document.createElement('button'); up.className='btn small'; up.textContent='↑ Avancer (après)'; up.title='Apparaît plus tard / dessus'; up.disabled=i===pieces.length-1; up.onclick=function(){ swap(i,i+1); };

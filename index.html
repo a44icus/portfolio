@@ -366,9 +366,17 @@
   @keyframes mstepFade{ from{opacity:0} to{opacity:1} }
   .mstep-collage{ position:relative; width:100%; aspect-ratio: 1 / .92; max-height: clamp(300px,54vh,520px); }
   .mpiece{ position:absolute; z-index:1; opacity:0;
-    transform: translate(-50%,-50%) rotate(var(--rot,0deg)) scale(.85);
-    transition: opacity .5s ease, transform .55s cubic-bezier(.2,.8,.2,1); }
+    transform: translate(-50%,-50%) rotate(var(--rot,0deg)) var(--from, scale(.85));
+    transition: opacity .5s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
   .mpiece.in{ opacity:1; transform: translate(-50%,-50%) rotate(var(--rot,0deg)) scale(1); }
+  .mpiece[data-anim="up"]{ --from: translate(0,44px) scale(.92); }
+  .mpiece[data-anim="down"]{ --from: translate(0,-44px) scale(.92); }
+  .mpiece[data-anim="left"]{ --from: translate(-58px,0) scale(.92); }
+  .mpiece[data-anim="right"]{ --from: translate(58px,0) scale(.92); }
+  .mpiece[data-anim="zoom"]{ --from: scale(.35); }
+  .mpiece[data-anim="pop"]{ --from: scale(1.32); }
+  .mpiece[data-anim="rotate"]{ --from: rotate(-26deg) scale(.6); }
+  .mpiece[data-anim="fade"]{ --from: scale(1); }
   .mpiece img{ display:block; width:100%; height:auto; will-change:transform;
     transform: translate(var(--px,0px), var(--py,0px));
     transition: transform .25s ease-out;
@@ -1521,23 +1529,25 @@
 
   function mkPiece(coll,p){
     var wrap=document.createElement('div'); wrap.className='mpiece';
+    if(p.anim) wrap.setAttribute('data-anim',p.anim);
     wrap.style.left=p.x+'%'; wrap.style.top=p.y+'%'; wrap.style.width=p.w+'%'; wrap.style.setProperty('--rot',(p.rot||0)+'deg');
     var img=document.createElement('img'); img.alt=''; img.decoding='async'; img.src=p.url;
     wrap.appendChild(img); coll.appendChild(wrap);
     return {wrap:wrap,img:img,d:(p.d!=null?p.d:8)};
   }
   function cfgList(dir){ var c=CONFIG[dir]; return c?c.map(function(p){return {url:'images/methode/'+dir+'/'+p.f,x:p.x,y:p.y,w:p.w,rot:p.rot,d:p.d};}):null; }
+  var DEFANIM=['up','left','right','zoom','rotate','down','pop'];
   function buildStep(i,list){
     var coll=steps[i].querySelector('.mstep-collage'); coll.innerHTML=''; var els=[];
-    if(list&&list.length){ list.forEach(function(p){ els.push(mkPiece(coll,p)); }); }
-    else { var dir=coll.getAttribute('data-dir'); els.push(mkPiece(coll,{url:FALLBACK[dir]||'',x:50,y:50,w:82,rot:-2,d:8})); }
+    if(list&&list.length){ list.forEach(function(p,k){ if(!p.anim) p.anim=DEFANIM[k%DEFANIM.length]; els.push(mkPiece(coll,p)); }); }
+    else { var dir=coll.getAttribute('data-dir'); els.push(mkPiece(coll,{url:FALLBACK[dir]||'',x:50,y:50,w:82,rot:-2,d:8,anim:'fade'})); }
     built[i]=els;
   }
   function buildAll(by){
     steps.forEach(function(st,i){
       var dir=st.querySelector('.mstep-collage').getAttribute('data-dir');
       var rows=by[dir];
-      var list=(rows&&rows.length)?rows.map(function(r){return {url:r.url,x:r.x,y:r.y,w:r.w,rot:r.rot,d:r.d};}):cfgList(dir);
+      var list=(rows&&rows.length)?rows.map(function(r){return {url:r.url,x:r.x,y:r.y,w:r.w,rot:r.rot,d:r.d,anim:r.anim};}):cfgList(dir);
       buildStep(i,list);
     });
     ready=true; if(seen) play(idx);
