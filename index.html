@@ -1552,15 +1552,15 @@
 
   /* parallaxe à la souris (desktop) */
   if(matchMedia('(pointer:fine)').matches){
-    var msteps=stepper.querySelector('.msteps');
-    msteps.addEventListener('pointermove', function(e){
+    var zone=stepper.closest('.approche')||stepper;
+    zone.addEventListener('pointermove', function(e){
       var els=built[idx]; if(!els||!els.length) return;
       var coll=steps[idx].querySelector('.mstep-collage'); var r=coll.getBoundingClientRect(); if(!r.width) return;
       var ox=(e.clientX-(r.left+r.width/2))/(r.width/2); var oy=(e.clientY-(r.top+r.height/2))/(r.height/2);
-      ox=Math.max(-1.4,Math.min(1.4,ox)); oy=Math.max(-1.4,Math.min(1.4,oy));
+      ox=Math.max(-1.6,Math.min(1.6,ox)); oy=Math.max(-1.6,Math.min(1.6,oy));
       els.forEach(function(el){ el.img.style.setProperty('--px',(-ox*el.d).toFixed(1)+'px'); el.img.style.setProperty('--py',(-oy*el.d).toFixed(1)+'px'); });
     });
-    msteps.addEventListener('pointerleave', function(){ (built[idx]||[]).forEach(function(el){ el.img.style.setProperty('--px','0px'); el.img.style.setProperty('--py','0px'); }); });
+    zone.addEventListener('pointerleave', function(){ (built[idx]||[]).forEach(function(el){ el.img.style.setProperty('--px','0px'); el.img.style.setProperty('--py','0px'); }); });
   }
 
   render();
