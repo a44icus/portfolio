@@ -353,26 +353,35 @@
   .carousel-dots button.active{ background:#fff; transform:scale(1.25); }
   @media (max-width:600px){ .carousel-nav{ width:42px; height:42px; font-size:1.4rem; } .carousel-cap{ bottom:2rem; padding:0 2rem; } }
 
-  /* approche — méthode en collages (apparition au scroll) */
+  /* approche — méthode : stepper de collages (construction élément par élément) */
   .approche{ border-top:1px solid var(--line);
     background: radial-gradient(1100px 640px at 82% 80%, rgba(96,74,168,.30), transparent 60%), linear-gradient(160deg,#171326 0%,#0e0b18 62%,#0b0913 100%);
     color:#F3F1EA; }
   .approche .section-tag{ color: var(--coral); }
   .approche .section-head h2{ color:#F3F1EA; }
-  .method-steps{ display:flex; flex-direction:column; gap: clamp(3rem,8vh,6rem); margin-top: clamp(2rem,5vh,3.5rem); }
-  .mstep{ display:grid; grid-template-columns: 1fr 1fr; gap: clamp(1.5rem,5vw,4rem); align-items:center; }
-  .mstep-collage{ position:relative; display:flex; justify-content:center; align-items:center; min-height: clamp(260px,38vh,420px); }
-  .mstep-collage::before{ content:''; position:absolute; inset:-6% -4%; z-index:0; opacity:.16;
-    background-image: linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px);
-    background-size: 34px 34px; transform: rotate(-4deg);
-    -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent); mask-image: radial-gradient(closest-side, #000 55%, transparent); }
-  .mstep-collage img{ position:relative; z-index:1; max-width:100%; max-height: clamp(300px,46vh,480px); width:auto; height:auto; filter: drop-shadow(0 24px 42px rgba(0,0,0,.55)); }
+  .method-stepper{ margin-top: clamp(2rem,5vh,3.2rem); }
+  .msteps{ position:relative; }
+  .mstep{ display:none; grid-template-columns:1fr 1fr; gap: clamp(1.5rem,5vw,4rem); align-items:center; }
+  .mstep.active{ display:grid; animation: mstepFade .45s ease; }
+  @keyframes mstepFade{ from{opacity:0} to{opacity:1} }
+  .mstep-collage{ position:relative; width:100%; aspect-ratio: 1 / .92; max-height: clamp(300px,54vh,520px); }
+  .mpiece{ position:absolute; z-index:1; height:auto; opacity:0;
+    transform: translate(-50%,-50%) rotate(var(--rot,0deg)) scale(.85);
+    transition: opacity .5s ease, transform .55s cubic-bezier(.2,.8,.2,1);
+    filter: drop-shadow(0 10px 18px rgba(0,0,0,.4)); }
+  .mpiece.in{ opacity:1; transform: translate(-50%,-50%) rotate(var(--rot,0deg)) scale(1); }
   .mstep-title{ font-family:'Playfair Display', Georgia, serif; font-weight:600; font-size: clamp(2.8rem,7vw,5rem); line-height:1; margin:0; color:#F5F3EC; letter-spacing:-.01em; }
   .mstep-line{ display:block; width: min(430px, 92%); height:34px; margin:1.15rem 0 1.4rem; overflow:visible; }
   .mstep-text p{ color: rgba(243,241,234,.72); font-size: clamp(1rem,1.4vw,1.15rem); max-width: 42ch; margin:0; line-height:1.55; }
+  .mstep-nav{ display:flex; align-items:center; justify-content:center; gap:1.1rem; margin-top: clamp(1.6rem,4vh,2.6rem); }
+  .mnav{ width:46px; height:46px; border-radius:50%; border:1px solid rgba(243,241,234,.28); background:transparent; color:#F3F1EA; font-size:1.4rem; line-height:1; cursor:pointer; display:grid; place-items:center; transition: background .2s ease, border-color .2s ease; }
+  .mnav:hover{ background: rgba(243,241,234,.12); border-color: rgba(243,241,234,.55); }
+  .mstep-dots{ display:flex; gap:.55rem; }
+  .mstep-dots button{ width:9px; height:9px; border-radius:50%; border:0; padding:0; background: rgba(243,241,234,.32); cursor:pointer; transition: background .2s ease, transform .2s ease; }
+  .mstep-dots button.active{ background: var(--coral); transform: scale(1.3); }
   @media (max-width: 820px){
-    .mstep{ grid-template-columns:1fr; gap:1.3rem; text-align:left; }
-    .mstep-collage{ min-height:auto; justify-content:flex-start; }
+    .mstep.active{ grid-template-columns:1fr; gap:1.2rem; }
+    .mstep-collage{ max-height:clamp(240px,44vh,360px); }
     .mstep-title{ font-size: clamp(2.6rem,13vw,3.6rem); }
   }
 
@@ -814,38 +823,45 @@
       <span class="section-tag">04 — Méthode</span>
       <h2>Une méthode en quatre temps.</h2>
     </div>
-    <div class="method-steps">
-      <div class="mstep reveal">
-        <div class="mstep-collage"><img src="images/methode/ecoute.png" onerror="this.onerror=null;this.src='images/boreal.jpg'" alt="Collage — Écoute" loading="lazy" decoding="async"></div>
-        <div class="mstep-text">
-          <h3 class="mstep-title">Écoute</h3>
-          <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
-          <p>Un échange pour comprendre le contexte, les contraintes et ce que le projet doit changer.</p>
-        </div>
+    <div class="method-stepper" id="methodStepper">
+      <div class="msteps">
+        <article class="mstep active" data-step="ecoute">
+          <div class="mstep-collage" data-dir="ecoute"></div>
+          <div class="mstep-text">
+            <h3 class="mstep-title">Écoute</h3>
+            <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
+            <p>Un échange pour comprendre le contexte, les contraintes et ce que le projet doit changer.</p>
+          </div>
+        </article>
+        <article class="mstep" data-step="exploration">
+          <div class="mstep-collage" data-dir="exploration"></div>
+          <div class="mstep-text">
+            <h3 class="mstep-title">Exploration</h3>
+            <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
+            <p>Des pistes formelles rapides, testées et confrontées, avant de choisir une direction.</p>
+          </div>
+        </article>
+        <article class="mstep" data-step="construction">
+          <div class="mstep-collage" data-dir="construction"></div>
+          <div class="mstep-text">
+            <h3 class="mstep-title">Construction</h3>
+            <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
+            <p>Le système se construit : grille, typographie, palette, déclinaisons.</p>
+          </div>
+        </article>
+        <article class="mstep" data-step="livraison">
+          <div class="mstep-collage" data-dir="livraison"></div>
+          <div class="mstep-text">
+            <h3 class="mstep-title">Livraison</h3>
+            <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
+            <p>Les fichiers, les règles d'usage, et un point pour vérifier que tout tient debout.</p>
+          </div>
+        </article>
       </div>
-      <div class="mstep reveal">
-        <div class="mstep-collage"><img src="images/methode/exploration.png" onerror="this.onerror=null;this.src='images/lueur.jpg'" alt="Collage — Exploration" loading="lazy" decoding="async"></div>
-        <div class="mstep-text">
-          <h3 class="mstep-title">Exploration</h3>
-          <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
-          <p>Des pistes formelles rapides, testées et confrontées, avant de choisir une direction.</p>
-        </div>
-      </div>
-      <div class="mstep reveal">
-        <div class="mstep-collage"><img src="images/methode/construction.png" onerror="this.onerror=null;this.src='images/freq.jpg'" alt="Collage — Construction" loading="lazy" decoding="async"></div>
-        <div class="mstep-text">
-          <h3 class="mstep-title">Construction</h3>
-          <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
-          <p>Le système se construit : grille, typographie, palette, déclinaisons.</p>
-        </div>
-      </div>
-      <div class="mstep reveal">
-        <div class="mstep-collage"><img src="images/methode/livraison.png" onerror="this.onerror=null;this.src='images/argile.jpg'" alt="Collage — Livraison" loading="lazy" decoding="async"></div>
-        <div class="mstep-text">
-          <h3 class="mstep-title">Livraison</h3>
-          <svg class="mstep-line" viewBox="0 0 430 34" fill="none" preserveAspectRatio="none" aria-hidden="true"><path d="M3 20 C60 6 100 30 152 18 C210 5 252 30 300 20 C350 11 392 15 427 18" stroke="rgba(243,241,234,.5)" stroke-width="1.4" stroke-dasharray="1 6" stroke-linecap="round"/><circle cx="12" cy="20" r="3.4" fill="#FF5A3C"/><circle cx="120" cy="21" r="3.4" fill="#FF5A3C"/><circle cx="228" cy="15" r="3.4" fill="#FF5A3C"/><circle cx="335" cy="16" r="3.4" fill="#FF5A3C"/><circle cx="420" cy="18" r="3.4" fill="#FF5A3C"/></svg>
-          <p>Les fichiers, les règles d'usage, et un point pour vérifier que tout tient debout.</p>
-        </div>
+      <div class="mstep-nav">
+        <button class="mnav mnav-prev" type="button" aria-label="Étape précédente">‹</button>
+        <div class="mstep-dots" role="tablist" aria-label="Étapes de la méthode"></div>
+        <button class="mnav mnav-next" type="button" aria-label="Étape suivante">›</button>
       </div>
     </div>
   </div>
@@ -1465,6 +1481,65 @@
     }catch(e){ render([]); }
   }
   if(document.readyState!=='loading') load(); else document.addEventListener('DOMContentLoaded',load);
+})();
+</script>
+
+<!-- Méthode : stepper de collages (construction élément par élément) -->
+<script>
+(function(){
+  var stepper=document.getElementById('methodStepper'); if(!stepper) return;
+  var CONFIG={
+    ecoute:[
+      {f:'grid.png',         x:50,y:48,w:98,rot:-4},
+      {f:'montgolfiere.png', x:49,y:33,w:52,rot:-3},
+      {f:'oreille.png',      x:16,y:25,w:17,rot:-6},
+      {f:'homme_jumelles.png',x:70,y:52,w:44,rot:2},
+      {f:'tete_chat.png',    x:30,y:60,w:30,rot:-2},
+      {f:'disque.png',       x:35,y:58,w:10,rot:0},
+      {f:'fleur_rouge.png',  x:10,y:56,w:20,rot:-8},
+      {f:'fleurs_bleue.png', x:90,y:64,w:20,rot:6},
+      {f:'e.png',  x:18,y:84,w:13,rot:-6},
+      {f:'c.png',  x:31,y:85,w:14,rot:4},
+      {f:'o.png',  x:45,y:84,w:13,rot:-3},
+      {f:'u.png',  x:58,y:85,w:12,rot:5},
+      {f:'t.png',  x:71,y:84,w:14,rot:-4},
+      {f:'e2.png', x:84,y:85,w:13,rot:3}
+    ]
+  };
+  var FALLBACK={ecoute:'images/boreal.jpg',exploration:'images/lueur.jpg',construction:'images/freq.jpg',livraison:'images/argile.jpg'};
+  var steps=[].slice.call(stepper.querySelectorAll('.mstep'));
+  var dotsWrap=stepper.querySelector('.mstep-dots');
+  var prevB=stepper.querySelector('.mnav-prev'), nextB=stepper.querySelector('.mnav-next');
+  var idx=0, built=[], seen=false;
+
+  steps.forEach(function(st,i){
+    var coll=st.querySelector('.mstep-collage'), dir=coll.getAttribute('data-dir'), cfg=CONFIG[dir], els=[];
+    if(cfg && cfg.length){
+      cfg.forEach(function(p){
+        var img=document.createElement('img'); img.className='mpiece'; img.alt=''; img.decoding='async';
+        img.src='images/methode/'+dir+'/'+p.f;
+        img.style.left=p.x+'%'; img.style.top=p.y+'%'; img.style.width=p.w+'%'; img.style.setProperty('--rot',(p.rot||0)+'deg');
+        coll.appendChild(img); els.push(img);
+      });
+    } else {
+      var f=document.createElement('img'); f.className='mpiece'; f.alt=''; f.src=FALLBACK[dir]||'';
+      f.style.left='50%'; f.style.top='50%'; f.style.width='82%'; f.style.setProperty('--rot','-2deg');
+      coll.appendChild(f); els.push(f);
+    }
+    built[i]=els;
+    var b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.setAttribute('aria-label','Étape '+(i+1)); b.addEventListener('click',function(){ go(i); }); dotsWrap.appendChild(b);
+  });
+
+  function play(i){ var els=built[i]||[]; els.forEach(function(el,k){ el.classList.remove('in'); el.style.transitionDelay=(k*0.15)+'s'; }); void stepper.offsetWidth; els.forEach(function(el){ el.classList.add('in'); }); }
+  function reset(i){ (built[i]||[]).forEach(function(el){ el.classList.remove('in'); el.style.transitionDelay='0s'; }); }
+  function render(){ steps.forEach(function(st,i){ st.classList.toggle('active', i===idx); }); [].forEach.call(dotsWrap.children,function(d,i){ d.classList.toggle('active', i===idx); }); }
+  function go(i){ i=(i+steps.length)%steps.length; if(i===idx) return; reset(idx); idx=i; render(); play(idx); }
+  prevB.addEventListener('click',function(){ go(idx-1); });
+  nextB.addEventListener('click',function(){ go(idx+1); });
+
+  render();
+  var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting && !seen){ seen=true; play(idx); io.disconnect(); } }); }, {threshold:.25});
+  io.observe(stepper);
 })();
 </script>
 
