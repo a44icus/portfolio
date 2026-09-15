@@ -633,6 +633,24 @@
   .idle-bubble::after{ content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:7px solid transparent; border-top-color:var(--ink); }
   body.idle-active, body.idle-active *{ cursor:none !important; }
   @media (prefers-reduced-motion: reduce){ .idle-hand{ animation:none; } }
+
+  /* tour de magie : bulle interactive + envol des éléments */
+  .magic-prompt{ position:fixed; left:20px; bottom:104px; z-index:1300; display:flex; align-items:flex-end; gap:8px; opacity:0; transform:translateY(12px) scale(.9); transition:opacity .35s ease, transform .35s cubic-bezier(.2,.9,.3,1.5); pointer-events:none; }
+  .magic-prompt.on{ opacity:1; transform:none; pointer-events:auto; }
+  .magic-wand{ width:48px; height:auto; display:block; transform-origin:70% 80%; animation:magicWiggle 1.1s ease-in-out infinite; filter:drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
+  @keyframes magicWiggle{ 0%,100%{ transform:rotate(-9deg);} 50%{ transform:rotate(11deg);} }
+  .magic-bubble{ background:var(--ink); color:var(--paper); border-radius:16px; padding:.7rem .9rem; box-shadow:0 14px 34px rgba(0,0,0,.42); max-width:240px; }
+  .magic-bubble p{ margin:0 0 .55rem; font-family:var(--ff-body); font-weight:700; font-size:.9rem; line-height:1.25; }
+  .magic-btns{ display:flex; gap:.5rem; }
+  .magic-btns button{ border:0; cursor:pointer; font-family:var(--ff-body); font-weight:700; font-size:.85rem; padding:.42rem .95rem; border-radius:100px; transition:transform .15s ease, filter .15s ease; }
+  .magic-btns button:hover{ transform:translateY(-1px); filter:brightness(1.08); }
+  .magic-yes{ background:var(--coral); color:#fff; }
+  .magic-no{ background:rgba(255,255,255,.16); color:var(--paper); }
+  .magic-layer{ position:fixed; inset:0; z-index:1250; pointer-events:none; }
+  .magic-fly{ position:fixed; margin:0; padding:0; white-space:pre; will-change:transform,opacity; }
+  .magic-fly-media{ position:fixed; margin:0; will-change:transform,opacity; }
+  @media (prefers-reduced-motion: reduce){ .magic-wand{ animation:none; } }
+  @media (max-width:600px){ .magic-prompt{ left:12px; bottom:92px; } .magic-wand{ width:40px; } .magic-bubble{ max-width:210px; } }
 </style>
 </head>
 <body>
@@ -1652,6 +1670,115 @@
   window.__idleReinit=function(){ scheduleWelcome(); arm(); };
   scheduleWelcome();
   arm();
+})();
+</script>
+
+<!-- Tour de magie : la baguette pose une question, "Oui" fait s'envoler les éléments visibles -->
+<script>
+(function(){
+  if(!matchMedia('(pointer:fine)').matches) return;                 // desktop only
+  if(!('animate' in document.createElement('div'))) return;         // besoin de Web Animations
+  var cfg = window.__magicMsg = window.__magicMsg || { q:'Tu veux un tour de magie ? ✨', yes:'Oui', no:'Non', bye:'Comme tu veux 😌' };
+  var KEY='magicShown';
+  try{ if(sessionStorage.getItem(KEY)) return; }catch(e){}
+
+  var prompt=null, running=false;
+
+  function markDone(){ try{ sessionStorage.setItem(KEY,'1'); }catch(e){} }
+
+  function showPrompt(){
+    if(prompt || document.hidden) return;
+    prompt=document.createElement('div'); prompt.className='magic-prompt'; prompt.setAttribute('aria-live','polite');
+    prompt.innerHTML='<img class="magic-wand" src="images/cursor/magic.png" alt="">'+
+      '<div class="magic-bubble"><p>'+cfg.q+'</p><div class="magic-btns">'+
+      '<button type="button" class="magic-yes">'+cfg.yes+'</button>'+
+      '<button type="button" class="magic-no">'+cfg.no+'</button></div></div>';
+    document.body.appendChild(prompt);
+    prompt.querySelector('.magic-yes').addEventListener('click', onYes);
+    prompt.querySelector('.magic-no').addEventListener('click', onNo);
+    requestAnimationFrame(function(){ prompt.classList.add('on'); });
+    markDone();
+  }
+  function closePrompt(){ if(!prompt) return; var p=prompt; prompt=null; p.classList.remove('on'); setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 420); }
+  function onNo(){ if(!prompt) return; var b=prompt.querySelector('.magic-bubble'); if(b) b.innerHTML='<p>'+cfg.bye+'</p>'; setTimeout(closePrompt, 1400); }
+  function onYes(){ closePrompt(); setTimeout(runMagic, 260); }
+
+  function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
+
+  function runMagic(){
+    if(running) return; running=true;
+    var vw=window.innerWidth, vh=window.innerHeight;
+    var layer=document.createElement('div'); layer.className='magic-layer'; layer.setAttribute('aria-hidden','true');
+    document.body.appendChild(layer);
+    var floats=[], restores=[], maxEnd=0;
+
+    // 1) Lettres : chaque caractère visible devient un ballon indépendant
+    var walker=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode:function(n){
+      if(!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      var p=n.parentElement; if(skip(p)) return NodeFilter.FILTER_REJECT;
+      var cs=getComputedStyle(p); if(cs.visibility==='hidden'||cs.display==='none'||+cs.opacity===0) return NodeFilter.FILTER_REJECT;
+      var r=p.getBoundingClientRect(); if(r.bottom<0||r.top>vh||r.right<0||r.left>vw||r.width<1||r.height<1) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }});
+    var nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+    var hidden=[];
+    nodes.forEach(function(node){
+      var p=node.parentElement, cs=getComputedStyle(p), txt=node.nodeValue, range=document.createRange();
+      for(var i=0;i<txt.length;i++){
+        var ch=txt[i]; if(ch===' '||ch==='\n'||ch==='\t'||ch==='\r') continue;
+        try{ range.setStart(node,i); range.setEnd(node,i+1); }catch(e){ continue; }
+        var rc=range.getBoundingClientRect();
+        if(!rc || rc.width===0 || rc.bottom<0 || rc.top>vh || rc.right<0 || rc.left>vw) continue;
+        var s=document.createElement('span'); s.className='magic-fly'; s.textContent=ch;
+        s.style.left=rc.left+'px'; s.style.top=rc.top+'px';
+        s.style.fontFamily=cs.fontFamily; s.style.fontSize=cs.fontSize; s.style.fontWeight=cs.fontWeight;
+        s.style.fontStyle=cs.fontStyle; s.style.letterSpacing=cs.letterSpacing; s.style.color=cs.color;
+        layer.appendChild(s); floats.push(s);
+      }
+      if(hidden.indexOf(p)<0){ hidden.push(p); var prev=p.style.color; restores.push(function(){ p.style.color=prev; }); p.style.color='transparent'; }
+    });
+
+    // 2) Médias : images + visuels de projet s'envolent entiers
+    [].slice.call(document.querySelectorAll('img, .project-visual')).forEach(function(el){
+      if(skip(el)) return; var r=el.getBoundingClientRect();
+      if(r.bottom<0||r.top>vh||r.right<0||r.left>vw||r.width<8||r.height<8) return;
+      var c=el.cloneNode(true); c.className=(el.className?el.className+' ':'')+'magic-fly-media';
+      c.style.left=r.left+'px'; c.style.top=r.top+'px'; c.style.width=r.width+'px'; c.style.height=r.height+'px'; c.style.position='fixed';
+      layer.appendChild(c); floats.push(c);
+      var prev=el.style.opacity; restores.push(function(){ el.style.opacity=prev; }); el.style.opacity='0';
+    });
+
+    if(!floats.length){ running=false; if(layer.parentNode) layer.parentNode.removeChild(layer); return; }
+
+    // 3) Envol « ballon » : montée + balancement + rotation, décalage aléatoire
+    floats.forEach(function(el){
+      var r=el.getBoundingClientRect();
+      var dist=r.top + r.height + 240 + Math.random()*220;
+      var swayA=(Math.random()*2-1)*46, swayB=(Math.random()*2-1)*80;
+      var rot=(Math.random()*2-1)*34;
+      var dur=2400+Math.random()*1700, delay=Math.random()*950;
+      maxEnd=Math.max(maxEnd, dur+delay);
+      el.animate([
+        { transform:'translate(0,0) rotate(0deg)', opacity:1, offset:0 },
+        { transform:'translate('+swayA+'px,'+(-dist*0.45)+'px) rotate('+(rot*0.5)+'deg)', opacity:1, offset:0.5 },
+        { transform:'translate('+swayB+'px,'+(-dist)+'px) rotate('+rot+'deg)', opacity:1, offset:0.82 },
+        { transform:'translate('+(swayB*1.12)+'px,'+(-dist-150)+'px) rotate('+rot+'deg)', opacity:0, offset:1 }
+      ], { duration:dur, delay:delay, easing:'cubic-bezier(.33,.85,.4,1)', fill:'forwards' });
+    });
+
+    // 4) « Ta-da » : la page se recompose
+    setTimeout(function(){
+      restores.forEach(function(fn){ try{ fn(); }catch(e){} });
+      layer.style.transition='opacity .5s ease'; layer.style.opacity='0';
+      setTimeout(function(){ if(layer.parentNode) layer.parentNode.removeChild(layer); running=false; }, 560);
+    }, Math.min(maxEnd+250, 6000));
+  }
+
+  // Déclencheur manuel (démo / test) : __magicShow() pour la bulle, __magicRun() pour l'effet direct
+  window.__magicShow=showPrompt; window.__magicRun=runMagic;
+
+  // Déclenchement : une seule fois, entre 20 et 30 s
+  setTimeout(showPrompt, 20000 + Math.random()*10000);
 })();
 </script>
 
