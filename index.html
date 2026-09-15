@@ -649,6 +649,10 @@
   .magic-layer{ position:fixed; inset:0; z-index:1250; pointer-events:none; }
   .magic-fly{ position:fixed; margin:0; padding:0; white-space:pre; will-change:transform,opacity; }
   .magic-fly-media{ position:fixed; margin:0; will-change:transform,opacity; }
+  .magic-tada{ position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(.2) rotate(-8deg); opacity:0; z-index:1260; font-family:var(--ff-display); font-weight:800; font-size:clamp(3rem,14vw,9rem); line-height:1; letter-spacing:-.02em; color:var(--coral); text-shadow:0 10px 34px rgba(0,0,0,.45); white-space:nowrap; will-change:transform,opacity; pointer-events:none; }
+  .magic-tada.pop{ animation:tadaPop .6s cubic-bezier(.2,1.2,.3,1.15) forwards; }
+  @keyframes tadaPop{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(.2) rotate(-8deg);} 60%{ opacity:1; transform:translate(-50%,-50%) scale(1.14) rotate(3deg);} 100%{ opacity:1; transform:translate(-50%,-50%) scale(1) rotate(0deg);} }
+  @media (prefers-reduced-motion: reduce){ .magic-tada.pop{ animation-duration:.001ms; opacity:1; } }
   @media (prefers-reduced-motion: reduce){ .magic-wand{ animation:none; } }
   @media (max-width:600px){ .magic-prompt{ left:12px; bottom:92px; } .magic-wand{ width:40px; } .magic-bubble{ max-width:210px; } }
 </style>
@@ -1766,12 +1770,18 @@
       ], { duration:dur, delay:delay, easing:'cubic-bezier(.33,.85,.4,1)', fill:'forwards' });
     });
 
-    // 4) « Ta-da » : la page se recompose
+    // 4) Gros « TA-DA ! » au centre quand les lettres ont disparu
+    var tada=document.createElement('div'); tada.className='magic-tada'; tada.textContent='TA-DA !';
+    layer.appendChild(tada);
+    var tadaAt=Math.min(maxEnd*0.72, 3200);
+    setTimeout(function(){ tada.classList.add('pop'); }, tadaAt);
+
+    // 5) Puis la page se recompose (le TA-DA s'efface avec le calque)
     setTimeout(function(){
       restores.forEach(function(fn){ try{ fn(); }catch(e){} });
       layer.style.transition='opacity .5s ease'; layer.style.opacity='0';
       setTimeout(function(){ if(layer.parentNode) layer.parentNode.removeChild(layer); running=false; }, 560);
-    }, Math.min(maxEnd+250, 6000));
+    }, tadaAt + 1200);
   }
 
   // Déclencheur manuel (démo / test) : __magicShow() pour la bulle, __magicRun() pour l'effet direct
