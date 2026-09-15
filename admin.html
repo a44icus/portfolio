@@ -201,7 +201,7 @@
   });
 
   var started=false;
-  function initAll(){ if(started) return; started=true; initCarousel(); initCollections(); initPlaces(); initMethod(); initSettings(); }
+  function initAll(){ if(started) return; started=true; initCarousel(); initProjects(); initCollections(); initPlaces(); initMethod(); initSettings(); }
 
   /* ---- Généric collection editor ---- */
   function editor(cfg){
@@ -250,10 +250,140 @@
     load();
   }
 
+  /* ---- Projets : vignette + page détaillée (étude de cas) + galerie ---- */
+  function initProjects(){
+    var listEl=document.getElementById('projList'), countEl=document.getElementById('projCount');
+    var data=[], photosByProj={};
+
+    function load(){
+      Promise.all([
+        sb.from('portfolio_projects').select('*').order('position',{ascending:true}),
+        sb.from('portfolio_project_photos').select('*').order('position',{ascending:true})
+      ]).then(function(r){
+        data=r[0].data||[]; photosByProj={};
+        (r[1].data||[]).forEach(function(ph){ (photosByProj[ph.project_id]=photosByProj[ph.project_id]||[]).push(ph); });
+        render();
+      });
+    }
+    function upd(row,patch){ Object.assign(row,patch); sb.from('portfolio_projects').update(patch).eq('id',row.id).then(function(r){ toast(r.error?('Erreur : '+r.error.message):'Enregistré ✓', r.error?'err':'ok'); }); }
+    function add(){
+      var pos=data.length?Math.max.apply(null,data.map(function(r){return r.position||0;}))+1:0;
+      sb.from('portfolio_projects').insert({title:'Nouveau projet', category:'', year:'', meta:'', link:'#', position:pos}).then(function(r){ if(r.error) toast(r.error.message,'err'); else load(); });
+    }
+    function del(row){ if(!confirm('Supprimer ce projet et sa page ?')) return;
+      var paths=(photosByProj[row.id]||[]).map(function(p){return p.path;}).filter(Boolean);
+      if(row.image_url_path) paths.push(row.image_url_path);
+      var after=function(){ sb.from('portfolio_projects').delete().eq('id',row.id).then(function(){ load(); toast('Supprimé.','ok'); }); };
+      if(paths.length) sb.storage.from(BUCKET).remove(paths).then(after,after); else after();
+    }
+    function move(i,d){ var j=i+d; if(j<0||j>=data.length) return; var a=data[i],b=data[j]; Promise.all([sb.from('portfolio_projects').update({position:b.position}).eq('id',a.id),sb.from('portfolio_projects').update({position:a.position}).eq('id',b.id)]).then(load); }
+
+    function uploadPhotos(proj, files){
+      var l=[].slice.call(files).filter(function(f){return /^image\//.test(f.type);}); if(!l.length) return;
+      var cur=photosByProj[proj.id]||[]; var base=cur.length?Math.max.apply(null,cur.map(function(p){return p.position||0;}))+1:0;
+      toast('Téléversement…','info'); var done=0,err=0;
+      function step(){ done++; if(done===l.length){ toast(err?('Terminé ('+err+' échec).'):'Photos ajoutées ✓', err?'err':'ok'); load(); } }
+      l.forEach(function(f,k){ var path='projects/'+Date.now()+'-'+k+'-'+slug(f.name); sb.storage.from(BUCKET).upload(path,f).then(function(u){ if(u.error){ err++; step(); return; } var url=sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; sb.from('portfolio_project_photos').insert({project_id:proj.id,url:url,path:path,position:base+k}).then(function(){ step(); },function(){ err++; step(); }); },function(){ err++; step(); }); });
+    }
+    function delPhoto(ph){ var after=function(){ sb.from('portfolio_project_photos').delete().eq('id',ph.id).then(load); }; if(ph.path) sb.storage.from(BUCKET).remove([ph.path]).then(after,after); else after(); }
+
+    // fabrique un champ étiqueté qui s'enregistre au blur/changement
+    function field(row,key,label,opts){
+      opts=opts||{}; var g=document.createElement('div'); if(opts.full) g.style.gridColumn='1 / -1';
+      var lb=document.createElement('label'); lb.textContent=label; g.appendChild(lb);
+      var el = opts.area ? document.createElement('textarea') : document.createElement('input');
+      if(opts.area){ el.rows=opts.rows||3; } else { el.type='text'; }
+      if(opts.ph) el.placeholder=opts.ph;
+      el.value=row[key]==null?'':row[key];
+      el.onchange=function(){ var p={}; p[key]=el.value; upd(row,p); if(opts.after) opts.after(el.value); };
+      g.appendChild(el); return g;
+    }
+
+    function render(){
+      countEl.textContent=data.length+' '+(data.length>1?'projets':'projet');
+      listEl.innerHTML='';
+      data.forEach(function(row,i){
+        var it=document.createElement('div'); it.className='item';
+        var head=document.createElement('div'); head.className='item-head';
+        var title=document.createElement('strong'); title.textContent=row.title||'Projet';
+        var acts=document.createElement('div'); acts.className='actions';
+        var view=document.createElement('a'); view.className='iconbtn'; view.textContent='↗'; view.title='Voir la page'; view.style.cssText='width:auto;padding:0 .6rem;text-decoration:none;display:inline-flex;align-items:center;'; view.target='_blank';
+        function refreshView(){ view.href = row.slug ? ('projets/projet.html?p='+encodeURIComponent(row.slug)) : (row.link||'#'); }
+        refreshView();
+        var up=document.createElement('button'); up.className='iconbtn'; up.textContent='↑'; up.disabled=i===0; up.onclick=function(){ move(i,-1); };
+        var dn=document.createElement('button'); dn.className='iconbtn'; dn.textContent='↓'; dn.disabled=i===data.length-1; dn.onclick=function(){ move(i,1); };
+        var rm=document.createElement('button'); rm.className='btn danger small'; rm.textContent='Suppr.'; rm.onclick=function(){ del(row); };
+        acts.appendChild(view); acts.appendChild(up); acts.appendChild(dn); acts.appendChild(rm);
+        head.appendChild(title); head.appendChild(acts); it.appendChild(head);
+
+        // couverture
+        var img=document.createElement('img'); img.className='thumb'; img.src=tx(row.image_url||'',600,72,'contain'); if(!row.image_url) img.style.display='none'; it.appendChild(img);
+        var fin=document.createElement('input'); fin.type='file'; fin.accept='image/*';
+        fin.onchange=function(){ var f=fin.files[0]; if(!f) return; var path='projects/cover-'+Date.now()+'-'+slug(f.name); toast('Téléversement…','info'); sb.storage.from(BUCKET).upload(path,f).then(function(u){ if(u.error){ toast(u.error.message,'err'); return; } var url=sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; var old=row.image_url_path; upd(row,{image_url:url,image_url_path:path}); img.src=url; img.style.display=''; if(old) sb.storage.from(BUCKET).remove([old]); }); };
+        it.appendChild(fin);
+
+        // champs vignette
+        var fw=document.createElement('div'); fw.className='fields two';
+        fw.appendChild(field(row,'title','Titre',{after:function(v){ title.textContent=v||'Projet'; }}));
+        fw.appendChild(field(row,'category','Catégorie (badge)'));
+        fw.appendChild(field(row,'year','Année'));
+        fw.appendChild(field(row,'meta','Description (ligne sur la vignette)'));
+        it.appendChild(fw);
+
+        // accordéon : page détaillée
+        var det=document.createElement('details'); det.style.cssText='margin-top:.8rem;border-top:1px solid var(--line,#eee);padding-top:.6rem;';
+        var sum=document.createElement('summary'); sum.textContent='Page détaillée (étude de cas)'; sum.style.cssText='cursor:pointer;font-weight:600;font-size:.9rem;'; det.appendChild(sum);
+
+        var note=document.createElement('p'); note.style.cssText='font-size:.8rem;color:var(--muted);margin:.6rem 0;';
+        note.innerHTML='Ces champs alimentent la page <code>projets/projet.html?p='+(row.slug||'…')+'</code>. La vignette pointe automatiquement vers cette page dès que le champ « Contexte » est rempli.';
+        det.appendChild(note);
+
+        var dw=document.createElement('div'); dw.className='fields two';
+        dw.appendChild(field(row,'slug','Adresse (slug) — lettres/chiffres/tirets',{after:refreshView, ph:'mon-projet'}));
+        dw.appendChild(field(row,'crumb','Fil d’ariane',{ph:'Étude de cas — Identité visuelle'}));
+        dw.appendChild(field(row,'lede','Accroche (sous le titre)',{area:true,rows:2,full:true}));
+        dw.appendChild(field(row,'client','Client'));
+        dw.appendChild(field(row,'role','Rôle'));
+        dw.appendChild(field(row,'place','Lieu'));
+        var spacer=document.createElement('div'); dw.appendChild(spacer);
+        dw.appendChild(field(row,'intro_tag','Bloc 1 — étiquette',{ph:'01 — Le contexte'}));
+        dw.appendChild(field(row,'intro_title','Bloc 1 — titre'));
+        dw.appendChild(field(row,'intro_body','Bloc 1 — texte (double saut de ligne = nouveau paragraphe)',{area:true,rows:4,full:true}));
+        dw.appendChild(field(row,'approach_tag','Bloc 2 — étiquette',{ph:'02 — La réponse'}));
+        dw.appendChild(field(row,'approach_title','Bloc 2 — titre'));
+        dw.appendChild(field(row,'approach_body','Bloc 2 — texte',{area:true,rows:4,full:true}));
+        dw.appendChild(field(row,'deliverables','Livrables (un par ligne)',{area:true,rows:4,full:true}));
+        dw.appendChild(field(row,'gallery_tag','Galerie — étiquette',{ph:'03 — En images'}));
+        det.appendChild(dw);
+
+        // galerie photos du projet
+        var gl=document.createElement('label'); gl.textContent='Galerie (photos de l’étude de cas)'; gl.style.cssText='display:block;margin:.7rem 0 .35rem;font-size:.85rem;color:var(--muted);'; det.appendChild(gl);
+        var strip=document.createElement('div'); strip.style.cssText='display:flex;flex-wrap:wrap;gap:6px;align-items:center;';
+        (photosByProj[row.id]||[]).forEach(function(ph){
+          var w=document.createElement('div'); w.style.cssText='position:relative;';
+          var im=document.createElement('img'); im.src=tx(ph.url,200,60,'cover'); im.style.cssText='width:64px;height:64px;object-fit:cover;border-radius:6px;display:block;';
+          var x=document.createElement('button'); x.textContent='×'; x.title='Supprimer'; x.style.cssText='position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:0;background:#e23;color:#fff;cursor:pointer;line-height:1;'; x.onclick=function(){ if(confirm('Supprimer cette photo ?')) delPhoto(ph); };
+          w.appendChild(im); w.appendChild(x); strip.appendChild(w);
+        });
+        var addp=document.createElement('button'); addp.className='btn small'; addp.textContent='+ photos'; var pin=document.createElement('input'); pin.type='file'; pin.accept='image/*'; pin.multiple=true; pin.hidden=true; addp.onclick=function(){ pin.click(); }; pin.onchange=function(){ uploadPhotos(row, pin.files); pin.value=''; };
+        strip.appendChild(addp); strip.appendChild(pin); det.appendChild(strip);
+
+        var quoteWrap=document.createElement('div'); quoteWrap.className='fields two'; quoteWrap.style.marginTop='.6rem';
+        quoteWrap.appendChild(field(row,'quote','Citation (témoignage)',{area:true,rows:2,full:true}));
+        quoteWrap.appendChild(field(row,'quote_author','Auteur de la citation'));
+        quoteWrap.appendChild(field(row,'quote_role','Rôle / société'));
+        det.appendChild(quoteWrap);
+
+        it.appendChild(det);
+        listEl.appendChild(it);
+      });
+    }
+
+    document.getElementById('projAdd').addEventListener('click', add);
+    load();
+  }
+
   function initCollections(){
-    editor({ table:'portfolio_projects', mount:'projList', count:'projCount', addBtn:'projAdd', singular:'projet', plural:'projets', twoCol:true, image:'image_url',
-      title:function(r){ return r.title||'Projet'; },
-      fields:[ {key:'title',label:'Titre'},{key:'category',label:'Catégorie (badge)'},{key:'year',label:'Année'},{key:'meta',label:'Description (ligne)'},{key:'link',label:'Lien (URL ou #)'} ] });
     editor({ table:'portfolio_services', mount:'svcList', count:'svcCount', addBtn:'svcAdd', singular:'service', plural:'services', twoCol:true,
       title:function(r){ return r.name||'Service'; },
       fields:[ {key:'name',label:'Nom'},{key:'tags',label:'Détails / tags'} ] });

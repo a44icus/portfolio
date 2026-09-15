@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projet — Étude de cas | Stéphane Donchery</title>
+<meta name="description" content="Étude de cas — Stéphane Donchery, graphiste & web designer.">
+<meta property="og:type" content="article">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#FAFAF7">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FAFAF7'/%3E%3Ccircle cx='12' cy='16' r='9' fill='none' stroke='%2317171E' stroke-width='2'/%3E%3Cpath d='M18 6 L28 26 L8 26 Z' fill='none' stroke='%23FF5A3C' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../fonts.css">
+<style>
+  :root{
+    --paper: #FAFAF7;
+    --paper-dim: #F1F0EB;
+    --ink: #17171E;
+    --muted: #6B6B75;
+    --cobalt: #2A2AF0;
+    --coral: #FF5A3C;
+    --lime: #D9FF4A;
+    --line: rgba(23,23,30,0.14);
+    --ff-display: 'Unbounded', sans-serif;
+    --ff-body: 'Manrope', sans-serif;
+    --ff-mono: 'Space Mono', monospace;
+    --maxw: 1100px;
+  }
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior: auto; }
+    *{ animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+  body{
+    margin:0; background: var(--paper); color: var(--ink);
+    font-family: var(--ff-body); font-size:16px; line-height:1.65;
+    -webkit-font-smoothing: antialiased; overflow-x:hidden;
+  }
+  a{ color: inherit; }
+  ul{ list-style:none; margin:0; padding:0; }
+  img{ max-width:100%; display:block; }
+  ::selection{ background: var(--lime); color: var(--ink); }
+  :focus-visible{ outline: 3px solid var(--cobalt); outline-offset: 3px; }
+  .wrap{ max-width: var(--maxw); margin:0 auto; padding: 0 clamp(1.2rem,5vw,2rem); }
+
+  /* grain */
+  .grain{
+    position: fixed; inset:0; pointer-events:none; z-index:500;
+    opacity:0.04; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* nav */
+  .nav{
+    position: sticky; top:0; z-index:100;
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 1rem clamp(1.2rem,5vw,2rem);
+    background: rgba(250,250,247,0.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .back{ display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; font-weight:600; font-size:.92rem; }
+  .back:hover{ color: var(--cobalt); }
+  .nav-cta{ text-decoration:none; font-weight:600; font-size:.88rem; padding:.5rem 1rem; border-radius:100px; background: var(--ink); color: var(--paper); transition: background .25s ease; }
+  .nav-cta:hover{ background: var(--cobalt); }
+
+  /* fade-up */
+  @keyframes fadeUp{ from{ opacity:0; transform: translateY(22px);} to{ opacity:1; transform:none; } }
+  .up{ animation: fadeUp .7s cubic-bezier(.2,.8,.2,1) both; }
+
+  /* hero */
+  header.hero{ padding: clamp(3rem,8vw,6rem) 0 clamp(1.5rem,4vw,2.5rem); }
+  .crumb{ font-family: var(--ff-mono); font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; color: var(--coral); margin-bottom:1.4rem; }
+  h1{ font-family: var(--ff-display); font-weight:800; font-size: clamp(2.6rem,8vw,5.5rem); line-height:.95; letter-spacing:-0.02em; margin:0; }
+  .lede{ margin-top:1.4rem; max-width: 44ch; font-size: clamp(1.1rem,1.8vw,1.35rem); color: var(--muted); font-weight:500; }
+
+  /* meta bar */
+  .meta{ display:grid; grid-template-columns: repeat(4,1fr); gap:1.5rem; margin-top: 2.8rem; padding-top:2rem; border-top:1px solid var(--line); }
+  .meta div .k{ font-family: var(--ff-mono); font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color: var(--muted); }
+  .meta div .v{ margin-top:.4rem; font-weight:600; }
+  .meta div:empty{ display:none; }
+  @media (max-width:700px){ .meta{ grid-template-columns: 1fr 1fr; gap:1.4rem; } }
+
+  /* cover */
+  .cover{ margin: clamp(2rem,5vw,3.5rem) 0; }
+  .cover img{ width:100%; height: clamp(280px,52vw,620px); object-fit:cover; border-radius:10px; }
+
+  /* content */
+  section.block{ padding: clamp(2rem,5vw,3.5rem) 0; }
+  .two{ display:grid; grid-template-columns: 1fr 1.4fr; gap: clamp(1.5rem,4vw,3rem); align-items:start; }
+  .two h2, .block h2{ font-family: var(--ff-display); font-weight:700; font-size: clamp(1.6rem,3.4vw,2.4rem); margin:0 0 1rem; line-height:1.05; }
+  .tag{ font-family: var(--ff-mono); font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color: var(--cobalt); }
+  .two p, .block p{ font-size:1.05rem; }
+  .two p + p{ margin-top:1rem; }
+  @media (max-width:760px){ .two{ grid-template-columns: 1fr; gap:1rem; } }
+
+  /* deliverables list */
+  .deliv{ border-top:1px solid var(--line); margin-top:1.5rem; }
+  .deliv li{ display:flex; gap:1rem; padding:.9rem 0; border-bottom:1px solid var(--line); align-items:baseline; }
+  .deliv li .n{ font-family: var(--ff-mono); font-size:.8rem; color: var(--muted); min-width:2.2rem; }
+  .deliv li .t{ font-weight:600; }
+
+  /* gallery */
+  .gallery{ display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:1rem; }
+  .gallery a{ display:block; overflow:hidden; border-radius:10px; position:relative; }
+  .gallery a.full{ grid-column: 1 / -1; }
+  .gallery img{ width:100%; height: clamp(200px,28vw,380px); object-fit:cover; transition: transform .8s cubic-bezier(.2,.8,.2,1); }
+  .gallery a:hover img{ transform: scale(1.04); }
+  @media (max-width:600px){ .gallery{ grid-template-columns: 1fr; } }
+
+  /* quote */
+  .quote{ margin: clamp(2rem,5vw,3.5rem) 0; padding: clamp(1.6rem,4vw,2.6rem); border:1px solid var(--line); border-radius:12px; background: var(--paper-dim); }
+  .quote p{ font-family: var(--ff-display); font-weight:600; font-size: clamp(1.3rem,2.6vw,1.9rem); line-height:1.25; margin:0; }
+  .quote .by{ margin-top:1.2rem; font-size:.9rem; color: var(--muted); }
+  .quote .by strong{ color: var(--ink); }
+
+  /* next */
+  .pager{ display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;
+    padding: clamp(2rem,5vw,3rem) 0; border-top:1px solid var(--line); margin-top:2rem; }
+  .pager a{ text-decoration:none; font-weight:600; display:inline-flex; align-items:center; gap:.5rem; }
+  .pager a:hover{ color: var(--cobalt); }
+  .pager .next{ font-family: var(--ff-display); font-size: clamp(1.2rem,2.4vw,1.6rem); }
+
+  /* contact */
+  .contact{ background: var(--ink); color: var(--paper); text-align:center; padding: clamp(3rem,7vw,5rem) 1.2rem; }
+  .contact h2{ font-family: var(--ff-display); font-weight:700; font-size: clamp(1.8rem,4vw,2.8rem); margin:0 0 1rem; }
+  .contact h2 em{ font-style:normal; color: var(--coral); }
+  .contact a.mail{ font-family: var(--ff-display); font-weight:700; font-size: clamp(1.2rem,3vw,2rem); text-decoration:none; color: var(--paper); border-bottom:3px solid var(--coral); }
+  footer{ padding: 1.6rem clamp(1.2rem,5vw,2rem); color: var(--muted); font-size:.82rem; display:flex; justify-content:space-between; flex-wrap:wrap; gap:.5rem; }
+
+  /* loading / empty */
+  .state{ max-width: var(--maxw); margin:0 auto; padding: clamp(4rem,12vw,8rem) clamp(1.2rem,5vw,2rem); text-align:center; color: var(--muted); }
+  .state h1{ font-size: clamp(1.8rem,5vw,3rem); color: var(--ink); margin-bottom:1rem; }
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="back" href="../index.html#travaux">← Tous les projets</a>
+  <a class="nav-cta" href="../index.html#contact">Discutons →</a>
+</nav>
+
+<!-- État de chargement / introuvable -->
+<div class="state" id="state">Chargement…</div>
+
+<!-- Contenu du projet (rempli dynamiquement) -->
+<main id="content" hidden>
+  <header class="hero">
+    <div class="wrap">
+      <p class="crumb up" id="crumb"></p>
+      <h1 class="up" id="title"></h1>
+      <p class="lede up" id="lede"></p>
+      <div class="meta up" id="meta"></div>
+    </div>
+  </header>
+
+  <div class="cover" id="coverWrap" hidden>
+    <div class="wrap"><img id="cover" alt="" decoding="async"></div>
+  </div>
+
+  <div class="wrap">
+    <section class="block" id="introBlock" hidden>
+      <div class="two">
+        <div><span class="tag" id="introTag"></span><h2 id="introTitle"></h2></div>
+        <div id="introBody"></div>
+      </div>
+    </section>
+
+    <section class="block" id="approachBlock" hidden>
+      <div class="two">
+        <div><span class="tag" id="approachTag"></span><h2 id="approachTitle"></h2></div>
+        <div id="approachBody"></div>
+      </div>
+      <ul class="deliv" id="deliv" hidden></ul>
+    </section>
+
+    <section class="block" id="galleryBlock" hidden>
+      <span class="tag" id="galleryTag"></span>
+      <div class="gallery" id="gallery"></div>
+    </section>
+
+    <div class="quote" id="quoteBlock" hidden>
+      <p id="quoteText"></p>
+      <div class="by" id="quoteBy"></div>
+    </div>
+
+    <div class="pager">
+      <a href="../index.html#travaux">← Tous les projets</a>
+      <a class="next" id="nextLink" href="../index.html#travaux">Projet suivant →</a>
+    </div>
+  </div>
+
+  <section class="contact">
+    <h2>Un projet en tête ?<br><em>Parlons-en.</em></h2>
+    <a class="mail" id="mail" href="mailto:stephane.donchery@gmail.com">stephane.donchery@gmail.com</a>
+  </section>
+
+  <footer>
+    <span>© 2026 Stéphane Donchery</span>
+    <a href="../index.html" style="text-decoration:none;font-weight:600;">Retour au portfolio ↑</a>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var SB_URL='https://iqnjgvhmeflczvftyter.supabase.co';
+  var SB_KEY='sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i';
+  var sb = window.supabase ? window.supabase.createClient(SB_URL,SB_KEY) : null;
+
+  function q(id){ return document.getElementById(id); }
+  function esc(s){ var d=document.createElement('div'); d.textContent=(s==null?'':String(s)); return d.innerHTML; }
+  function imgTx(u,s,qual,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(qual||72) : u; }
+  function paras(txt){ if(!txt) return ''; return String(txt).split(/\n{2,}/).map(function(p){ return '<p>'+esc(p.trim()).replace(/\n/g,'<br>')+'</p>'; }).join(''); }
+
+  var params=new URLSearchParams(location.search);
+  var slug=(params.get('p')||params.get('slug')||'').trim();
+
+  function fail(msg){
+    var s=q('state'); s.innerHTML='<h1>Projet introuvable</h1><p>'+esc(msg||'Ce projet n’existe pas ou a été retiré.')+'</p><p style="margin-top:1.5rem"><a class="nav-cta" href="../index.html#travaux" style="color:var(--paper)">← Retour aux projets</a></p>';
+  }
+
+  if(!sb){ fail('Connexion indisponible.'); return; }
+  if(!slug){ fail('Aucun projet demandé.'); return; }
+
+  sb.from('portfolio_projects').select('*').eq('slug',slug).limit(1).then(function(r){
+    var p = r.data && r.data[0];
+    if(r.error || !p){ fail(); return; }
+    render(p);
+    // galerie + projet suivant en parallèle
+    sb.from('portfolio_project_photos').select('*').eq('project_id',p.id).order('position',{ascending:true}).then(function(g){ renderGallery(g.data||[]); });
+    sb.from('portfolio_projects').select('slug,title,position,intro_body,link').order('position',{ascending:true}).then(function(all){ renderNext(all.data||[], p); });
+  });
+
+  function render(p){
+    // SEO
+    document.title=(p.title||'Projet')+' — Étude de cas | Stéphane Donchery';
+    window.__galTag = p.gallery_tag || '03 — En images';
+
+    q('crumb').textContent = p.crumb || (p.category ? 'Étude de cas — '+p.category : 'Étude de cas');
+    q('title').textContent = p.title || 'Projet';
+    setOrHide('lede', p.lede);
+
+    // meta bar : Client / Année / Rôle / Lieu
+    var meta=q('meta'); meta.innerHTML='';
+    addMeta(meta,'Client',p.client);
+    addMeta(meta,'Année',p.year);
+    addMeta(meta,'Rôle',p.role);
+    addMeta(meta,'Lieu',p.place);
+    meta.hidden = !meta.children.length;
+
+    // cover
+    if(p.image_url){ var c=q('cover'); c.src=imgTx(p.image_url,1600,74,'contain'); c.alt='Visuel de couverture — '+(p.title||''); q('coverWrap').hidden=false; }
+
+    // bloc contexte
+    if(p.intro_title || p.intro_body){
+      q('introTag').textContent=p.intro_tag||'01 — Le contexte';
+      q('introTitle').textContent=p.intro_title||'';
+      q('introBody').innerHTML=paras(p.intro_body);
+      q('introBlock').hidden=false;
+    }
+    // bloc réponse + livrables
+    if(p.approach_title || p.approach_body || p.deliverables){
+      q('approachTag').textContent=p.approach_tag||'02 — La réponse';
+      q('approachTitle').textContent=p.approach_title||'';
+      q('approachBody').innerHTML=paras(p.approach_body);
+      q('approachBlock').hidden=false;
+      if(p.deliverables){
+        var items=String(p.deliverables).split(/\n+/).map(function(x){return x.trim();}).filter(Boolean);
+        if(items.length){
+          q('deliv').innerHTML=items.map(function(it,i){ return '<li><span class="n">'+('0'+(i+1)).slice(-2)+'</span><span class="t">'+esc(it)+'</span></li>'; }).join('');
+          q('deliv').hidden=false;
+        }
+      }
+    }
+    // citation
+    if(p.quote){
+      q('quoteText').textContent='« '+p.quote+' »';
+      var by='';
+      if(p.quote_author) by+='<strong>'+esc(p.quote_author)+'</strong>';
+      if(p.quote_role) by+=(by?' — ':'')+esc(p.quote_role);
+      q('quoteBy').innerHTML=by;
+      q('quoteBlock').hidden=false;
+    }
+
+    q('state').hidden=true;
+    q('content').hidden=false;
+  }
+
+  function addMeta(wrap,k,v){ if(!v) return; var d=document.createElement('div'); d.innerHTML='<div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div>'; wrap.appendChild(d); }
+  function setOrHide(id,val){ var el=q(id); if(val){ el.textContent=val; el.hidden=false; } else { el.hidden=true; } }
+
+  function renderGallery(photos){
+    if(!photos.length) return;
+    q('galleryTag').textContent = (window.__galTag)||'03 — En images';
+    var g=q('gallery');
+    g.innerHTML=photos.map(function(ph,i){
+      var full=(i===0 && photos.length%2===1) ? ' class="full"' : (i===0?' class="full"':'');
+      var big=imgTx(ph.url,1400,74,'contain');
+      return '<a'+full+' href="'+esc(ph.url)+'" target="_blank" rel="noopener"><img src="'+esc(big)+'" alt="'+esc(ph.caption||'Visuel du projet')+'" loading="lazy" decoding="async"></a>';
+    }).join('');
+    q('galleryBlock').hidden=false;
+  }
+
+  function renderNext(all, cur){
+    if(!all.length) return;
+    var idx=-1; for(var i=0;i<all.length;i++){ if(all[i].slug===cur.slug){ idx=i; break; } }
+    if(idx<0) return;
+    for(var k=1;k<=all.length;k++){
+      var n=all[(idx+k)%all.length];
+      if(n.slug===cur.slug) break;
+      var href=nextHref(n);
+      if(href){ q('nextLink').setAttribute('href',href); q('nextLink').innerHTML=esc(n.title||'Projet suivant')+' →'; return; }
+    }
+  }
+  function nextHref(n){
+    if(n.slug && n.intro_body) return 'projet.html?p='+encodeURIComponent(n.slug);
+    var l=(n.link||'').trim(); if(l && l!=='#' && l.indexOf('projet.html')<0) return l.replace(/^projets\//,'');
+    return null;
+  }
+})();
+</script>
+<!-- Vercel Web Analytics -->
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>

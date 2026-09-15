@@ -1819,13 +1819,18 @@
   }
   function applyProjects(rows){
     if(!rows||!rows.length) return; var g=document.querySelector('.grid'); if(!g) return; g.innerHTML='';
+    function projHref(p){
+      if(p.slug && (p.intro_body||p.approach_body||p.lede)) return 'projets/projet.html?p='+encodeURIComponent(p.slug);
+      var l=(p.link||'').trim(); return (l&&l!=='#')?l:'#';
+    }
     rows.forEach(function(p,i){
-      var a=document.createElement('a'); a.className='project'; a.href=p.link||'#'; a.setAttribute('aria-label',E(p.title)+' — projet');
+      var href=projHref(p);
+      var a=document.createElement('a'); a.className='project'; a.href=href; a.setAttribute('aria-label',E(p.title)+' — projet');
       a.innerHTML='<div class="project-visual" style="background-image:url(\''+ATTR(p.image_url)+'\')"></div>'+
         '<span class="project-idx">'+('0'+(i+1)).slice(-2)+' / '+A(p.category)+'</span>'+
         '<span class="project-arrow" aria-hidden="true">↗</span>'+
         '<div class="project-info"><p class="project-title">'+A(p.title)+'</p><p class="project-meta">'+A(p.meta)+'</p></div>';
-      if((p.link||'#')==='#') a.addEventListener('click',function(e){ e.preventDefault(); });
+      if(href==='#') a.addEventListener('click',function(e){ e.preventDefault(); });
       g.appendChild(a);
     });
   }
