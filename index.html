@@ -717,6 +717,18 @@
   html.spell-editorial .project, html.spell-editorial .svc, html.spell-editorial .quote{ box-shadow:0 24px 60px -24px rgba(43,32,24,.5) !important; }
   html.spell-editorial img, html.spell-editorial .project-visual{ filter:sepia(.28) saturate(.92) contrast(.97) !important; }
 
+  /* — surfaces codées en dur remises au diapason de l'univers actif (Méthode, carrousel, contact, îlots clairs…) — */
+  html.spell-brutal .approche, html.spell-neon .approche, html.spell-editorial .approche,
+  html.spell-brutal .carousel, html.spell-neon .carousel, html.spell-editorial .carousel,
+  html.spell-brutal #contact, html.spell-neon #contact, html.spell-editorial #contact{ background:var(--panel)!important; color:var(--panel-fg)!important; }
+  html.spell-brutal .approche, html.spell-neon .approche, html.spell-editorial .approche,
+  html.spell-brutal .approche .section-head h2, html.spell-neon .approche .section-head h2, html.spell-editorial .approche .section-head h2,
+  html.spell-brutal #contact .email-link, html.spell-neon #contact .email-link, html.spell-editorial #contact .email-link{ color:var(--panel-fg)!important; }
+  html.spell-brutal #services, html.spell-neon #services, html.spell-editorial #services,
+  html.spell-brutal #voix, html.spell-neon #voix, html.spell-editorial #voix{ background:var(--paper)!important; color:var(--ink)!important; }
+  html.spell-brutal .quote, html.spell-neon .quote, html.spell-editorial .quote{ background:var(--paper-dim)!important; }
+  html.spell-brutal .project-visual, html.spell-neon .project-visual, html.spell-editorial .project-visual{ background-color:var(--paper-dim)!important; }
+
   /* textures plein écran par univers */
   .spell-fx{ position:fixed; inset:0; z-index:1249; pointer-events:none; opacity:0; transition:opacity .5s ease; }
   .spell-fx.on{ opacity:1; }
