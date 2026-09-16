@@ -673,6 +673,34 @@
   @keyframes mgcClouds{ 0%,100%{ transform:translateX(0);} 50%{ transform:translateX(-9px);} }
   .magic-prompt #magicien{ transform-box:fill-box; transform-origin:center bottom; animation:mgcBob 3.8s ease-in-out infinite; }
   @keyframes mgcBob{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-4px) rotate(-1deg);} }
+
+  /* ===== Sort de style : le magicien métamorphose tout le site (change les variables) ===== */
+  html.spell-morphing *{ transition: background-color .55s ease, color .55s ease, border-color .55s ease, fill .55s ease, stroke .55s ease, box-shadow .55s ease, -webkit-text-stroke-color .55s ease !important; }
+  /* Univers 1 — Pop bonbon */
+  html.spell-pop, html.spell-pop #services, html.spell-pop #voix, html.spell-pop #contact{
+    --paper:#ffffff; --paper-dim:#f4f0ff; --ink:#1a1030; --muted:#6a5a86; --line:rgba(26,16,48,.16);
+    --panel:#1a1030; --panel-fg:#ffffff; --nav-bg:rgba(255,255,255,.72);
+    --coral:#ff2d8e; --cobalt:#7b2ff7; --lime:#ffd400; }
+  /* Univers 2 — Éditorial crème */
+  html.spell-cream, html.spell-cream #services, html.spell-cream #voix, html.spell-cream #contact{
+    --paper:#f5eee2; --paper-dim:#ece2d4; --ink:#241f1b; --muted:#8a7d70; --line:rgba(36,31,27,.16);
+    --panel:#241f1b; --panel-fg:#f5eee2; --nav-bg:rgba(245,238,226,.78);
+    --coral:#c8624a; --cobalt:#5a7d6a; --lime:#e0a83c; --ff-display:'Manrope', sans-serif; }
+  /* Univers 3 — Néon nuit */
+  html.spell-neon, html.spell-neon #services, html.spell-neon #voix, html.spell-neon #contact{
+    --paper:#07070f; --paper-dim:#14142e; --ink:#eafcff; --muted:#86b9c8; --line:rgba(34,224,255,.24);
+    --panel:#04040a; --panel-fg:#eafcff; --nav-bg:rgba(7,7,15,.72);
+    --coral:#ff2fa0; --cobalt:#22e0ff; --lime:#b9ff2e; --ff-display:'Space Mono', monospace; }
+  /* étiquette / accroche du sort */
+  .spell-toast{ position:fixed; left:50%; bottom:34px; transform:translateX(-50%) translateY(16px); z-index:1305;
+    background:rgba(10,10,14,.82); color:#fff; font-family:var(--ff-body); font-weight:700; font-size:.95rem;
+    padding:.62rem 1.15rem; border-radius:100px; box-shadow:0 14px 34px rgba(0,0,0,.45); backdrop-filter:blur(6px);
+    opacity:0; transition:opacity .4s ease, transform .4s ease; max-width:90vw; text-align:center; }
+  .spell-toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .spell-toast a{ color:#ffd400; text-decoration:none; border-bottom:2px solid currentColor; margin-left:.15rem; }
+  .spell-toast .st-kbd{ display:inline-block; font-family:var(--ff-mono, 'Space Mono', monospace); font-size:.8em; opacity:.75; }
+  @media (max-width:600px){ .spell-toast{ bottom:24px; font-size:.85rem; padding:.55rem .9rem; } }
+
   .magic-layer{ position:fixed; inset:0; z-index:1250; pointer-events:none; }
   .magic-fly{ position:fixed; margin:0; padding:0; white-space:pre; will-change:transform,opacity; }
   .magic-fly-media{ position:fixed; margin:0; will-change:transform,opacity; }
@@ -1820,7 +1848,35 @@
     if(matchMedia('(pointer:coarse)').matches) setTimeout(placeHitZones, 740); }
   function collapse(){ if(!prompt) return; removeHitZones(); prompt.classList.remove('on'); prompt.setAttribute('tabindex','0'); prompt.setAttribute('aria-label', cfg.q); tweenGeom(PEEK, 440); } // se replie dans le coin
   function onNo(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); }
-  function onYes(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); setTimeout(runMagic, 300); }
+  function onYes(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); setTimeout(castSpell, 300); }
+
+  /* ===== Le sort de style : métamorphose le site dans plusieurs univers puis revient ===== */
+  var spelling=false, spellToast=null;
+  function showToast(html){
+    if(!spellToast){ spellToast=document.createElement('div'); spellToast.className='spell-toast'; spellToast.setAttribute('role','status'); document.body.appendChild(spellToast); }
+    spellToast.innerHTML=html; void spellToast.offsetWidth; spellToast.classList.add('on');
+  }
+  function removeToast(){ if(!spellToast) return; var t=spellToast; spellToast=null; t.classList.remove('on'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 460); }
+  function castSpell(){
+    if(spelling) return; spelling=true;
+    var root=document.documentElement;
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    root.classList.add('spell-morphing');
+    var seq = reduce ? [{c:'spell-cream',label:'Éditorial'}]
+                     : [{c:'spell-pop',label:'Pop'},{c:'spell-cream',label:'Éditorial'},{c:'spell-neon',label:'Néon'}];
+    var hold = reduce ? 2600 : 1900, i=0;
+    function tick(){
+      root.classList.remove('spell-pop','spell-cream','spell-neon');
+      if(i<seq.length){ root.classList.add(seq[i].c); showToast('✨ Style : <strong>'+seq[i].label+'</strong>'); i++; setTimeout(tick, hold); }
+      else {
+        showToast('Le design change tout. <a href="#contact" data-cta>On crée le tien&nbsp;?</a>');
+        var cta=spellToast&&spellToast.querySelector('[data-cta]'); if(cta) cta.addEventListener('click', removeToast);
+        setTimeout(function(){ root.classList.remove('spell-morphing'); spelling=false; }, 700);
+        setTimeout(removeToast, 5200);
+      }
+    }
+    setTimeout(tick, 40); // laisse la transition s'armer avant le 1er univers
+  }
 
   function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
 
@@ -1899,8 +1955,8 @@
     }, tadaAt + 1200);
   }
 
-  // Démo : __magicShow() ouvre le magicien, __magicRun() lance l'effet direct
-  window.__magicShow=function(){ open(); }; window.__magicRun=runMagic;
+  // Démo : __magicShow() ouvre le magicien, __magicRun() lance directement le sort de style
+  window.__magicShow=function(){ open(); }; window.__magicRun=castSpell;
 
   // Le magicien attend dans le coin ; il surgit quand on clique sa main
   buildPeek();
