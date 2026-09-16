@@ -649,18 +649,19 @@
   body.idle-active, body.idle-active *{ cursor:none !important; }
   @media (prefers-reduced-motion: reduce){ .idle-hand{ animation:none; } }
 
-  /* tour de magie : bulle interactive + envol des éléments */
-  .magic-prompt{ position:fixed; left:20px; bottom:104px; z-index:1300; display:flex; align-items:flex-end; gap:8px; opacity:0; transform:translateY(12px) scale(.9); transition:opacity .35s ease, transform .35s cubic-bezier(.2,.9,.3,1.5); pointer-events:none; }
+  /* tour de magie : magicien cartoon (SVG) en bas à droite + envol des éléments */
+  .magic-prompt{ position:fixed; right:18px; bottom:18px; width:min(340px,44vw); z-index:1300; opacity:0; transform:translateY(28px) scale(.94); transition:opacity .45s ease, transform .5s cubic-bezier(.2,.9,.3,1.35); pointer-events:none; }
   .magic-prompt.on{ opacity:1; transform:none; pointer-events:auto; }
-  .magic-wand{ width:48px; height:auto; display:block; transform-origin:70% 80%; animation:magicWiggle 1.1s ease-in-out infinite; filter:drop-shadow(0 3px 6px rgba(0,0,0,.35)); }
-  @keyframes magicWiggle{ 0%,100%{ transform:rotate(-9deg);} 50%{ transform:rotate(11deg);} }
-  .magic-bubble{ background:var(--ink); color:var(--paper); border-radius:16px; padding:.7rem .9rem; box-shadow:0 14px 34px rgba(0,0,0,.42); max-width:240px; }
-  .magic-bubble p{ margin:0 0 .55rem; font-family:var(--ff-body); font-weight:700; font-size:.9rem; line-height:1.25; }
-  .magic-btns{ display:flex; gap:.5rem; }
-  .magic-btns button{ border:0; cursor:pointer; font-family:var(--ff-body); font-weight:700; font-size:.85rem; padding:.42rem .95rem; border-radius:100px; transition:transform .15s ease, filter .15s ease; }
-  .magic-btns button:hover{ transform:translateY(-1px); filter:brightness(1.08); }
-  .magic-yes{ background:var(--coral); color:#fff; }
-  .magic-no{ background:rgba(255,255,255,.16); color:var(--paper); }
+  .magic-prompt svg{ width:100%; height:auto; display:block; overflow:visible; filter:drop-shadow(0 14px 28px rgba(0,0,0,.42)); }
+  .magic-prompt #bouton_oui, .magic-prompt #bouton_non{ cursor:pointer; transform-box:fill-box; transform-origin:center; transition:transform .15s ease; }
+  .magic-prompt #bouton_oui:hover, .magic-prompt #bouton_non:hover,
+  .magic-prompt #bouton_oui:focus-visible, .magic-prompt #bouton_non:focus-visible{ transform:scale(1.09); outline:none; }
+  .magic-prompt #cartes{ transform-box:fill-box; transform-origin:center; animation:mgcCards 3.4s ease-in-out infinite; }
+  @keyframes mgcCards{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-7px) rotate(2.5deg);} }
+  .magic-prompt #nuages{ transform-box:fill-box; transform-origin:center; animation:mgcClouds 6.5s ease-in-out infinite; }
+  @keyframes mgcClouds{ 0%,100%{ transform:translateX(0);} 50%{ transform:translateX(-9px);} }
+  .magic-prompt #magicien{ transform-box:fill-box; transform-origin:center bottom; animation:mgcBob 3.8s ease-in-out infinite; }
+  @keyframes mgcBob{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-4px) rotate(-1deg);} }
   .magic-layer{ position:fixed; inset:0; z-index:1250; pointer-events:none; }
   .magic-fly{ position:fixed; margin:0; padding:0; white-space:pre; will-change:transform,opacity; }
   .magic-fly-media{ position:fixed; margin:0; will-change:transform,opacity; }
@@ -668,8 +669,8 @@
   .magic-tada.pop{ animation:tadaPop .6s cubic-bezier(.2,1.2,.3,1.15) forwards; }
   @keyframes tadaPop{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(.2) rotate(-8deg);} 60%{ opacity:1; transform:translate(-50%,-50%) scale(1.14) rotate(3deg);} 100%{ opacity:1; transform:translate(-50%,-50%) scale(1) rotate(0deg);} }
   @media (prefers-reduced-motion: reduce){ .magic-tada.pop{ animation-duration:.001ms; opacity:1; } }
-  @media (prefers-reduced-motion: reduce){ .magic-wand{ animation:none; } }
-  @media (max-width:600px){ .magic-prompt{ left:12px; bottom:92px; } .magic-wand{ width:40px; } .magic-bubble{ max-width:210px; } }
+  @media (prefers-reduced-motion: reduce){ .magic-prompt #cartes, .magic-prompt #nuages, .magic-prompt #magicien{ animation:none; } }
+  @media (max-width:600px){ .magic-prompt{ right:10px; bottom:10px; width:56vw; } }
 </style>
 </head>
 <body>
@@ -1733,24 +1734,40 @@
 
   function markDone(){ try{ sessionStorage.setItem(KEY,'1'); }catch(e){} }
 
+  // charge le SVG du magicien une seule fois (préchargé en idle, réutilisé au déclenchement)
+  var svgPromise=null;
+  function loadSvg(){ if(!svgPromise) svgPromise=fetch('images/magician.svg').then(function(r){return r.text();}).catch(function(){return null;}); return svgPromise; }
+  (window.requestIdleCallback||function(cb){ setTimeout(cb,4000); })(loadSvg);
+
+  function wireBtn(el, handler){
+    if(!el) return;
+    el.setAttribute('role','button'); el.setAttribute('tabindex','0');
+    el.addEventListener('click', handler);
+    el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); handler(); } });
+  }
+
   function showPrompt(){
     if(prompt || document.hidden) return;
-    // pas deux bulles à la fois : si le « coucou » est visible, on réessaie un peu plus tard
+    // pas deux éléments à la fois : si le « coucou » est visible, on réessaie un peu plus tard
     if(document.querySelector('.idle-wave.on')){ setTimeout(showPrompt, 5000); return; }
-    prompt=document.createElement('div'); prompt.className='magic-prompt'; prompt.setAttribute('aria-live','polite');
-    prompt.innerHTML='<img class="magic-wand" src="images/cursor/magic.png" alt="">'+
-      '<div class="magic-bubble"><p>'+cfg.q+'</p><div class="magic-btns">'+
-      '<button type="button" class="magic-yes">'+cfg.yes+'</button>'+
-      '<button type="button" class="magic-no">'+cfg.no+'</button></div></div>';
-    document.body.appendChild(prompt);
-    prompt.querySelector('.magic-yes').addEventListener('click', onYes);
-    prompt.querySelector('.magic-no').addEventListener('click', onNo);
-    requestAnimationFrame(function(){ prompt.classList.add('on'); });
-    markDone();
-    autoTimer=setTimeout(function(){ if(prompt) closePrompt(); }, 12000); // ne s'incruste pas si on l'ignore
+    loadSvg().then(function(svgText){
+      if(prompt || document.hidden || !svgText) return;        // re-vérifie après le chargement
+      if(document.querySelector('.idle-wave.on')){ setTimeout(showPrompt, 5000); return; }
+      prompt=document.createElement('div'); prompt.className='magic-prompt';
+      prompt.setAttribute('role','group'); prompt.setAttribute('aria-label', cfg.q);
+      prompt.innerHTML=svgText;
+      document.body.appendChild(prompt);
+      var yes=prompt.querySelector('#bouton_oui'), no=prompt.querySelector('#bouton_non');
+      if(yes) yes.setAttribute('aria-label', cfg.yes);
+      if(no) no.setAttribute('aria-label', cfg.no);
+      wireBtn(yes, onYes); wireBtn(no, onNo);
+      requestAnimationFrame(function(){ if(prompt) prompt.classList.add('on'); });
+      markDone();
+      autoTimer=setTimeout(function(){ if(prompt) closePrompt(); }, 12000); // ne s'incruste pas si on l'ignore
+    });
   }
   function closePrompt(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } if(!prompt) return; var p=prompt; prompt=null; p.classList.remove('on'); setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 420); }
-  function onNo(){ if(!prompt) return; if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } var b=prompt.querySelector('.magic-bubble'); if(b) b.innerHTML='<p>'+cfg.bye+'</p>'; setTimeout(closePrompt, 1400); }
+  function onNo(){ closePrompt(); } // le magicien s'en va
   function onYes(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } closePrompt(); setTimeout(runMagic, 260); }
 
   function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
