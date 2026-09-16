@@ -674,32 +674,70 @@
   .magic-prompt #magicien{ transform-box:fill-box; transform-origin:center bottom; animation:mgcBob 3.8s ease-in-out infinite; }
   @keyframes mgcBob{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-4px) rotate(-1deg);} }
 
-  /* ===== Sort de style : le magicien métamorphose tout le site (change les variables) ===== */
-  html.spell-morphing *{ transition: background-color .55s ease, color .55s ease, border-color .55s ease, fill .55s ease, stroke .55s ease, box-shadow .55s ease, -webkit-text-stroke-color .55s ease !important; }
-  /* Univers 1 — Pop bonbon */
-  html.spell-pop, html.spell-pop #services, html.spell-pop #voix, html.spell-pop #contact{
-    --paper:#ffffff; --paper-dim:#f4f0ff; --ink:#1a1030; --muted:#6a5a86; --line:rgba(26,16,48,.16);
-    --panel:#1a1030; --panel-fg:#ffffff; --nav-bg:rgba(255,255,255,.72);
-    --coral:#ff2d8e; --cobalt:#7b2ff7; --lime:#ffd400; }
-  /* Univers 2 — Éditorial crème */
-  html.spell-cream, html.spell-cream #services, html.spell-cream #voix, html.spell-cream #contact{
-    --paper:#f5eee2; --paper-dim:#ece2d4; --ink:#241f1b; --muted:#8a7d70; --line:rgba(36,31,27,.16);
-    --panel:#241f1b; --panel-fg:#f5eee2; --nav-bg:rgba(245,238,226,.78);
-    --coral:#c8624a; --cobalt:#5a7d6a; --lime:#e0a83c; --ff-display:'Manrope', sans-serif; }
-  /* Univers 3 — Néon nuit */
+  /* ===== Sort de style : métamorphose RADICALE du site (couleurs + typo + formes + textures) ===== */
+  html.spell-morphing *{ transition: background-color .5s ease, color .5s ease, border-color .5s ease, fill .5s ease, stroke .5s ease, box-shadow .5s ease, border-radius .5s ease, filter .5s ease, letter-spacing .5s ease, text-shadow .5s ease, -webkit-text-stroke-color .5s ease !important; }
+
+  /* — BRUTALISTE : blanc / noir / rouge, coins carrés, mono, ombres dures — */
+  html.spell-brutal, html.spell-brutal #services, html.spell-brutal #voix, html.spell-brutal #contact{
+    --paper:#ffffff!important; --paper-dim:#ececec!important; --ink:#000000!important; --muted:#3a3a3a!important; --line:#000000!important;
+    --panel:#000000!important; --panel-fg:#ffffff!important; --nav-bg:rgba(255,255,255,.92)!important;
+    --coral:#ff2020!important; --cobalt:#000000!important; --lime:#000000!important; --ff-display:'Space Mono', monospace!important; }
+  html.spell-brutal h1, html.spell-brutal h2, html.spell-brutal .project-title, html.spell-brutal .svc-name,
+  html.spell-brutal .num, html.spell-brutal .marquee-item, html.spell-brutal .section-tag, html.spell-brutal .mark{
+    text-transform:uppercase !important; letter-spacing:-.03em !important; }
+  html.spell-brutal .project, html.spell-brutal .svc, html.spell-brutal .quote, html.spell-brutal .stat,
+  html.spell-brutal .nav-cta, html.spell-brutal .btn, html.spell-brutal .pill, html.spell-brutal .carousel,
+  html.spell-brutal img, html.spell-brutal .project-visual, html.spell-brutal .sound-toggle{ border-radius:0 !important; }
+  html.spell-brutal .project, html.spell-brutal .svc, html.spell-brutal .quote, html.spell-brutal .stat, html.spell-brutal .nav-cta{
+    border:3px solid #000 !important; box-shadow:7px 7px 0 #000 !important; }
+  html.spell-brutal .nav{ border-bottom:3px solid #000 !important; }
+  html.spell-brutal img, html.spell-brutal .project-visual{ filter:grayscale(1) contrast(1.2) !important; }
+
+  /* — NÉON : nuit électrique, halos, cyber, mono — */
   html.spell-neon, html.spell-neon #services, html.spell-neon #voix, html.spell-neon #contact{
-    --paper:#07070f; --paper-dim:#14142e; --ink:#eafcff; --muted:#86b9c8; --line:rgba(34,224,255,.24);
-    --panel:#04040a; --panel-fg:#eafcff; --nav-bg:rgba(7,7,15,.72);
-    --coral:#ff2fa0; --cobalt:#22e0ff; --lime:#b9ff2e; --ff-display:'Space Mono', monospace; }
+    --paper:#05050d!important; --paper-dim:#0b0b1c!important; --ink:#eafcff!important; --muted:#7fb8cc!important; --line:rgba(34,230,255,.4)!important;
+    --panel:#02020a!important; --panel-fg:#eafcff!important; --nav-bg:rgba(5,5,13,.7)!important;
+    --coral:#ff2fb0!important; --cobalt:#22e6ff!important; --lime:#c6ff2e!important; --ff-display:'Space Mono', monospace!important; }
+  html.spell-neon h1, html.spell-neon h2, html.spell-neon .num{ text-shadow:0 0 14px var(--cobalt), 0 0 40px rgba(34,230,255,.45) !important; }
+  html.spell-neon .section-tag, html.spell-neon .marquee-item{ text-shadow:0 0 10px currentColor !important; }
+  html.spell-neon .project, html.spell-neon .svc, html.spell-neon .quote, html.spell-neon .stat, html.spell-neon .nav-cta, html.spell-neon .btn{
+    border:1px solid var(--cobalt) !important; box-shadow:0 0 16px rgba(34,230,255,.45), inset 0 0 14px rgba(34,230,255,.12) !important; }
+  html.spell-neon img, html.spell-neon .project-visual{ filter:saturate(1.5) contrast(1.1) brightness(1.05) !important; }
+
+  /* — ÉDITORIAL : crème luxe, très arrondi, doux, humaniste — */
+  html.spell-editorial, html.spell-editorial #services, html.spell-editorial #voix, html.spell-editorial #contact{
+    --paper:#f2ebdd!important; --paper-dim:#e6dac7!important; --ink:#2b2018!important; --muted:#8a7862!important; --line:rgba(43,32,24,.18)!important;
+    --panel:#2b2018!important; --panel-fg:#f2ebdd!important; --nav-bg:rgba(242,235,221,.82)!important;
+    --coral:#b5623f!important; --cobalt:#5c6f4a!important; --lime:#d9a441!important; --ff-display:'Manrope', sans-serif!important; }
+  html.spell-editorial h1, html.spell-editorial h2, html.spell-editorial .project-title, html.spell-editorial .svc-name{
+    font-weight:600 !important; letter-spacing:0 !important; text-transform:none !important; }
+  html.spell-editorial .project, html.spell-editorial .svc, html.spell-editorial .quote, html.spell-editorial .stat,
+  html.spell-editorial .nav-cta, html.spell-editorial .btn, html.spell-editorial .pill, html.spell-editorial .carousel,
+  html.spell-editorial img, html.spell-editorial .project-visual{ border-radius:26px !important; }
+  html.spell-editorial .project, html.spell-editorial .svc, html.spell-editorial .quote{ box-shadow:0 24px 60px -24px rgba(43,32,24,.5) !important; }
+  html.spell-editorial img, html.spell-editorial .project-visual{ filter:sepia(.28) saturate(.92) contrast(.97) !important; }
+
+  /* textures plein écran par univers */
+  .spell-fx{ position:fixed; inset:0; z-index:1249; pointer-events:none; opacity:0; transition:opacity .5s ease; }
+  .spell-fx.on{ opacity:1; }
+  .spell-fx.fx-neon{ background:repeating-linear-gradient(0deg, rgba(34,230,255,.10) 0 1px, transparent 1px 3px), radial-gradient(circle at 50% 0%, rgba(34,230,255,.14), transparent 62%); mix-blend-mode:screen; }
+  .spell-fx.fx-brutal{ background:radial-gradient(circle, rgba(0,0,0,.20) 1px, transparent 1.6px); background-size:22px 22px; mix-blend-mode:multiply; }
+  .spell-fx.fx-editorial{ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); mix-blend-mode:multiply; opacity:.42; }
+
+  /* flash de sort (émane de la baguette, en bas à droite) */
+  .spell-flash{ position:fixed; inset:0; z-index:1306; pointer-events:none; opacity:0; background:radial-gradient(circle at 84% 82%, #fff 0%, rgba(255,255,255,.55) 22%, transparent 60%); }
+  .spell-flash.go{ animation:spellFlash .55s ease-out; }
+  @keyframes spellFlash{ 0%{ opacity:0; } 14%{ opacity:1; } 100%{ opacity:0; } }
+
   /* étiquette / accroche du sort */
-  .spell-toast{ position:fixed; left:50%; bottom:34px; transform:translateX(-50%) translateY(16px); z-index:1305;
-    background:rgba(10,10,14,.82); color:#fff; font-family:var(--ff-body); font-weight:700; font-size:.95rem;
+  .spell-toast{ position:fixed; left:50%; bottom:34px; transform:translateX(-50%) translateY(16px); z-index:1307;
+    background:rgba(10,10,14,.86); color:#fff; font-family:var(--ff-body); font-weight:700; font-size:.95rem;
     padding:.62rem 1.15rem; border-radius:100px; box-shadow:0 14px 34px rgba(0,0,0,.45); backdrop-filter:blur(6px);
     opacity:0; transition:opacity .4s ease, transform .4s ease; max-width:90vw; text-align:center; }
   .spell-toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
   .spell-toast a{ color:#ffd400; text-decoration:none; border-bottom:2px solid currentColor; margin-left:.15rem; }
-  .spell-toast .st-kbd{ display:inline-block; font-family:var(--ff-mono, 'Space Mono', monospace); font-size:.8em; opacity:.75; }
   @media (max-width:600px){ .spell-toast{ bottom:24px; font-size:.85rem; padding:.55rem .9rem; } }
+  @media (prefers-reduced-motion: reduce){ .spell-flash.go{ animation:none; } .spell-fx{ display:none; } }
 
   .magic-layer{ position:fixed; inset:0; z-index:1250; pointer-events:none; }
   .magic-fly{ position:fixed; margin:0; padding:0; white-space:pre; will-change:transform,opacity; }
@@ -1850,32 +1888,45 @@
   function onNo(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); }
   function onYes(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); setTimeout(castSpell, 300); }
 
-  /* ===== Le sort de style : métamorphose le site dans plusieurs univers puis revient ===== */
-  var spelling=false, spellToast=null;
+  /* ===== Le sort de style : métamorphose RADICALE du site puis retour ===== */
+  var spelling=false, spellToast=null, spellFx=null, spellFlash=null;
+  var ALL_THEMES=['spell-brutal','spell-neon','spell-editorial'];
   function showToast(html){
     if(!spellToast){ spellToast=document.createElement('div'); spellToast.className='spell-toast'; spellToast.setAttribute('role','status'); document.body.appendChild(spellToast); }
     spellToast.innerHTML=html; void spellToast.offsetWidth; spellToast.classList.add('on');
   }
   function removeToast(){ if(!spellToast) return; var t=spellToast; spellToast=null; t.classList.remove('on'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 460); }
+  function setFx(name){ // texture plein écran (scanlines / grain / trame)
+    if(!spellFx){ spellFx=document.createElement('div'); spellFx.className='spell-fx'; spellFx.setAttribute('aria-hidden','true'); document.body.appendChild(spellFx); }
+    spellFx.className='spell-fx'+(name?(' fx-'+name+' on'):'');
+  }
+  function removeFx(){ if(spellFx){ spellFx.classList.remove('on'); var f=spellFx; spellFx=null; setTimeout(function(){ if(f.parentNode) f.parentNode.removeChild(f); }, 550); } }
+  function flash(){ // éclair qui émane de la baguette
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if(!spellFlash){ spellFlash=document.createElement('div'); spellFlash.className='spell-flash'; spellFlash.setAttribute('aria-hidden','true'); document.body.appendChild(spellFlash); }
+    spellFlash.classList.remove('go'); void spellFlash.offsetWidth; spellFlash.classList.add('go');
+  }
   function castSpell(){
     if(spelling) return; spelling=true;
     var root=document.documentElement;
     var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.classList.add('spell-morphing');
-    var seq = reduce ? [{c:'spell-cream',label:'Éditorial'}]
-                     : [{c:'spell-pop',label:'Pop'},{c:'spell-cream',label:'Éditorial'},{c:'spell-neon',label:'Néon'}];
-    var hold = reduce ? 2600 : 1900, i=0;
+    flash();
+    var seq = reduce ? [{c:'spell-editorial',fx:'editorial',label:'Éditorial'}]
+                     : [{c:'spell-brutal',fx:'brutal',label:'Brutalist'},{c:'spell-neon',fx:'neon',label:'Néon'},{c:'spell-editorial',fx:'editorial',label:'Éditorial'}];
+    var hold = reduce ? 2800 : 2000, i=0;
     function tick(){
-      root.classList.remove('spell-pop','spell-cream','spell-neon');
-      if(i<seq.length){ root.classList.add(seq[i].c); showToast('✨ Style : <strong>'+seq[i].label+'</strong>'); i++; setTimeout(tick, hold); }
+      root.classList.remove.apply(root.classList, ALL_THEMES);
+      if(i<seq.length){ root.classList.add(seq[i].c); setFx(seq[i].fx); if(i>0) flash(); showToast('✨ Style : <strong>'+seq[i].label+'</strong>'); i++; setTimeout(tick, hold); }
       else {
+        flash(); removeFx();
         showToast('Le design change tout. <a href="#contact" data-cta>On crée le tien&nbsp;?</a>');
         var cta=spellToast&&spellToast.querySelector('[data-cta]'); if(cta) cta.addEventListener('click', removeToast);
         setTimeout(function(){ root.classList.remove('spell-morphing'); spelling=false; }, 700);
-        setTimeout(removeToast, 5200);
+        setTimeout(removeToast, 5600);
       }
     }
-    setTimeout(tick, 40); // laisse la transition s'armer avant le 1er univers
+    setTimeout(tick, 60); // laisse la transition s'armer avant le 1er univers
   }
 
   function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
