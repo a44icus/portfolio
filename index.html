@@ -1299,6 +1299,7 @@
         this.pointer.y = e.clientY - r.top;
       });
       canvas.addEventListener('pointerleave', () => { this.pointer.x = -9999; this.pointer.y = -9999; });
+      window.addEventListener('load', () => { this.computeAvoid(); }); // recale après chargement des polices
       if(reduced){ this.draw(); } else { requestAnimationFrame(() => this.loop()); }
     }
     resize(){
@@ -1308,19 +1309,31 @@
       this.canvas.height = r.height * dpr;
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.w = r.width; this.h = r.height;
+      this.computeAvoid(r);
+    }
+    /* zones à éviter = rectangles des <p> de la section, en coordonnées du canvas */
+    computeAvoid(cr){
+      cr = cr || this.canvas.getBoundingClientRect();
+      const sec = this.canvas.closest('section') || document.body;
+      this.avoid = [].slice.call(sec.querySelectorAll('p')).map(el => {
+        const b = el.getBoundingClientRect();
+        return { x: b.left - cr.left, y: b.top - cr.top, w: b.width, h: b.height };
+      }).filter(a => a.w > 1 && a.h > 1);
+    }
+    inAvoid(x, y, r, pad){
+      pad = pad || 12;
+      return (this.avoid || []).some(a => x > a.x - pad - r && x < a.x + a.w + pad + r && y > a.y - pad - r && y < a.y + a.h + pad + r);
     }
     populate(){
       const count = Math.max(9, Math.min(22, Math.round((this.w * this.h) / 52000)));
       const colors = this.opts.colors || ['#2A2AF0', '#FF5A3C', '#D9FF4A', '#17171E'];
-      this.shapes = Array.from({ length: count }, () => ({
-        hx: rand(0, this.w), hy: rand(0, this.h),
-        x: 0, y: 0, vx: 0, vy: 0,
-        r: rand(9, 32),
-        type: Math.floor(rand(0, 3)),
-        color: colors[Math.floor(rand(0, colors.length))],
-        phase: rand(0, Math.PI * 2)
-      }));
-      this.shapes.forEach(s => { s.x = s.hx; s.y = s.hy; });
+      this.shapes = [];
+      for(let i = 0; i < count; i++){
+        const r = rand(9, 32);
+        let hx, hy, tries = 0;
+        do { hx = rand(0, this.w); hy = rand(0, this.h); tries++; } while(tries < 40 && this.inAvoid(hx, hy, r)); // pas sous un texte
+        this.shapes.push({ hx, hy, x: hx, y: hy, vx: 0, vy: 0, r, type: Math.floor(rand(0, 3)), color: colors[Math.floor(rand(0, colors.length))], phase: rand(0, Math.PI * 2) });
+      }
     }
     loop(){ this.update(); this.draw(); requestAnimationFrame(() => this.loop()); }
     update(){
@@ -1336,6 +1349,15 @@
           tx += (dx / dist) * force * 80;
           ty += (dy / dist) * force * 80;
         }
+        // éviter les zones de texte : si la cible tombe dans un <p>, la repousser vers le bord le plus proche
+        const pad = 12;
+        (this.avoid || []).forEach(a => {
+          const x0 = a.x - pad - s.r, y0 = a.y - pad - s.r, x1 = a.x + a.w + pad + s.r, y1 = a.y + a.h + pad + s.r;
+          if(tx > x0 && tx < x1 && ty > y0 && ty < y1){
+            const dl = tx - x0, dr = x1 - tx, dt = ty - y0, db = y1 - ty, m = Math.min(dl, dr, dt, db);
+            if(m === dl) tx = x0; else if(m === dr) tx = x1; else if(m === dt) ty = y0; else ty = y1;
+          }
+        });
         s.vx += (tx - s.x) * 0.02;
         s.vy += (ty - s.y) * 0.02;
         s.vx *= 0.86; s.vy *= 0.86;
