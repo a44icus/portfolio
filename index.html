@@ -1841,7 +1841,9 @@
     places.forEach(function(pl){
       if(pl.lat==null || pl.lng==null) return;
       var mk=document.createElement('div'); mk.className='trip-marker'; mk.title=pl.name||''; mk.innerHTML='<i></i>';
-      var photos=byPlace[pl.id]||[];
+      var allPhotos=byPlace[pl.id]||[];
+      var maxPh=(window.matchMedia && window.matchMedia('(max-width:600px)').matches) ? 6 : 9;
+      var photos=allPhotos.slice(0, maxPh);
       var html='<div class="trip-pop"><h4>'+esc(pl.name)+'</h4>';
       if(photos.length){
         html+='<div class="trip-thumbs">';
