@@ -1729,12 +1729,14 @@
   var KEY='magicShown';
   try{ if(sessionStorage.getItem(KEY)) return; }catch(e){}
 
-  var prompt=null, running=false;
+  var prompt=null, running=false, autoTimer=null;
 
   function markDone(){ try{ sessionStorage.setItem(KEY,'1'); }catch(e){} }
 
   function showPrompt(){
     if(prompt || document.hidden) return;
+    // pas deux bulles à la fois : si le « coucou » est visible, on réessaie un peu plus tard
+    if(document.querySelector('.idle-wave.on')){ setTimeout(showPrompt, 5000); return; }
     prompt=document.createElement('div'); prompt.className='magic-prompt'; prompt.setAttribute('aria-live','polite');
     prompt.innerHTML='<img class="magic-wand" src="images/cursor/magic.png" alt="">'+
       '<div class="magic-bubble"><p>'+cfg.q+'</p><div class="magic-btns">'+
@@ -1745,10 +1747,11 @@
     prompt.querySelector('.magic-no').addEventListener('click', onNo);
     requestAnimationFrame(function(){ prompt.classList.add('on'); });
     markDone();
+    autoTimer=setTimeout(function(){ if(prompt) closePrompt(); }, 12000); // ne s'incruste pas si on l'ignore
   }
-  function closePrompt(){ if(!prompt) return; var p=prompt; prompt=null; p.classList.remove('on'); setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 420); }
-  function onNo(){ if(!prompt) return; var b=prompt.querySelector('.magic-bubble'); if(b) b.innerHTML='<p>'+cfg.bye+'</p>'; setTimeout(closePrompt, 1400); }
-  function onYes(){ closePrompt(); setTimeout(runMagic, 260); }
+  function closePrompt(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } if(!prompt) return; var p=prompt; prompt=null; p.classList.remove('on'); setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 420); }
+  function onNo(){ if(!prompt) return; if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } var b=prompt.querySelector('.magic-bubble'); if(b) b.innerHTML='<p>'+cfg.bye+'</p>'; setTimeout(closePrompt, 1400); }
+  function onYes(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } closePrompt(); setTimeout(runMagic, 260); }
 
   function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
 
