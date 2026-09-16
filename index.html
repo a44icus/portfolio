@@ -22,7 +22,10 @@
 <meta name="twitter:description" content="Identité visuelle, direction artistique, édition, web et production graphique. Basé près de Reims.">
 <meta name="twitter:image" content="https://stephane-donchery-portfolio.vercel.app/og-image.png">
 <link rel="canonical" href="https://stephane-donchery-portfolio.vercel.app/">
-<meta name="theme-color" content="#FAFAF7">
+<meta name="theme-color" content="#0e0b18" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FAFAF7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0b18">
+<link rel="preconnect" href="https://iqnjgvhmeflczvftyter.supabase.co" crossorigin>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FAFAF7'/%3E%3Ccircle cx='12' cy='16' r='9' fill='none' stroke='%2317171E' stroke-width='2'/%3E%3Cpath d='M18 6 L28 26 L8 26 Z' fill='none' stroke='%23FF5A3C' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Person","name":"Stéphane Donchery","jobTitle":"Graphiste & Web designer","email":"mailto:stephane.donchery@gmail.com","url":"https://stephane-donchery-portfolio.vercel.app/","address":{"@type":"PostalAddress","addressLocality":"Reims","addressRegion":"Grand Est","addressCountry":"FR"},"knowsAbout":["Identité visuelle","Direction artistique","Édition","Web design","Motion design","Packaging"]}
@@ -1617,7 +1620,9 @@
     var wrap=document.createElement('div'); wrap.className='mpiece';
     if(p.anim) wrap.setAttribute('data-anim',p.anim);
     wrap.style.left=p.x+'%'; wrap.style.top=p.y+'%'; wrap.style.width=p.w+'%'; wrap.style.setProperty('--rot',(p.rot||0)+'deg');
-    var img=document.createElement('img'); img.alt=''; img.decoding='async'; img.src=p.url;
+    var src=p.url; // pièces uploadées via l'admin (stockage Supabase) : optimisées à la volée, ratio préservé
+    if(src && src.indexOf('/storage/v1/object/public/')>-1){ src=src.replace('/object/public/','/render/image/public/')+'?width=900&height=900&resize=contain&quality=80'; }
+    var img=document.createElement('img'); img.alt=''; img.decoding='async'; img.src=src;
     wrap.appendChild(img); coll.appendChild(wrap);
     return {wrap:wrap,img:img,d:(p.d!=null?p.d:8)};
   }
@@ -1629,21 +1634,27 @@
     else { var dir=coll.getAttribute('data-dir'); els.push(mkPiece(coll,{url:FALLBACK[dir]||'',x:50,y:50,w:82,rot:-2,d:8,anim:'fade'})); }
     built[i]=els;
   }
+  var DATA=null;
+  function listFor(i){
+    var dir=steps[i].querySelector('.mstep-collage').getAttribute('data-dir');
+    var rows=DATA&&DATA[dir];
+    return (rows&&rows.length)?rows.map(function(r){return {url:r.url,x:r.x,y:r.y,w:r.w,rot:r.rot,d:r.d,anim:r.anim};}):cfgList(dir);
+  }
+  function ensureBuilt(i){ if(!built[i]) buildStep(i,listFor(i)); }
   function buildAll(by){
-    steps.forEach(function(st,i){
-      var dir=st.querySelector('.mstep-collage').getAttribute('data-dir');
-      var rows=by[dir];
-      var list=(rows&&rows.length)?rows.map(function(r){return {url:r.url,x:r.x,y:r.y,w:r.w,rot:r.rot,d:r.d,anim:r.anim};}):cfgList(dir);
-      buildStep(i,list);
-    });
+    DATA=by;
+    ensureBuilt(idx);                 // n'assemble que l'étape visible au départ
     ready=true; if(seen) play(idx);
+    var ric=window.requestIdleCallback||function(cb){ return setTimeout(cb,1500); };
+    ric(function(){ steps.forEach(function(_,i){ if(i!==idx) ensureBuilt(i); }); }); // précharge les autres en tâche de fond
   }
 
   function play(i){ if(!ready) return; var els=built[i]||[]; els.forEach(function(el,k){ el.wrap.classList.remove('in'); el.wrap.style.transitionDelay=(k*0.15)+'s'; }); void stepper.offsetWidth; els.forEach(function(el){ el.wrap.classList.add('in'); }); }
   function reset(i){ (built[i]||[]).forEach(function(el){ el.wrap.classList.remove('in'); el.wrap.style.transitionDelay='0s'; el.img.style.setProperty('--px','0px'); el.img.style.setProperty('--py','0px'); }); }
-  function render(){ steps.forEach(function(st,i){ st.classList.toggle('active', i===idx); }); [].forEach.call(dotsWrap.children,function(d,i){ d.classList.toggle('active', i===idx); }); }
+  function render(){ steps.forEach(function(st,i){ st.classList.toggle('active', i===idx); }); [].forEach.call(dotsWrap.children,function(d,i){ d.classList.toggle('active', i===idx); d.setAttribute('aria-selected', i===idx?'true':'false'); }); }
   function go(i){
     i=(i+steps.length)%steps.length; if(i===idx || animating || !ready) return;
+    ensureBuilt(i);
     animating=true; var old=idx; var oldEls=built[old]||[];
     oldEls.forEach(function(el,k){ el.wrap.classList.remove('in'); el.wrap.style.transitionDelay=(Math.min(k,14)*0.03)+'s'; el.wrap.classList.add('out'); });
     var exitMs=560 + Math.min(oldEls.length,14)*30 + 40;
@@ -1712,6 +1723,7 @@
 <script>
 (function(){
   if(!matchMedia('(pointer:fine)').matches) return;                 // desktop only
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; // respecte la réduction d'animations (déclenchement auto désactivé)
   if(!('animate' in document.createElement('div'))) return;         // besoin de Web Animations
   var cfg = window.__magicMsg = window.__magicMsg || { q:'Tu veux un tour de magie ? ✨', yes:'Oui', no:'Non', bye:'Comme tu veux 😌' };
   var KEY='magicShown';
