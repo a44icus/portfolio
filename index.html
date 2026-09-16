@@ -377,7 +377,7 @@
   .mstep{ display:none; grid-template-columns:1fr 1fr; gap: clamp(1.5rem,5vw,4rem); align-items:center; }
   .mstep.active{ display:grid; animation: mstepFade .45s ease; }
   @keyframes mstepFade{ from{opacity:0} to{opacity:1} }
-  .mstep-collage{ position:relative; width:100%; aspect-ratio: 1 / .92; max-height: clamp(300px,54vh,520px); }
+  .mstep-collage{ position:relative; width:100%; aspect-ratio: 1 / .92; max-width: calc(clamp(300px,54vh,520px) / 0.92); margin-inline:auto; }
   .mpiece{ position:absolute; z-index:1; opacity:0; pointer-events:none;
     transform: translate(-50%,-50%) rotate(var(--rot,0deg)) var(--from, scale(.85));
     transition: opacity .5s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
