@@ -2151,7 +2151,7 @@
     var as=document.querySelectorAll('.contact-aside div strong');
     if(as[0] && m.contact_availability!=null) as[0].textContent=m.contact_availability;
     if(as[1] && m.contact_location!=null) as[1].textContent=m.contact_location;
-    if(as[2] && m.contact_phone!=null) as[2].textContent=m.contact_phone;
+    if(as[2] && m.contact_phone!=null){ var ph=String(m.contact_phone); var d=ph.replace(/[^0-9+]/g,''); var tel=(d.charAt(0)==='+')?d:('+33'+d.replace(/^0/,'')); as[2].innerHTML='<a href="tel:'+tel+'" class="tel-link">'+A(ph)+'</a>'; }
     var soc=[['social_flickr'],['social_instagram'],['social_linkedin'],['social_behance'],['social_arena']];
     var links=document.querySelectorAll('.socials li a');
     soc.forEach(function(p,i){ var a=links[i]; if(!a) return; var u=m[p[0]]; var li=a.parentNode; if(u){ a.href=u; li.style.display=''; } else { li.style.display='none'; } });
