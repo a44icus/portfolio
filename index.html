@@ -149,7 +149,9 @@
     font-weight:600; font-size:.9rem; padding:.55rem 1.05rem; border-radius: 100px;
     background: var(--ink); color: var(--paper); transition: background .25s ease, transform .25s ease;
   }
-  .nav-cta:hover{ background: var(--cobalt); transform: translateY(-1px); }
+  .nav-cta:hover{ background: var(--cobalt); color:#fff; transform: translateY(-1px); }
+  .tel-link{ color:inherit; text-decoration:none; border-bottom:1px solid transparent; transition:border-color .2s ease; }
+  .tel-link:hover{ border-bottom-color:currentColor; }
   .nav-toggle{ display:none; background:none; border:0; width:44px; height:44px; padding:11px 8px; }
   .nav-toggle span{ display:block; height:2px; width:100%; background:var(--ink); border-radius:2px; transition: transform .3s ease, opacity .25s ease; }
   .nav-toggle span + span{ margin-top:5px; }
@@ -513,6 +515,8 @@
   footer .clock{ font-family: var(--ff-mono); }
   .to-top{ text-decoration:none; font-weight:600; color: var(--ink); display:inline-flex; align-items:center; gap:.4rem; }
   .to-top:hover{ color: var(--cobalt); }
+  .legal-link{ text-decoration:none; color: var(--muted); font-weight:600; }
+  .legal-link:hover{ color: var(--cobalt); }
 </style>
 <style>
   /* ===== Dark mode + nouvelles fonctionnalités ===== */
@@ -821,9 +825,6 @@
 <section id="top" class="hero">
   <canvas class="shape-field" id="heroCanvas" aria-hidden="true"></canvas>
   <div class="hero-inner">
-    <div class="hero-top">
-      <span class="hero-index">Portfolio — 2009 › 2026</span>
-    </div>
     <h1>
       <span class="line line-1"><span>Des formes</span></span>
       <span class="line line-2"><span>qui <span class="swap" data-words="bougent.,parlent.,restent.,respirent.">bougent.</span></span></span>
@@ -1127,7 +1128,7 @@
     <div class="contact-aside">
       <div>Disponibilité<strong>Nouveaux projets dès novembre 2026</strong></div>
       <div>Localisation<strong>Près de Reims · à distance partout</strong></div>
-      <div>Téléphone<strong>06 84 74 79 59</strong></div>
+      <div>Téléphone<strong><a href="tel:+33684747959" class="tel-link">06 84 74 79 59</a></strong></div>
     </div>
   </div>
 </section>
@@ -1135,6 +1136,7 @@
 <footer>
   <p>© 2026 Stéphane Donchery — Tous droits réservés.</p>
   <p class="clock" id="clock">Reims —:—</p>
+  <a href="mentions-legales.html" class="legal-link">Mentions légales</a>
   <a href="#top" class="to-top">Haut de page ↑</a>
 </footer>
 
@@ -1580,8 +1582,8 @@
     }
     m.addEventListener('pointerleave', function(e){
       if(e.pointerType==='touch') return; // tactile géré par pointerup/pointercancel
-      if(pickTimeout) clearTimeout(pickTimeout);
-      pickTimeout=setTimeout(function(){ if(ring) ring.classList.remove('is-pick'); pickTimeout=null; }, 650);
+      if(pickTimeout){ clearTimeout(pickTimeout); pickTimeout=null; }
+      if(ring) ring.classList.remove('is-pick'); // retrait immédiat : évite qu'il croise le curseur doigt
       releaseStrum(false);
     });
     m.addEventListener('pointerdown', function(e){
@@ -1800,7 +1802,7 @@
   function arm(){ clearTimeout(timer); timer=setTimeout(function(){ show(); }, idleMs()); }
   function scheduleWelcome(){ if(welcomeDone) return; clearTimeout(welcomeTimer); welcomeTimer=setTimeout(function(){ welcomeDone=true; show((window.__idleMsgs&&window.__idleMsgs.welcome)||'Bienvenue !'); }, welMs()); }
   function dismiss(){ hide(); arm(); }
-  window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; if(shown) position(); }, {passive:true});
+  window.addEventListener('pointermove', function(e){ mx=e.clientX; my=e.clientY; dismiss(); }, {passive:true}); // bouger la souris = activité → réarme (pas de bulle)
   window.addEventListener('scroll', dismiss, {passive:true});
   ['pointerdown','keydown'].forEach(function(ev){ window.addEventListener(ev, dismiss, {passive:true}); });
   window.__idleReinit=function(){ scheduleWelcome(); arm(); };
