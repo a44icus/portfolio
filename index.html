@@ -1741,7 +1741,29 @@
 
   // Géométrie : état "peek" (main+baguette qui dépasse) ↔ état ouvert (magicien complet)
   var PEEK={ vb:'160 92 118 180', w:92, h:140, r:0, b:0 };
-  function openGeom(){ var W=Math.max(180, Math.min(320, Math.round(window.innerWidth*0.42))); return { vb:'0 0 575.38 481.87', w:W, h:Math.round(W*481.87/575.38), r:18, b:18 }; }
+  function openGeom(){ var vw=window.innerWidth; var W=Math.max(210, Math.min(320, Math.round(vw*(vw<600?0.68:0.42)))); return { vb:'0 0 575.38 481.87', w:W, h:Math.round(W*481.87/575.38), r:18, b:18 }; }
+
+  // Zones de tap agrandies au-dessus de Oui/Non (tactile) — les boutons du SVG sont trop petits au doigt
+  var hitZones=[];
+  function removeHitZones(){ hitZones.forEach(function(b){ if(b.parentNode) b.parentNode.removeChild(b); }); hitZones=[]; if(hitResize){ window.removeEventListener('resize',hitResize); hitResize=null; } }
+  function mkHit(x1,x2,y1,y2,handler,label){
+    var b=document.createElement('button'); b.type='button'; b.setAttribute('aria-label',label);
+    b.style.cssText='position:fixed;left:'+x1+'px;top:'+y1+'px;width:'+Math.max(0,x2-x1)+'px;height:'+Math.max(0,y2-y1)+'px;background:transparent;border:0;padding:0;margin:0;z-index:1301;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+    b.addEventListener('click',function(e){ e.stopPropagation(); handler(e); });
+    document.body.appendChild(b); hitZones.push(b);
+  }
+  var hitResize=null;
+  function placeHitZones(){
+    if(!prompt || !prompt.classList.contains('on')) return;
+    removeHitZones();
+    var oui=prompt.querySelector('#bouton_oui'), non=prompt.querySelector('#bouton_non');
+    if(!oui||!non) return;
+    var ro=oui.getBoundingClientRect(), rn=non.getBoundingClientRect();
+    var midX=(ro.right+rn.left)/2, top=Math.min(ro.top,rn.top)-22, bot=Math.max(ro.bottom,rn.bottom)+22;
+    mkHit(ro.left-22, midX, top, bot, onYes, cfg.yes);   // Oui : de son bord gauche jusqu'au milieu
+    mkHit(midX, rn.right+22, top, bot, onNo, cfg.no);     // Non : du milieu jusqu'à son bord droit
+    hitResize=function(){ placeHitZones(); }; window.addEventListener('resize',hitResize);
+  }
   function applyGeom(g){ if(!prompt) return; prompt.style.width=g.w+'px'; prompt.style.height=g.h+'px'; prompt.style.right=g.r+'px'; prompt.style.bottom=g.b+'px'; if(svgEl) svgEl.setAttribute('viewBox', g.vb); }
   var tweenId=0;
   function tweenGeom(to, dur){
@@ -1794,8 +1816,9 @@
       void prompt.offsetWidth; prompt.classList.add('peek-in'); // fondu d'apparition (reflow forcé, fiable)
     });
   }
-  function open(){ if(!prompt || prompt.classList.contains('on')) return; prompt.classList.add('on'); prompt.setAttribute('aria-label', cfg.q+' Oui ou Non ?'); prompt.removeAttribute('tabindex'); tweenGeom(openGeom(), 560); }
-  function collapse(){ if(!prompt) return; prompt.classList.remove('on'); prompt.setAttribute('tabindex','0'); prompt.setAttribute('aria-label', cfg.q); tweenGeom(PEEK, 440); } // se replie dans le coin
+  function open(){ if(!prompt || prompt.classList.contains('on')) return; prompt.classList.add('on'); prompt.setAttribute('aria-label', cfg.q+' Oui ou Non ?'); prompt.removeAttribute('tabindex'); tweenGeom(openGeom(), 560);
+    if(matchMedia('(pointer:coarse)').matches) setTimeout(placeHitZones, 740); }
+  function collapse(){ if(!prompt) return; removeHitZones(); prompt.classList.remove('on'); prompt.setAttribute('tabindex','0'); prompt.setAttribute('aria-label', cfg.q); tweenGeom(PEEK, 440); } // se replie dans le coin
   function onNo(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); }
   function onYes(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); setTimeout(runMagic, 300); }
 
