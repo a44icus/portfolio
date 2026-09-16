@@ -655,7 +655,7 @@
   .magic-prompt.peek-in{ opacity:1; }
   .magic-prompt:not(.on):hover{ transform:scale(1.06); }
   .magic-prompt.on{ overflow:visible; cursor:default; }
-  .magic-prompt svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 14px 28px rgba(0,0,0,.42)); }
+  .magic-prompt svg{ width:100%; height:100%; display:block; }
   /* état replié : seul le magicien (bras + baguette) est visible */
   .magic-prompt:not(.on) #nuages,
   .magic-prompt:not(.on) #cartes,
@@ -1734,15 +1734,14 @@
 <!-- Tour de magie : la baguette pose une question, "Oui" fait s'envoler les éléments visibles -->
 <script>
 (function(){
-  if(!matchMedia('(pointer:fine)').matches) return;                 // desktop only
-  if(!('animate' in document.createElement('div'))) return;         // besoin de Web Animations
+  if(!('animate' in document.createElement('div'))) return;         // besoin de Web Animations (desktop + mobile)
   var cfg = window.__magicMsg = window.__magicMsg || { q:'Un tour de magie ?', yes:'Oui', no:'Non' };
 
   var prompt=null, running=false, svgEl=null;
 
   // Géométrie : état "peek" (main+baguette qui dépasse) ↔ état ouvert (magicien complet)
   var PEEK={ vb:'160 92 118 180', w:92, h:140, r:0, b:0 };
-  function openGeom(){ var W=Math.max(220, Math.min(320, Math.round(window.innerWidth*0.4))); return { vb:'0 0 575.38 481.87', w:W, h:Math.round(W*481.87/575.38), r:18, b:18 }; }
+  function openGeom(){ var W=Math.max(180, Math.min(320, Math.round(window.innerWidth*0.42))); return { vb:'0 0 575.38 481.87', w:W, h:Math.round(W*481.87/575.38), r:18, b:18 }; }
   function applyGeom(g){ if(!prompt) return; prompt.style.width=g.w+'px'; prompt.style.height=g.h+'px'; prompt.style.right=g.r+'px'; prompt.style.bottom=g.b+'px'; if(svgEl) svgEl.setAttribute('viewBox', g.vb); }
   var tweenId=0;
   function tweenGeom(to, dur){
