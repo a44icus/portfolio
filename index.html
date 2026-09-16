@@ -1854,7 +1854,8 @@
       var pop=new maplibregl.Popup({offset:16, className:'trip-pop', maxWidth:'220px'}).setHTML(html);
       pop.on('open', function(){
         var c=pop.getElement(); if(!c) return;
-        var withUrl=photos.filter(function(p){return p.url;});
+        // Vignettes limitées, mais la lightbox contient TOUTES les photos uploadées
+        var withUrl=allPhotos.filter(function(p){return p.url;});
         var urls=withUrl.map(function(p){return window.__imgTx(p.url,1600,72,'contain');});
         var caps=withUrl.map(function(p){return p.caption||pl.name;});
         c.querySelectorAll('.trip-thumbs img').forEach(function(img,ii){
