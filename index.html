@@ -1728,7 +1728,7 @@
   if(!('animate' in document.createElement('div'))) return;         // besoin de Web Animations
   var cfg = window.__magicMsg = window.__magicMsg || { q:'Tu veux un tour de magie ? ✨', yes:'Oui', no:'Non', bye:'Comme tu veux 😌' };
   var KEY='magicShown';
-  try{ if(sessionStorage.getItem(KEY)) return; }catch(e){}
+  var seenBefore=false; try{ seenBefore=!!sessionStorage.getItem(KEY); }catch(e){}
 
   var prompt=null, running=false, autoTimer=null;
 
@@ -1847,11 +1847,11 @@
     }, tadaAt + 1200);
   }
 
-  // Déclencheur manuel (démo / test) : __magicShow() pour la bulle, __magicRun() pour l'effet direct
+  // Déclencheur manuel (démo / test) : __magicShow() pour la bulle, __magicRun() pour l'effet direct — toujours dispo
   window.__magicShow=showPrompt; window.__magicRun=runMagic;
 
-  // Déclenchement : une seule fois, entre 20 et 30 s
-  setTimeout(showPrompt, 20000 + Math.random()*10000);
+  // Déclenchement auto : une seule fois par session, entre 20 et 30 s
+  if(!seenBefore) setTimeout(showPrompt, 20000 + Math.random()*10000);
 })();
 </script>
 
