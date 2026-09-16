@@ -649,16 +649,27 @@
   body.idle-active, body.idle-active *{ cursor:none !important; }
   @media (prefers-reduced-motion: reduce){ .idle-hand{ animation:none; } }
 
-  /* tour de magie : magicien cartoon (SVG) en bas à droite + envol des éléments */
-  .magic-prompt{ position:fixed; right:18px; bottom:18px; width:min(340px,44vw); z-index:1300; opacity:0; transform:translateY(28px) scale(.94); transition:opacity .45s ease, transform .5s cubic-bezier(.2,.9,.3,1.35); pointer-events:none; }
-  .magic-prompt.on{ opacity:1; transform:none; pointer-events:auto; }
-  .magic-prompt svg{ width:100%; height:auto; display:block; overflow:visible; filter:drop-shadow(0 14px 28px rgba(0,0,0,.42)); }
+  /* tour de magie : la main+baguette du magicien dépasse du coin ; il surgit au clic (taille/viewBox pilotés en JS) */
+  .magic-prompt{ position:fixed; right:0; bottom:0; z-index:1300; cursor:pointer; overflow:hidden;
+    opacity:0; transition:opacity .4s ease, transform .2s ease; transform-origin:bottom right; }
+  .magic-prompt.peek-in{ opacity:1; }
+  .magic-prompt:not(.on):hover{ transform:scale(1.06); }
+  .magic-prompt.on{ overflow:visible; cursor:default; }
+  .magic-prompt svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 14px 28px rgba(0,0,0,.42)); }
+  /* état replié : seul le magicien (bras + baguette) est visible */
+  .magic-prompt:not(.on) #nuages,
+  .magic-prompt:not(.on) #cartes,
+  .magic-prompt:not(.on) #question,
+  .magic-prompt:not(.on) #bouton_oui,
+  .magic-prompt:not(.on) #bouton_non{ opacity:0; visibility:hidden; transition:opacity .25s ease; }
+  .magic-prompt.on #nuages, .magic-prompt.on #cartes, .magic-prompt.on #question,
+  .magic-prompt.on #bouton_oui, .magic-prompt.on #bouton_non{ transition:opacity .4s ease .2s; }
   .magic-prompt #bouton_oui, .magic-prompt #bouton_non{ cursor:pointer; transform-box:fill-box; transform-origin:center; transition:transform .15s ease; }
-  .magic-prompt #bouton_oui:hover, .magic-prompt #bouton_non:hover,
-  .magic-prompt #bouton_oui:focus-visible, .magic-prompt #bouton_non:focus-visible{ transform:scale(1.09); outline:none; }
-  .magic-prompt #cartes{ transform-box:fill-box; transform-origin:center; animation:mgcCards 3.4s ease-in-out infinite; }
+  .magic-prompt.on #bouton_oui:hover, .magic-prompt.on #bouton_non:hover,
+  .magic-prompt.on #bouton_oui:focus-visible, .magic-prompt.on #bouton_non:focus-visible{ transform:scale(1.09); outline:none; }
+  .magic-prompt.on #cartes{ transform-box:fill-box; transform-origin:center; animation:mgcCards 3.4s ease-in-out infinite; }
   @keyframes mgcCards{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-7px) rotate(2.5deg);} }
-  .magic-prompt #nuages{ transform-box:fill-box; transform-origin:center; animation:mgcClouds 6.5s ease-in-out infinite; }
+  .magic-prompt.on #nuages{ transform-box:fill-box; transform-origin:center; animation:mgcClouds 6.5s ease-in-out infinite; }
   @keyframes mgcClouds{ 0%,100%{ transform:translateX(0);} 50%{ transform:translateX(-9px);} }
   .magic-prompt #magicien{ transform-box:fill-box; transform-origin:center bottom; animation:mgcBob 3.8s ease-in-out infinite; }
   @keyframes mgcBob{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-4px) rotate(-1deg);} }
@@ -1724,51 +1735,70 @@
 <script>
 (function(){
   if(!matchMedia('(pointer:fine)').matches) return;                 // desktop only
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; // respecte la réduction d'animations (déclenchement auto désactivé)
   if(!('animate' in document.createElement('div'))) return;         // besoin de Web Animations
-  var cfg = window.__magicMsg = window.__magicMsg || { q:'Tu veux un tour de magie ? ✨', yes:'Oui', no:'Non', bye:'Comme tu veux 😌' };
-  var KEY='magicShown';
-  var seenBefore=false; try{ seenBefore=!!sessionStorage.getItem(KEY); }catch(e){}
+  var cfg = window.__magicMsg = window.__magicMsg || { q:'Un tour de magie ?', yes:'Oui', no:'Non' };
 
-  var prompt=null, running=false, autoTimer=null;
+  var prompt=null, running=false, svgEl=null;
 
-  function markDone(){ try{ sessionStorage.setItem(KEY,'1'); }catch(e){} }
+  // Géométrie : état "peek" (main+baguette qui dépasse) ↔ état ouvert (magicien complet)
+  var PEEK={ vb:'160 92 118 180', w:92, h:140, r:0, b:0 };
+  function openGeom(){ var W=Math.max(220, Math.min(320, Math.round(window.innerWidth*0.4))); return { vb:'0 0 575.38 481.87', w:W, h:Math.round(W*481.87/575.38), r:18, b:18 }; }
+  function applyGeom(g){ if(!prompt) return; prompt.style.width=g.w+'px'; prompt.style.height=g.h+'px'; prompt.style.right=g.r+'px'; prompt.style.bottom=g.b+'px'; if(svgEl) svgEl.setAttribute('viewBox', g.vb); }
+  var tweenId=0;
+  function tweenGeom(to, dur){
+    if(!prompt || !svgEl) return;
+    var my=++tweenId;
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches){ applyGeom(to); return; }
+    var fVB=svgEl.getAttribute('viewBox').split(' ').map(Number), tVB=to.vb.split(' ').map(Number);
+    var f={ w:parseFloat(prompt.style.width)||PEEK.w, h:parseFloat(prompt.style.height)||PEEK.h, r:parseFloat(prompt.style.right)||0, b:parseFloat(prompt.style.bottom)||0 };
+    var t0=performance.now();
+    (function step(now){
+      if(my!==tweenId || !prompt) return;                 // un tween plus récent a pris la main
+      var k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,3);
+      prompt.style.width=(f.w+(to.w-f.w)*e)+'px'; prompt.style.height=(f.h+(to.h-f.h)*e)+'px';
+      prompt.style.right=(f.r+(to.r-f.r)*e)+'px'; prompt.style.bottom=(f.b+(to.b-f.b)*e)+'px';
+      svgEl.setAttribute('viewBox', fVB.map(function(v,i){ return v+(tVB[i]-v)*e; }).join(' '));
+      if(k<1) requestAnimationFrame(step);
+    })(t0);
+    setTimeout(function(){ if(my===tweenId && prompt) applyGeom(to); }, dur+140); // filet : garantit l'état final même si rAF est throttlé
+  }
 
-  // charge le SVG du magicien une seule fois (préchargé en idle, réutilisé au déclenchement)
+  // charge le SVG du magicien une seule fois
   var svgPromise=null;
   function loadSvg(){ if(!svgPromise) svgPromise=fetch('images/magician.svg').then(function(r){return r.text();}).catch(function(){return null;}); return svgPromise; }
-  (window.requestIdleCallback||function(cb){ setTimeout(cb,4000); })(loadSvg);
 
   function wireBtn(el, handler){
     if(!el) return;
     el.setAttribute('role','button'); el.setAttribute('tabindex','0');
     el.addEventListener('click', handler);
-    el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); handler(); } });
+    el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); handler(e); } });
   }
 
-  function showPrompt(){
-    if(prompt || document.hidden) return;
-    // pas deux éléments à la fois : si le « coucou » est visible, on réessaie un peu plus tard
-    if(document.querySelector('.idle-wave.on')){ setTimeout(showPrompt, 5000); return; }
+  // Le magicien dépasse discrètement du coin bas-droite (bras + baguette) ; un clic le fait surgir
+  function buildPeek(){
+    if(prompt) return;
     loadSvg().then(function(svgText){
-      if(prompt || document.hidden || !svgText) return;        // re-vérifie après le chargement
-      if(document.querySelector('.idle-wave.on')){ setTimeout(showPrompt, 5000); return; }
+      if(prompt || !svgText) return;
       prompt=document.createElement('div'); prompt.className='magic-prompt';
-      prompt.setAttribute('role','group'); prompt.setAttribute('aria-label', cfg.q);
+      prompt.setAttribute('role','button'); prompt.setAttribute('tabindex','0'); prompt.setAttribute('aria-label', cfg.q);
       prompt.innerHTML=svgText;
       document.body.appendChild(prompt);
+      svgEl=prompt.querySelector('svg');
+      if(svgEl) svgEl.setAttribute('preserveAspectRatio','xMidYMax meet');
+      applyGeom(PEEK); // cadré sur la main + baguette, blotti dans le coin
+      prompt.addEventListener('click', function(){ if(!prompt.classList.contains('on')) open(); });
+      prompt.addEventListener('keydown', function(e){ if(!prompt.classList.contains('on') && (e.key==='Enter'||e.key===' ')){ e.preventDefault(); open(); } });
       var yes=prompt.querySelector('#bouton_oui'), no=prompt.querySelector('#bouton_non');
       if(yes) yes.setAttribute('aria-label', cfg.yes);
       if(no) no.setAttribute('aria-label', cfg.no);
       wireBtn(yes, onYes); wireBtn(no, onNo);
-      requestAnimationFrame(function(){ if(prompt) prompt.classList.add('on'); });
-      markDone();
-      autoTimer=setTimeout(function(){ if(prompt) closePrompt(); }, 12000); // ne s'incruste pas si on l'ignore
+      void prompt.offsetWidth; prompt.classList.add('peek-in'); // fondu d'apparition (reflow forcé, fiable)
     });
   }
-  function closePrompt(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } if(!prompt) return; var p=prompt; prompt=null; p.classList.remove('on'); setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 420); }
-  function onNo(){ closePrompt(); } // le magicien s'en va
-  function onYes(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } closePrompt(); setTimeout(runMagic, 260); }
+  function open(){ if(!prompt || prompt.classList.contains('on')) return; prompt.classList.add('on'); prompt.setAttribute('aria-label', cfg.q+' Oui ou Non ?'); prompt.removeAttribute('tabindex'); tweenGeom(openGeom(), 560); }
+  function collapse(){ if(!prompt) return; prompt.classList.remove('on'); prompt.setAttribute('tabindex','0'); prompt.setAttribute('aria-label', cfg.q); tweenGeom(PEEK, 440); } // se replie dans le coin
+  function onNo(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); }
+  function onYes(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); setTimeout(runMagic, 300); }
 
   function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
 
@@ -1847,11 +1877,11 @@
     }, tadaAt + 1200);
   }
 
-  // Déclencheur manuel (démo / test) : __magicShow() pour la bulle, __magicRun() pour l'effet direct — toujours dispo
-  window.__magicShow=showPrompt; window.__magicRun=runMagic;
+  // Démo : __magicShow() ouvre le magicien, __magicRun() lance l'effet direct
+  window.__magicShow=function(){ open(); }; window.__magicRun=runMagic;
 
-  // Déclenchement auto : une seule fois par session, entre 20 et 30 s
-  if(!seenBefore) setTimeout(showPrompt, 20000 + Math.random()*10000);
+  // Le magicien attend dans le coin ; il surgit quand on clique sa main
+  buildPeek();
 })();
 </script>
 
