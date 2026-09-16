@@ -1426,12 +1426,12 @@
   var noteEl = document.querySelector('.pick-note');
   var pickTimeout = null;
   document.querySelectorAll('.marquee').forEach(function(m){
-    if(!finePointer) return; // effet guitare réservé aux souris (évite le déclenchement au scroll tactile)
     var ns='http://www.w3.org/2000/svg';
     var svg=document.createElementNS(ns,'svg'); svg.setAttribute('class','string-svg'); svg.setAttribute('viewBox','0 0 1000 100'); svg.setAttribute('preserveAspectRatio','none'); svg.setAttribute('aria-hidden','true');
     var path=document.createElementNS(ns,'path'); path.setAttribute('class','string'); path.setAttribute('d','M0,50 Q500,50 1000,50');
     svg.appendChild(path); m.appendChild(svg);
-    var W=1000, mid=50, raf=null, lastX=0.5, lastStrength=0;
+    m.style.touchAction='pan-y'; // tactile : le glissé vertical fait défiler la page, l'horizontal gratte la corde
+    var W=1000, mid=50, raf=null, lastX=0.5, lastStrength=0, touchActive=false;
     var isElectric = m.classList.contains('marquee--rev');
     var strum = function(x,s){ (isElectric ? playElectric : playNote)(x, s); };
     var ring=document.querySelector('.cursor-ring');
@@ -1444,6 +1444,7 @@
       (function vib(now){ var t=(now-t0)/1000; var amp=startAmp*Math.exp(-decay*t)*Math.cos(freq*t); draw(W/2, mid+amp); if(Math.abs(amp)>0.5){ raf=requestAnimationFrame(vib); } else { draw(W/2, mid); path.classList.remove('twang'); raf=null; } })(t0);
     }
     m.addEventListener('pointermove', function(e){
+      if(e.pointerType==='touch' && !touchActive) return; // ignore le survol tactile hors grattage
       if(raf){ cancelAnimationFrame(raf); raf=null; }
       path.classList.add('twang');
       var r=m.getBoundingClientRect();
@@ -1458,21 +1459,31 @@
         pickEl.style.transform='translate(-50%,-50%) rotate('+deg+'deg)';
       }
     });
-    m.addEventListener('pointerleave', function(){
-      if(pickTimeout) clearTimeout(pickTimeout);
-      pickTimeout=setTimeout(function(){ if(ring) ring.classList.remove('is-pick'); pickTimeout=null; }, 650);
+    function releaseStrum(force){
       var mm=/Q([\d.\-]+),([\d.\-]+)/.exec(path.getAttribute('d'));
       var startAmp = mm ? (parseFloat(mm[2])-mid) : 0;
-      if(Math.abs(startAmp)>=6) strum(lastX, lastStrength);
-      twang(startAmp);
+      if(force || Math.abs(startAmp)>=6) strum(lastX, lastStrength || 0.5);
+      twang(startAmp || (force?30:0));
+    }
+    m.addEventListener('pointerleave', function(e){
+      if(e.pointerType==='touch') return; // tactile géré par pointerup/pointercancel
+      if(pickTimeout) clearTimeout(pickTimeout);
+      pickTimeout=setTimeout(function(){ if(ring) ring.classList.remove('is-pick'); pickTimeout=null; }, 650);
+      releaseStrum(false);
     });
     m.addEventListener('pointerdown', function(e){
+      if(e.pointerType==='touch'){ touchActive=true; lastX=0.5; lastStrength=0; path.classList.add('twang'); return; }
       var r=m.getBoundingClientRect();
       var cx=((e.clientX-r.left)/r.width)*W, cy=((e.clientY-r.top)/r.height)*100;
       path.classList.add('twang');
       strum(cx/W, Math.max(0.35, Math.min(1, Math.abs(cy-mid)/mid)));
       twang((cy-mid)*2 || 42);
     });
+    m.addEventListener('pointerup', function(e){
+      if(e.pointerType!=='touch' || !touchActive) return;
+      touchActive=false; releaseStrum(true); // au doigt : un pincement franc à chaque grattage/tap
+    });
+    m.addEventListener('pointercancel', function(e){ if(e.pointerType==='touch'){ touchActive=false; twang(0); } }); // scroll vertical : pas de son
   });
 })();
 </script>
