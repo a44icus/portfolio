@@ -684,64 +684,85 @@
   /* ===== Sort de style : métamorphose RADICALE du site (couleurs + typo + formes + textures) ===== */
   html.spell-morphing *{ transition: background-color .5s ease, color .5s ease, border-color .5s ease, fill .5s ease, stroke .5s ease, box-shadow .5s ease, border-radius .5s ease, filter .5s ease, letter-spacing .5s ease, text-shadow .5s ease, -webkit-text-stroke-color .5s ease !important; }
 
-  /* — BRUTALISTE : blanc / noir / rouge, coins carrés, mono, ombres dures — */
-  html.spell-brutal, html.spell-brutal #services, html.spell-brutal #voix, html.spell-brutal #contact{
-    --paper:#ffffff!important; --paper-dim:#ececec!important; --ink:#000000!important; --muted:#3a3a3a!important; --line:#000000!important;
-    --panel:#000000!important; --panel-fg:#ffffff!important; --nav-bg:rgba(255,255,255,.92)!important;
-    --coral:#ff2020!important; --cobalt:#000000!important; --lime:#000000!important; --ff-display:'Space Mono', monospace!important; }
-  html.spell-brutal h1, html.spell-brutal h2, html.spell-brutal .project-title, html.spell-brutal .svc-name,
-  html.spell-brutal .num, html.spell-brutal .marquee-item, html.spell-brutal .section-tag, html.spell-brutal .mark{
-    text-transform:uppercase !important; letter-spacing:-.03em !important; }
-  html.spell-brutal .project, html.spell-brutal .svc, html.spell-brutal .quote, html.spell-brutal .stat,
-  html.spell-brutal .nav-cta, html.spell-brutal .btn, html.spell-brutal .pill, html.spell-brutal .carousel,
-  html.spell-brutal img, html.spell-brutal .project-visual, html.spell-brutal .sound-toggle{ border-radius:0 !important; }
-  html.spell-brutal .project, html.spell-brutal .svc, html.spell-brutal .quote, html.spell-brutal .stat, html.spell-brutal .nav-cta{
-    border:3px solid #000 !important; box-shadow:7px 7px 0 #000 !important; }
-  html.spell-brutal .nav{ border-bottom:3px solid #000 !important; }
-  html.spell-brutal img, html.spell-brutal .project-visual{ filter:grayscale(1) contrast(1.2) !important; }
+  /* — AURORA : nuit premium, dégradés aurore, verre dépoli, halos (Linear / Vercel) — */
+  html.spell-aurora, html.spell-aurora #services, html.spell-aurora #voix, html.spell-aurora #contact{
+    --paper:#08080c!important; --paper-dim:#12121c!important; --ink:#f4f5ff!important; --muted:#9aa0c4!important; --line:rgba(255,255,255,.1)!important;
+    --panel:#0b0b14!important; --panel-fg:#f4f5ff!important; --nav-bg:rgba(8,8,12,.55)!important;
+    --coral:#a78bfa!important; --cobalt:#818cf8!important; --lime:#22d3ee!important; }
+  html.spell-aurora h1, html.spell-aurora h2, html.spell-aurora .project-title, html.spell-aurora .svc-name{
+    font-weight:800 !important; letter-spacing:-.02em !important; text-transform:none !important; text-shadow:0 0 44px rgba(129,140,248,.4) !important; }
+  html.spell-aurora .project, html.spell-aurora .svc, html.spell-aurora .quote, html.spell-aurora .stat,
+  html.spell-aurora .nav-cta, html.spell-aurora .btn, html.spell-aurora .pill, html.spell-aurora .carousel,
+  html.spell-aurora img, html.spell-aurora .project-visual{ border-radius:18px !important; }
+  html.spell-aurora .project, html.spell-aurora .svc, html.spell-aurora .quote, html.spell-aurora .stat{
+    background:rgba(255,255,255,.045) !important; border:1px solid rgba(255,255,255,.1) !important;
+    box-shadow:0 24px 70px -34px rgba(129,140,248,.65), inset 0 1px 0 rgba(255,255,255,.08) !important; backdrop-filter:blur(8px) !important; }
+  html.spell-aurora .nav-cta{ background:linear-gradient(135deg,#818cf8,#a78bfa) !important; color:#0b0b14 !important; border:none !important; box-shadow:0 10px 30px -8px rgba(129,140,248,.6) !important; }
+  html.spell-aurora img, html.spell-aurora .project-visual{ filter:saturate(1.05) contrast(1.02) !important; }
 
-  /* — NÉON : nuit électrique, halos, cyber, mono — */
-  html.spell-neon, html.spell-neon #services, html.spell-neon #voix, html.spell-neon #contact{
-    --paper:#05050d!important; --paper-dim:#0b0b1c!important; --ink:#eafcff!important; --muted:#7fb8cc!important; --line:rgba(34,230,255,.4)!important;
-    --panel:#02020a!important; --panel-fg:#eafcff!important; --nav-bg:rgba(5,5,13,.7)!important;
-    --coral:#ff2fb0!important; --cobalt:#22e6ff!important; --lime:#c6ff2e!important; --ff-display:'Space Mono', monospace!important; }
-  html.spell-neon h1, html.spell-neon h2, html.spell-neon .num{ text-shadow:0 0 14px var(--cobalt), 0 0 40px rgba(34,230,255,.45) !important; }
-  html.spell-neon .section-tag, html.spell-neon .marquee-item{ text-shadow:0 0 10px currentColor !important; }
-  html.spell-neon .project, html.spell-neon .svc, html.spell-neon .quote, html.spell-neon .stat, html.spell-neon .nav-cta, html.spell-neon .btn{
-    border:1px solid var(--cobalt) !important; box-shadow:0 0 16px rgba(34,230,255,.45), inset 0 0 14px rgba(34,230,255,.12) !important; }
-  html.spell-neon img, html.spell-neon .project-visual{ filter:saturate(1.5) contrast(1.1) brightness(1.05) !important; }
+  /* — LIQUID GLASS : clair irisé, verre translucide, flou, reflets (Apple 2025) — */
+  html.spell-glass, html.spell-glass #services, html.spell-glass #voix, html.spell-glass #contact{
+    --paper:#e9edfb!important; --paper-dim:#f2ecfa!important; --ink:#1a1730!important; --muted:#5a5578!important; --line:rgba(255,255,255,.6)!important;
+    --panel:#dfe4fb!important; --panel-fg:#1a1730!important; --nav-bg:rgba(255,255,255,.5)!important;
+    --coral:#7c5cff!important; --cobalt:#3b82f6!important; --lime:#06b6d4!important; --ff-display:'Manrope', sans-serif!important; }
+  html.spell-glass body{ background:linear-gradient(135deg,#e8ecff 0%,#ffe9f3 55%,#e6fbff 100%) !important; background-attachment:fixed !important; }
+  html.spell-glass h1, html.spell-glass h2, html.spell-glass .project-title, html.spell-glass .svc-name{
+    font-weight:700 !important; letter-spacing:-.02em !important; text-transform:none !important; }
+  html.spell-glass .project, html.spell-glass .svc, html.spell-glass .quote, html.spell-glass .stat,
+  html.spell-glass .nav-cta, html.spell-glass .btn, html.spell-glass .pill, html.spell-glass .carousel,
+  html.spell-glass img, html.spell-glass .project-visual{ border-radius:26px !important; }
+  html.spell-glass .project, html.spell-glass .svc, html.spell-glass .quote, html.spell-glass .stat{
+    background:rgba(255,255,255,.42) !important; border:1px solid rgba(255,255,255,.7) !important;
+    box-shadow:0 30px 60px -28px rgba(60,60,110,.4), inset 0 1px 0 rgba(255,255,255,.9) !important; backdrop-filter:blur(16px) saturate(1.4) !important; }
+  html.spell-glass .nav-cta{ background:rgba(255,255,255,.6) !important; color:#241f45 !important; border:1px solid rgba(255,255,255,.9) !important; box-shadow:0 6px 18px -8px rgba(60,60,110,.5) !important; }
+  html.spell-glass img, html.spell-glass .project-visual{ filter:saturate(1.08) brightness(1.02) !important; }
 
-  /* — ÉDITORIAL : crème luxe, très arrondi, doux, humaniste — */
-  html.spell-editorial, html.spell-editorial #services, html.spell-editorial #voix, html.spell-editorial #contact{
-    --paper:#f2ebdd!important; --paper-dim:#e6dac7!important; --ink:#2b2018!important; --muted:#8a7862!important; --line:rgba(43,32,24,.18)!important;
-    --panel:#2b2018!important; --panel-fg:#f2ebdd!important; --nav-bg:rgba(242,235,221,.82)!important;
-    --coral:#b5623f!important; --cobalt:#5c6f4a!important; --lime:#d9a441!important; --ff-display:'Manrope', sans-serif!important; }
-  html.spell-editorial h1, html.spell-editorial h2, html.spell-editorial .project-title, html.spell-editorial .svc-name{
-    font-weight:600 !important; letter-spacing:0 !important; text-transform:none !important; }
-  html.spell-editorial .project, html.spell-editorial .svc, html.spell-editorial .quote, html.spell-editorial .stat,
-  html.spell-editorial .nav-cta, html.spell-editorial .btn, html.spell-editorial .pill, html.spell-editorial .carousel,
-  html.spell-editorial img, html.spell-editorial .project-visual{ border-radius:26px !important; }
-  html.spell-editorial .project, html.spell-editorial .svc, html.spell-editorial .quote{ box-shadow:0 24px 60px -24px rgba(43,32,24,.5) !important; }
-  html.spell-editorial img, html.spell-editorial .project-visual{ filter:sepia(.28) saturate(.92) contrast(.97) !important; }
+  /* — KINETIC EDITORIAL : noir + vert acide, typo cinétique, grille, mono — */
+  html.spell-kinetic, html.spell-kinetic #services, html.spell-kinetic #voix, html.spell-kinetic #contact{
+    --paper:#0d0d0d!important; --paper-dim:#151515!important; --ink:#f5f5f2!important; --muted:#8a8a8a!important; --line:rgba(255,255,255,.14)!important;
+    --panel:#000000!important; --panel-fg:#f5f5f2!important; --nav-bg:rgba(13,13,13,.72)!important;
+    --coral:#d4ff3d!important; --cobalt:#d4ff3d!important; --lime:#d4ff3d!important; --ff-display:'Space Mono', monospace!important; }
+  html.spell-kinetic h1, html.spell-kinetic h2, html.spell-kinetic .project-title, html.spell-kinetic .svc-name,
+  html.spell-kinetic .num, html.spell-kinetic .marquee-item, html.spell-kinetic .section-tag, html.spell-kinetic .mark{
+    text-transform:uppercase !important; letter-spacing:-.02em !important; }
+  html.spell-kinetic .section-tag{ color:#d4ff3d !important; }
+  html.spell-kinetic .project, html.spell-kinetic .svc, html.spell-kinetic .quote, html.spell-kinetic .stat,
+  html.spell-kinetic .nav-cta, html.spell-kinetic .btn, html.spell-kinetic .pill, html.spell-kinetic .carousel,
+  html.spell-kinetic img, html.spell-kinetic .project-visual, html.spell-kinetic .sound-toggle{ border-radius:2px !important; }
+  html.spell-kinetic .project, html.spell-kinetic .svc, html.spell-kinetic .quote, html.spell-kinetic .stat{
+    border:1px solid rgba(255,255,255,.16) !important; box-shadow:none !important; }
+  html.spell-kinetic .nav-cta, html.spell-kinetic .btn{ background:#d4ff3d !important; color:#0d0d0d !important; border:none !important; }
+  html.spell-kinetic img, html.spell-kinetic .project-visual{ filter:grayscale(1) contrast(1.08) !important; }
 
   /* — surfaces codées en dur remises au diapason de l'univers actif (Méthode, carrousel, contact, îlots clairs…) — */
-  html.spell-brutal .approche, html.spell-neon .approche, html.spell-editorial .approche,
-  html.spell-brutal .carousel, html.spell-neon .carousel, html.spell-editorial .carousel,
-  html.spell-brutal #contact, html.spell-neon #contact, html.spell-editorial #contact{ background:var(--panel)!important; color:var(--panel-fg)!important; }
-  html.spell-brutal .approche, html.spell-neon .approche, html.spell-editorial .approche,
-  html.spell-brutal .approche .section-head h2, html.spell-neon .approche .section-head h2, html.spell-editorial .approche .section-head h2,
-  html.spell-brutal #contact .email-link, html.spell-neon #contact .email-link, html.spell-editorial #contact .email-link{ color:var(--panel-fg)!important; }
-  html.spell-brutal #services, html.spell-neon #services, html.spell-editorial #services,
-  html.spell-brutal #voix, html.spell-neon #voix, html.spell-editorial #voix{ background:var(--paper)!important; color:var(--ink)!important; }
-  html.spell-brutal .quote, html.spell-neon .quote, html.spell-editorial .quote{ background:var(--paper-dim)!important; }
-  html.spell-brutal .project-visual, html.spell-neon .project-visual, html.spell-editorial .project-visual{ background-color:var(--paper-dim)!important; }
+  html.spell-aurora .approche, html.spell-glass .approche, html.spell-kinetic .approche,
+  html.spell-aurora .carousel, html.spell-glass .carousel, html.spell-kinetic .carousel,
+  html.spell-aurora #contact, html.spell-glass #contact, html.spell-kinetic #contact{ background:var(--panel)!important; color:var(--panel-fg)!important; }
+  html.spell-aurora .approche, html.spell-glass .approche, html.spell-kinetic .approche,
+  html.spell-aurora .approche .section-head h2, html.spell-glass .approche .section-head h2, html.spell-kinetic .approche .section-head h2,
+  html.spell-aurora #contact .email-link, html.spell-glass #contact .email-link, html.spell-kinetic #contact .email-link{ color:var(--panel-fg)!important; }
+  html.spell-aurora #services, html.spell-glass #services, html.spell-kinetic #services,
+  html.spell-aurora #voix, html.spell-glass #voix, html.spell-kinetic #voix{ background:var(--paper)!important; color:var(--ink)!important; }
+  html.spell-aurora .quote, html.spell-glass .quote, html.spell-kinetic .quote{ background:var(--paper-dim)!important; }
+  html.spell-aurora .project-visual, html.spell-glass .project-visual, html.spell-kinetic .project-visual{ background-color:var(--paper-dim)!important; }
 
   /* textures plein écran par univers */
   .spell-fx{ position:fixed; inset:0; z-index:1249; pointer-events:none; opacity:0; transition:opacity .5s ease; }
   .spell-fx.on{ opacity:1; }
-  .spell-fx.fx-neon{ background:repeating-linear-gradient(0deg, rgba(34,230,255,.10) 0 1px, transparent 1px 3px), radial-gradient(circle at 50% 0%, rgba(34,230,255,.14), transparent 62%); mix-blend-mode:screen; }
-  .spell-fx.fx-brutal{ background:radial-gradient(circle, rgba(0,0,0,.20) 1px, transparent 1.6px); background-size:22px 22px; mix-blend-mode:multiply; }
-  .spell-fx.fx-editorial{ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); mix-blend-mode:multiply; opacity:.42; }
+  .spell-fx.fx-aurora{ background:
+      radial-gradient(40% 40% at 18% 22%, rgba(99,102,241,.5), transparent 70%),
+      radial-gradient(42% 42% at 82% 26%, rgba(168,85,247,.45), transparent 70%),
+      radial-gradient(52% 52% at 60% 94%, rgba(34,211,238,.4), transparent 70%);
+    filter:blur(46px); mix-blend-mode:screen; animation:auroraDrift 16s ease-in-out infinite alternate; }
+  .spell-fx.fx-glass{ background:
+      radial-gradient(50% 40% at 12% 8%, rgba(124,92,255,.14), transparent 60%),
+      radial-gradient(46% 40% at 88% 16%, rgba(6,182,212,.14), transparent 60%);
+    mix-blend-mode:multiply; opacity:.75; }
+  .spell-fx.fx-kinetic{ background:
+      repeating-linear-gradient(0deg, rgba(212,255,61,.055) 0 1px, transparent 1px 46px),
+      repeating-linear-gradient(90deg, rgba(212,255,61,.055) 0 1px, transparent 1px 46px);
+    mix-blend-mode:screen; opacity:.85; }
+  @keyframes auroraDrift{ 0%{ transform:translate3d(-3%,-2%,0) scale(1.06);} 100%{ transform:translate3d(4%,3%,0) scale(1.16);} }
 
   /* flash de sort (émane de la baguette, en bas à droite) */
   .spell-flash{ position:fixed; inset:0; z-index:1306; pointer-events:none; opacity:0; background:radial-gradient(circle at 84% 82%, #fff 0%, rgba(255,255,255,.55) 22%, transparent 60%); }
@@ -1929,7 +1950,7 @@
 
   /* ===== Le sort de style : métamorphose RADICALE du site puis retour ===== */
   var spelling=false, spellToast=null, spellFx=null, spellFlash=null;
-  var ALL_THEMES=['spell-brutal','spell-neon','spell-editorial'];
+  var ALL_THEMES=['spell-aurora','spell-glass','spell-kinetic'];
   function showToast(html){
     if(!spellToast){ spellToast=document.createElement('div'); spellToast.className='spell-toast'; spellToast.setAttribute('role','status'); document.body.appendChild(spellToast); }
     spellToast.innerHTML=html; void spellToast.offsetWidth; spellToast.classList.add('on');
@@ -1951,8 +1972,8 @@
     var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.classList.add('spell-morphing');
     flash();
-    var seq = reduce ? [{c:'spell-editorial',fx:'editorial',label:'Éditorial'}]
-                     : [{c:'spell-brutal',fx:'brutal',label:'Brutalist'},{c:'spell-neon',fx:'neon',label:'Néon'},{c:'spell-editorial',fx:'editorial',label:'Éditorial'}];
+    var seq = reduce ? [{c:'spell-glass',fx:'glass',label:'Liquid Glass'}]
+                     : [{c:'spell-aurora',fx:'aurora',label:'Aurora'},{c:'spell-glass',fx:'glass',label:'Liquid Glass'},{c:'spell-kinetic',fx:'kinetic',label:'Kinetic Editorial'}];
     var hold = reduce ? 2800 : 2000, i=0;
     function tick(){
       root.classList.remove.apply(root.classList, ALL_THEMES);
