@@ -217,7 +217,7 @@
   .hero canvas{ position:absolute; inset:0; width:100%; height:100%; }
   @media (max-width:600px){ #heroCanvas{ display:none; } }
   /* grain (grained.js) : ne doit jamais bloquer les interactions du hero */
-  #top::before{ pointer-events:none; z-index:1; }
+  #top::before{ pointer-events:none; z-index:3; }
   .hero-inner{ position:relative; z-index:2; width:100%; max-width: var(--maxw); margin:0 auto; }
   .hero-top{ display:flex; align-items:center; gap:1rem; margin-bottom: 1.8rem; flex-wrap:wrap; }
   .hero-index{ font-family: var(--ff-mono); font-size:.8rem; color: var(--muted); }
