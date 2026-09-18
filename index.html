@@ -216,6 +216,8 @@
   }
   .hero canvas{ position:absolute; inset:0; width:100%; height:100%; }
   @media (max-width:600px){ #heroCanvas{ display:none; } }
+  /* grain (grained.js) : ne doit jamais bloquer les interactions du hero */
+  #top::before{ pointer-events:none; z-index:1; }
   .hero-inner{ position:relative; z-index:2; width:100%; max-width: var(--maxw); margin:0 auto; }
   .hero-top{ display:flex; align-items:center; gap:1rem; margin-bottom: 1.8rem; flex-wrap:wrap; }
   .hero-index{ font-family: var(--ff-mono); font-size:.8rem; color: var(--muted); }
@@ -2268,6 +2270,27 @@
 </script>
 
 <!-- Vercel Web Analytics (s'active via le toggle Analytics du projet) -->
+<script src="js/grained.min.js"></script>
+<script>
+  /* Grain animé sur le hero (#top). Léger, désactivé si l'utilisateur préfère peu d'animation. */
+  (function(){
+    if(typeof grained !== 'function') return;
+    var mq = matchMedia('(prefers-reduced-motion: reduce)');
+    function paint(){
+      try{
+        grained('#top', {
+          animate: !mq.matches,
+          patternWidth: 120, patternHeight: 120,
+          grainOpacity: 0.06, grainDensity: 1,
+          grainWidth: 1, grainHeight: 1,
+          grainChaos: 0.7, grainSpeed: 18
+        });
+      }catch(e){}
+    }
+    if(document.readyState === 'complete') paint();
+    else window.addEventListener('load', paint, { once:true });
+  })();
+</script>
 <script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
