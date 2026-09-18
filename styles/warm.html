@@ -166,6 +166,35 @@ h1,h2,h3{ margin:0; font-family:var(--ff-s); font-weight:600; letter-spacing:-.0
 footer{ border-top:1px solid var(--line); padding:2.5rem var(--gut); display:flex; justify-content:space-between; flex-wrap:wrap; gap:1rem; color:var(--dim); font-size:.85rem; }
 footer a{ color:var(--terra); font-weight:600; }
 
+/* ---------- PROJETS : catalogue 3D feuilletable ---------- */
+.catalog{ margin-top:.5rem; }
+.cat-stage{ position:relative; width:min(88vw,440px); height:min(72vh,600px); margin:0 auto; perspective:2400px; }
+.cat-page{ position:absolute; inset:0; transform-style:preserve-3d; transform-origin:left center; transition:transform 1s cubic-bezier(.7,0,.22,1); will-change:transform; cursor:pointer; }
+.cat-page.flipped{ transform:rotateY(-162deg); }
+.cat-face{ position:absolute; inset:0; -webkit-backface-visibility:hidden; backface-visibility:hidden; border-radius:6px; overflow:hidden; box-shadow:0 34px 66px -26px rgba(120,80,50,.55); }
+.cat-front{ background:var(--card); }
+.cat-media{ position:absolute; inset:0; background-size:cover; background-position:center; background-color:var(--paper-2); }
+.cat-front::after{ content:''; position:absolute; inset:0; background:linear-gradient(to top, rgba(28,22,18,.74), transparent 48%); }
+.cat-meta{ position:absolute; left:0; right:0; bottom:0; z-index:2; display:flex; align-items:flex-end; gap:1rem; padding:1.4rem 1.5rem; color:#faf6ef; }
+.cat-num{ font-family:var(--ff-s); font-size:2rem; line-height:.9; opacity:.85; }
+.cat-info{ flex:1; min-width:0; }
+.cat-c{ font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--clay); }
+.cat-t{ font-family:var(--ff-s); font-weight:600; font-size:1.45rem; margin:.2rem 0 0; color:#faf6ef; letter-spacing:-.01em; }
+.cat-link{ width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.55); display:grid; place-items:center; color:#faf6ef; flex-shrink:0; font-size:1.05rem; transition:background .2s, color .2s; }
+.cat-link:hover{ background:#faf6ef; color:var(--ink); }
+.cat-back{ transform:rotateY(180deg); background:repeating-linear-gradient(45deg,#efe7d9,#efe7d9 13px,#e7dcc8 13px,#e7dcc8 26px); display:grid; place-items:center; border:1px solid var(--line); }
+.cat-back-mark{ font-family:var(--ff-s); font-style:italic; font-size:2.6rem; color:var(--clay); opacity:.5; }
+.cat-ui{ display:flex; align-items:center; justify-content:center; gap:1.7rem; margin-top:2.2rem; }
+.cat-nav{ width:54px; height:54px; border-radius:50%; border:1px solid var(--line); background:transparent; color:var(--ink); font-size:1.2rem; cursor:pointer; transition:background .2s, color .2s, border-color .2s, transform .2s; }
+.cat-nav:hover{ background:var(--terra); color:#faf6ef; border-color:var(--terra); transform:translateY(-2px); }
+.cat-nav:disabled{ opacity:.35; cursor:default; }
+.cat-nav:disabled:hover{ background:transparent; color:var(--ink); border-color:var(--line); transform:none; }
+.cat-count{ font-family:var(--ff-s); font-size:1.15rem; min-width:6ch; text-align:center; display:inline-flex; gap:.35rem; justify-content:center; }
+.cat-count .sep{ color:var(--dim); }
+.cat-hint{ text-align:center; font-size:.78rem; color:var(--dim); margin-top:1rem; letter-spacing:.02em; }
+@media (max-width:520px){ .cat-stage{ height:66vh; } .cat-t{ font-size:1.25rem; } }
+@media (prefers-reduced-motion:reduce){ .cat-page{ transition:none; } }
+
 /* ---------- LIGHTBOX ---------- */
 .lb{ position:fixed; inset:0; z-index:1200; background:rgba(44,36,32,.85); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; padding:4vw; }
 .lb.on{ display:flex; }
@@ -226,8 +255,16 @@ footer a{ color:var(--terra); font-weight:600; }
 
 <main>
   <section class="section" id="travaux"><div class="wrap">
-    <div class="sec-head reveal"><div><span class="eyebrow">Sélection</span><h2 id="t-travaux" style="margin-top:1rem">Huit projets, huit intentions.</h2></div><p>Identité, édition, print, digital — chaque projet part d'une intention claire.</p></div>
-    <div class="bento" id="bento"></div>
+    <div class="sec-head reveal"><div><span class="eyebrow">Sélection</span><h2 id="t-travaux" style="margin-top:1rem">Huit projets, huit intentions.</h2></div><p>Un catalogue à feuilleter — page après page, projet après projet.</p></div>
+    <div class="catalog reveal" id="catalog">
+      <div class="cat-stage" id="catStage" role="group" aria-label="Catalogue des projets"></div>
+      <div class="cat-ui">
+        <button class="cat-nav" id="catPrev" type="button" aria-label="Projet précédent">←</button>
+        <div class="cat-count"><span id="catCur">01</span><span class="sep">/</span><span id="catTotal">08</span></div>
+        <button class="cat-nav" id="catNext" type="button" aria-label="Projet suivant">→</button>
+      </div>
+      <div class="cat-hint">Cliquez la page ou glissez pour tourner</div>
+    </div>
   </div></section>
 
   <section class="section" id="services"><div class="wrap">
@@ -339,6 +376,54 @@ footer a{ color:var(--terra); font-weight:600; }
   document.addEventListener('visibilitychange',function(){ running=!document.hidden; if(running&&!reduce) loop(); });
   function loop(){ if(!running) return; uniforms.uTime.value=(performance.now()-start)/1000; renderer.render(scene,camera); if(!reduce) requestAnimationFrame(loop); }
   if(reduce){ uniforms.uTime.value=6.0; renderer.render(scene,camera); } else loop();
+})();
+</script>
+<script>
+/* ================= WARM : catalogue projets 3D feuilletable ================= */
+(function(){
+  if(!window.loadPortfolio) return;
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  loadPortfolio().then(function(data){
+    var stage=document.getElementById('catStage'); if(!stage) return;
+    var IMG=(window.PF&&PF.img)||function(u){return u;}, E=(window.PF&&PF.esc)||function(s){return s==null?'':String(s);};
+    var projects=data.projects||[]; var n=projects.length; if(!n) return;
+    document.getElementById('catTotal').textContent=('0'+n).slice(-2);
+    function href(p){ return (p.slug&&(p.intro_body||p.approach_body||p.lede))?('../projets/projet.html?p='+encodeURIComponent(p.slug)):(p.link&&p.link!=='#'?p.link:null); }
+    stage.innerHTML=projects.map(function(p,i){
+      var h=href(p), num=('0'+(i+1)).slice(-2);
+      return '<div class="cat-page" data-i="'+i+'">'+
+        '<div class="cat-face cat-front">'+
+          '<div class="cat-media" style="background-image:url(\''+E(IMG(p.image_url,{w:900}))+'\')"></div>'+
+          '<div class="cat-meta"><span class="cat-num">'+num+'</span>'+
+            '<div class="cat-info"><span class="cat-c">'+E(p.category)+(p.year?' · '+E(p.year):'')+'</span><h3 class="cat-t">'+E(p.title)+'</h3></div>'+
+            (h?'<a class="cat-link" href="'+E(h)+'" aria-label="Voir le projet '+E(p.title)+'">↗</a>':'')+
+          '</div>'+
+        '</div>'+
+        '<div class="cat-face cat-back"><span class="cat-back-mark">sd</span></div>'+
+      '</div>';
+    }).join('');
+    var pages=[].slice.call(stage.querySelectorAll('.cat-page'));
+    var cur=0, prevBtn=document.getElementById('catPrev'), nextBtn=document.getElementById('catNext'), curEl=document.getElementById('catCur');
+    function layout(){
+      pages.forEach(function(pg,i){ pg.classList.toggle('flipped', i<cur); pg.style.zIndex=(i<cur)?i:(n-i); });
+      curEl.textContent=('0'+(cur+1)).slice(-2);
+      prevBtn.disabled=(cur===0); nextBtn.disabled=(cur===n-1);
+    }
+    function next(){ if(cur<n-1){ cur++; layout(); } }
+    function prev(){ if(cur>0){ cur--; layout(); } }
+    layout();
+    nextBtn.addEventListener('click', next); prevBtn.addEventListener('click', prev);
+    // clic sur la page = tourner (sauf le lien projet) ; glisser = tourner ; pas de double
+    var x0=null, moved=false;
+    stage.addEventListener('pointerdown', function(e){ x0=e.clientX; moved=false; });
+    stage.addEventListener('pointermove', function(e){ if(x0!=null && Math.abs(e.clientX-x0)>10) moved=true; });
+    stage.addEventListener('pointerup', function(e){ if(x0==null) return; var d=e.clientX-x0; x0=null; if(moved){ if(d<-45) next(); else if(d>45) prev(); } });
+    stage.addEventListener('click', function(e){ if(moved){ moved=false; return; } if(e.target.closest('.cat-link')) return; next(); });
+    // clavier quand le catalogue est visible
+    var vis=false;
+    if('IntersectionObserver' in window){ new IntersectionObserver(function(es){ vis=es[0].isIntersecting; },{threshold:.3}).observe(document.getElementById('catalog')); }
+    addEventListener('keydown', function(e){ if(!vis) return; if(e.key==='ArrowRight'){ next(); } else if(e.key==='ArrowLeft'){ prev(); } });
+  }).catch(function(){});
 })();
 </script>
 <script src="render.js"></script>
