@@ -369,9 +369,7 @@ footer a{ color:var(--terra); font-weight:600; }
     var maxAniso=renderer.capabilities.getMaxAnisotropy();
     var scene=new THREE.Scene();
     var camera=new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-    var wheel=new THREE.Group(); scene.add(wheel);
-    var TILT=-0.52; wheel.rotation.x=TILT;               // le haut de la roue s'éloigne (profondeur)
-    var R=4.5, CW=2.16, CH=3.0, step=Math.PI*2/N;
+    var R=4.4, CW=2.16, CH=3.0, step=Math.PI*2/N, CY=CH/2+0.05; // CY : centre carte, bord bas posé sur l'anneau (y≈0)
 
     // ---- fabrique la texture d'une carte (fond crème + entête texte + image) ----
     function spaced(g,txt,x,y,ls){ for(var i=0;i<txt.length;i++){ g.fillText(txt[i],x,y); x+=g.measureText(txt[i]).width+ls; } }
@@ -408,11 +406,8 @@ footer a{ color:var(--terra); font-weight:600; }
         makeTex(p).then(function(tex){
           var mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, side:THREE.DoubleSide});
           var mesh=new THREE.Mesh(new THREE.PlaneGeometry(CW,CH), mat);
-          var a0=i*step;
-          mesh.position.set(Math.sin(a0)*R, Math.cos(a0)*R, 0);
-          mesh.rotation.z=a0;                          // tangente à la roue
-          mesh.userData={ a0:a0, hover:false, pop:0, href:href(p) };
-          wheel.add(mesh); cards.push(mesh);
+          mesh.userData={ a0:i*step, hover:false, pop:0, href:href(p) };
+          scene.add(mesh); cards.push(mesh);        // cartes placées en coordonnées monde (carrousel debout)
           renderOnce();
         });
       });
@@ -421,8 +416,9 @@ footer a{ color:var(--terra); font-weight:600; }
     var rot=0, target=0;
     function resize(){ var w=stage.clientWidth||innerWidth, h=stage.clientHeight||600;
       renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
-      // cadrage : la carte avant (bas) est mise en avant, les cartes arrière s'estompent vers le haut
-      camera.position.set(0, -0.3, R*3.05 + (w<680? R*0.9 : 0)); camera.lookAt(0,-1.35,0); renderOnce(); }
+      // cadrage : caméra en face, légèrement en hauteur, regardant l'anneau de cartes debout
+      var back = w<680 ? R*1.15 : 0;
+      camera.position.set(0, CY+1.5, R + 5.4 + back); camera.lookAt(0, CY-0.2, 0); renderOnce(); }
     addEventListener('resize', resize); resize();
 
     // molette = rotation ; glisser = rotation
@@ -443,20 +439,18 @@ footer a{ color:var(--terra); font-weight:600; }
     });
     canvas.addEventListener('pointerleave', function(){ dragX=null; hoverIdx=-1; cards.forEach(function(m){ m.userData.hover=false; }); });
 
-    var _v=new THREE.Vector3();
     function step_(){
-      rot += (target-rot)*0.09; wheel.rotation.z=rot; wheel.updateMatrixWorld(true);
+      rot += (target-rot)*0.09;
       for(var i=0;i<cards.length;i++){ var m=cards[i], d=m.userData;
+        var a=rot + d.a0;                              // position angulaire autour de l'axe vertical
         d.pop += ((d.hover?1:0)-d.pop)*0.16; var h=d.pop;
-        m.position.z = 0 + h*3.1;                     // se détache vers l'avant
-        m.rotation.z = d.a0*(1-h);                    // se redresse
-        m.rotation.y = 0.22*h;                        // légèrement incliné à droite
-        m.rotation.x = -TILT*h;                       // face caméra (annule l'inclinaison de la roue)
-        var s=1+0.26*h; m.scale.set(s,s,1);
-        m.getWorldPosition(_v);
-        var dn=(_v.z + R)/(2*R); dn=dn<0?0:(dn>1?1:dn); // profondeur 0..1
-        m.material.opacity = h>0? 1 : (0.16+0.84*dn);
-        m.renderOrder = h>0? 9999 : Math.round(_v.z*100);
+        var x=Math.sin(a)*R, z=Math.cos(a)*R;          // au front (a≈0) : z=+R, face à la caméra
+        m.position.set(x, CY + 0.85*h, z + 3.0*h);     // debout ; au survol : monte + avance vers la caméra
+        m.rotation.set(0, a*(1-h) + 0.20*h, 0);        // reste vertical ; au survol : face caméra, légèrement à droite
+        var s=1 + 0.30*h; m.scale.set(s,s,1);
+        var dn=(z + R)/(2*R); dn=dn<0?0:(dn>1?1:dn);   // profondeur : 1 au front, 0 à l'arrière
+        m.material.opacity = h>0? 1 : (0.30+0.70*dn);
+        m.renderOrder = h>0? 9999 : Math.round((z+R)*100);
       }
     }
     function renderOnce(){ step_(); renderer.render(scene,camera); }
