@@ -370,6 +370,7 @@ footer a{ color:var(--terra); font-weight:600; }
     var scene=new THREE.Scene();
     var camera=new THREE.PerspectiveCamera(40, 1, 0.1, 100);
     var R=5.2, CW=2.16, CH=3.0, step=Math.PI*2/N, CY=CH/2+0.05; // CY : centre carte, bord bas posé sur l'anneau (y≈0)
+    var rig=new THREE.Group(); scene.add(rig); rig.rotation.z=15*Math.PI/180; // axe de rotation incliné 15° vers la gauche
 
     // ---- fabrique la texture d'une carte (fond crème + entête texte + image) ----
     function spaced(g,txt,x,y,ls){ for(var i=0;i<txt.length;i++){ g.fillText(txt[i],x,y); x+=g.measureText(txt[i]).width+ls; } }
@@ -407,7 +408,7 @@ footer a{ color:var(--terra); font-weight:600; }
           var mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, side:THREE.DoubleSide});
           var mesh=new THREE.Mesh(new THREE.PlaneGeometry(CW,CH), mat);
           mesh.userData={ a0:i*step, hover:false, pop:0, href:href(p) };
-          scene.add(mesh); cards.push(mesh);        // cartes placées en coordonnées monde (carrousel debout)
+          rig.add(mesh); cards.push(mesh);          // cartes dans le rig incliné (carrousel debout)
           renderOnce();
         });
       });
@@ -417,8 +418,8 @@ footer a{ color:var(--terra); font-weight:600; }
     function resize(){ var w=stage.clientWidth||innerWidth, h=stage.clientHeight||600;
       renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
       // cadrage : caméra en face, légèrement en hauteur, regardant l'anneau de cartes debout
-      var back = w<680 ? R*1.7 : 0;
-      camera.position.set(0, CY+1.9, R + 13 + back); camera.lookAt(0, CY-0.1, 0); renderOnce(); }
+      var back = w<680 ? R*1.6 : 0;
+      camera.position.set(0, CY+1.75, R + 10.5 + back); camera.lookAt(0, CY-0.1, 0); renderOnce(); }
     addEventListener('resize', resize); resize();
 
     // molette = rotation ; glisser = rotation
