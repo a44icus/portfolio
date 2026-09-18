@@ -24,6 +24,14 @@
     return '<a href="' + v.href + '">' + v.label + '</a>';
   }).join('');
 
+  // Navigation « magique » entre variantes si le module de transition est présent
+  dock.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href]');
+    if (a && !a.getAttribute('aria-disabled') && typeof window.magicGoTo === 'function') {
+      e.preventDefault(); magicGoTo(a.getAttribute('href'));
+    }
+  });
+
   function open() { dock.classList.add('on'); }
   function close() { dock.classList.remove('on'); }
   function toggle() { dock.classList.contains('on') ? close() : open(); }

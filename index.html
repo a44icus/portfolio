@@ -2018,7 +2018,8 @@
     styleDock.addEventListener('click', function(e){
       if(e.target.closest('[data-style="default"]')){ closeDock(); return; } // déjà sur l'original
       if(e.target.closest('.sd-close')){ closeDock(); return; }
-      /* les .sd-variant sont de vrais liens : la navigation se fait nativement */
+      var v=e.target.closest('.sd-variant');
+      if(v){ if(typeof window.magicGoTo==='function'){ e.preventDefault(); magicGoTo(v.getAttribute('href')); } } // transition magique
     });
   }
   function openDock(){ buildDock(); void styleDock.offsetWidth; styleDock.classList.add('on'); }
@@ -2045,11 +2046,13 @@
       root.classList.remove.apply(root.classList, ALL_THEMES);
       if(i<seq.length){ root.classList.add(seq[i].c); setFx(seq[i].fx); if(i>0) flash(); showToast('✨ Style : <strong>'+seq[i].label+'</strong>'); i++; setTimeout(tick, hold); }
       else {
-        flash(); removeToast(); removeFx();
-        root.classList.remove.apply(root.classList, ALL_THEMES); // retour au site de base
-        setTimeout(function(){ root.classList.remove('spell-morphing'); spelling=false; }, 700);
-        revealFab();
-        setTimeout(openDock, 480); // ouvre le lanceur vers les 4 sites
+        // Climax : le magicien te TÉLÉPORTE vers l'un des 4 sites (transition magique)
+        flash(); removeToast();
+        var dests=['styles/aurora.html','styles/glass.html','styles/kinetic.html','styles/warm.html'];
+        var url=dests[Math.floor(Math.random()*dests.length)];
+        spelling=false;
+        if(typeof window.magicGoTo==='function'){ setTimeout(function(){ magicGoTo(url); }, 240); }
+        else { removeFx(); root.classList.remove.apply(root.classList, ALL_THEMES); location.href=url; }
       }
     }
     setTimeout(tick, 60); // laisse la transition s'armer avant le 1er univers
@@ -2360,6 +2363,7 @@
 </script>
 
 <!-- Vercel Web Analytics (s'active via le toggle Analytics du projet) -->
+<script src="styles/transition.js"></script>
 <script src="js/grained.min.js"></script>
 <script>
   /* Grain animé sur le hero (#top). Léger, désactivé si l'utilisateur préfère peu d'animation. */
