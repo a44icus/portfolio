@@ -9,8 +9,8 @@
     { id: 'original', label: 'Original',     href: '../index.html', ready: true },
     { id: 'aurora',   label: 'Aurora',       href: 'aurora.html',   ready: true },
     { id: 'glass',    label: 'Liquid Glass', href: 'glass.html',    ready: true },
-    { id: 'kinetic',  label: 'Kinetic',      href: 'kinetic.html',  ready: false },
-    { id: 'warm',     label: 'Warm Luxe',    href: 'warm.html',     ready: false }
+    { id: 'kinetic',  label: 'Kinetic',      href: 'kinetic.html',  ready: true },
+    { id: 'warm',     label: 'Warm Luxe',    href: 'warm.html',     ready: true }
   ];
 
   var cur = document.documentElement.getAttribute('data-variant') || '';
