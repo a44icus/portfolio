@@ -2035,27 +2035,22 @@
 
   function castSpell(){
     if(spelling) return; spelling=true;
-    var root=document.documentElement;
-    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-    root.classList.add('spell-morphing');
+    // IMPORTANT : le site de base ne change JAMAIS de style. Le magicien annonce
+    // une destination (overlay) puis TÉLÉPORTE vers l'un des 4 sites. Aucun restyle ici.
     flash();
-    var seq = reduce ? [{c:'spell-glass',fx:'glass',label:'Liquid Glass'}]
-                     : [{c:'spell-aurora',fx:'aurora',label:'Aurora'},{c:'spell-glass',fx:'glass',label:'Liquid Glass'},{c:'spell-kinetic',fx:'kinetic',label:'Kinetic Editorial'}];
-    var hold = reduce ? 2800 : 2000, i=0;
-    function tick(){
-      root.classList.remove.apply(root.classList, ALL_THEMES);
-      if(i<seq.length){ root.classList.add(seq[i].c); setFx(seq[i].fx); if(i>0) flash(); showToast('✨ Style : <strong>'+seq[i].label+'</strong>'); i++; setTimeout(tick, hold); }
-      else {
-        // Climax : le magicien te TÉLÉPORTE vers l'un des 4 sites (transition magique)
-        flash(); removeToast();
-        var dests=['styles/aurora.html','styles/glass.html','styles/kinetic.html','styles/warm.html'];
-        var url=dests[Math.floor(Math.random()*dests.length)];
-        spelling=false;
-        if(typeof window.magicGoTo==='function'){ setTimeout(function(){ magicGoTo(url); }, 240); }
-        else { removeFx(); root.classList.remove.apply(root.classList, ALL_THEMES); location.href=url; }
-      }
-    }
-    setTimeout(tick, 60); // laisse la transition s'armer avant le 1er univers
+    var dests=[
+      { url:'styles/aurora.html',  label:'Aurora' },
+      { url:'styles/glass.html',   label:'Liquid Glass' },
+      { url:'styles/kinetic.html', label:'Kinetic' },
+      { url:'styles/warm.html',    label:'Warm Luxe' }
+    ];
+    var d=dests[Math.floor(Math.random()*dests.length)];
+    showToast('✨ Le magicien t’ouvre un univers…');
+    setTimeout(function(){ showToast('✨ Direction : <strong>'+d.label+'</strong>'); flash(); }, 850);
+    setTimeout(function(){
+      removeToast();
+      if(typeof window.magicGoTo==='function') magicGoTo(d.url); else location.href=d.url;
+    }, 1650);
   }
 
   function skip(el){ return !el || el.nodeType!==1 || ['SCRIPT','STYLE','CANVAS','NOSCRIPT','IFRAME','VIDEO'].indexOf(el.tagName)>=0 || el.closest('.preloader,.cursor-ring,.idle-wave,.sound-toggle,.magic-prompt,.magic-layer'); }
