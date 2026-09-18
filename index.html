@@ -779,6 +779,35 @@
   @media (max-width:600px){ .spell-toast{ bottom:24px; font-size:.85rem; padding:.55rem .9rem; } }
   @media (prefers-reduced-motion: reduce){ .spell-flash.go{ animation:none; } .spell-fx{ display:none; } }
 
+  /* ===== Sélecteur de style : le visiteur garde l'univers qu'il préfère ===== */
+  .style-dock{ position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(20px); z-index:1308;
+    display:flex; align-items:center; gap:.25rem; padding:.4rem .5rem; max-width:min(94vw,720px); flex-wrap:wrap; justify-content:center;
+    background:rgba(12,12,18,.92); border:1px solid rgba(255,255,255,.14); border-radius:100px;
+    box-shadow:0 20px 46px rgba(0,0,0,.5); backdrop-filter:blur(12px);
+    opacity:0; pointer-events:none; transition:opacity .4s ease, transform .4s ease; }
+  .style-dock.on{ opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+  .style-dock .sd-label{ font-family:var(--ff-mono); font-size:.62rem; letter-spacing:.09em; text-transform:uppercase; color:#9a9aa6; padding:0 .45rem 0 .6rem; }
+  .style-dock button[data-style]{ font-family:'Manrope',sans-serif; font-size:.82rem; font-weight:600; color:#fff; cursor:pointer;
+    background:transparent; border:1px solid transparent; border-radius:100px; padding:.42rem .8rem; display:inline-flex; align-items:center; gap:.4rem; transition:background .2s, color .2s, border-color .2s; white-space:nowrap; }
+  .style-dock button[data-style]:hover{ background:rgba(255,255,255,.1); }
+  .style-dock button[data-style].active{ background:#fff; color:#111; }
+  .style-dock .sd-swatch{ width:12px; height:12px; border-radius:50%; box-shadow:0 0 0 1px rgba(255,255,255,.25) inset; }
+  .style-dock .sd-cta{ font-family:'Manrope',sans-serif; font-size:.8rem; font-weight:700; color:#ffd400; text-decoration:none; padding:.42rem .7rem; border-left:1px solid rgba(255,255,255,.14); margin-left:.15rem; white-space:nowrap; }
+  .style-dock .sd-close{ background:transparent; border:0; color:#9a9aa6; cursor:pointer; font-size:.9rem; line-height:1; padding:.42rem .5rem; border-radius:50%; transition:color .2s, background .2s; }
+  .style-dock .sd-close:hover{ color:#fff; background:rgba(255,255,255,.1); }
+  @media (max-width:640px){ .style-dock{ bottom:16px; gap:.15rem; padding:.35rem; } .style-dock .sd-label{ display:none; } .style-dock button[data-style]{ font-size:.74rem; padding:.36rem .6rem; } .style-dock .sd-cta{ display:none; } }
+
+  .style-fab{ position:fixed; left:clamp(.7rem,2vw,1.1rem); bottom:calc(clamp(.7rem,2vw,1.1rem) + 92px); z-index:901;
+    width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.18);
+    background:rgba(12,12,18,.82); color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 22px rgba(0,0,0,.42); backdrop-filter:blur(8px);
+    opacity:0; pointer-events:none; transform:translateY(10px) scale(.9); transition:opacity .35s ease, transform .35s ease, background .2s ease; }
+  .style-fab.show{ opacity:1; pointer-events:auto; transform:none; }
+  .style-fab:hover{ background:rgba(26,26,38,.95); transform:translateY(-2px); }
+  .style-fab svg{ width:21px; height:21px; }
+  @media (max-width:600px){ .style-fab{ bottom:calc(clamp(.7rem,2vw,1.1rem) + 80px); width:40px; height:40px; } }
+  @media (prefers-reduced-motion: reduce){ .style-dock, .style-fab{ transition:opacity .2s ease; } }
+
   .magic-layer{ position:fixed; inset:0; z-index:1250; pointer-events:none; }
   .magic-fly{ position:fixed; margin:0; padding:0; white-space:pre; will-change:transform,opacity; }
   .magic-fly-media{ position:fixed; margin:0; will-change:transform,opacity; }
@@ -1966,6 +1995,52 @@
     if(!spellFlash){ spellFlash=document.createElement('div'); spellFlash.className='spell-flash'; spellFlash.setAttribute('aria-hidden','true'); document.body.appendChild(spellFlash); }
     spellFlash.classList.remove('go'); void spellFlash.offsetWidth; spellFlash.classList.add('go');
   }
+  /* — Sélecteur de style persistant : le visiteur garde l'univers qu'il préfère — */
+  var STYLE_MAP={ aurora:{c:'spell-aurora',fx:'aurora'}, glass:{c:'spell-glass',fx:'glass'}, kinetic:{c:'spell-kinetic',fx:'kinetic'} };
+  var styleDock=null, styleFab=null;
+  function currentStyle(){ try{ var s=localStorage.getItem('pf-style'); return (s&&STYLE_MAP[s])?s:'default'; }catch(e){ return 'default'; } }
+  function saveStyle(key){ try{ if(key&&key!=='default'&&STYLE_MAP[key]) localStorage.setItem('pf-style',key); else localStorage.removeItem('pf-style'); }catch(e){} }
+  function updateDockActive(key){ if(!styleDock) return; var bs=styleDock.querySelectorAll('[data-style]'); for(var i=0;i<bs.length;i++){ bs[i].classList.toggle('active', bs[i].getAttribute('data-style')===key); } }
+  function applyStyle(key, animate){
+    var root=document.documentElement;
+    if(animate) root.classList.add('spell-morphing');
+    root.classList.remove('spell-aurora','spell-glass','spell-kinetic');
+    var m=key&&STYLE_MAP[key];
+    if(m){ root.classList.add(m.c); setFx(m.fx); } else { removeFx(); }
+    updateDockActive(m?key:'default');
+    if(animate) setTimeout(function(){ root.classList.remove('spell-morphing'); }, 640);
+  }
+  function swatchBtn(k,label,sw){ return '<button data-style="'+k+'" type="button"><span class="sd-swatch" style="background:'+sw+'"></span>'+label+'</button>'; }
+  function buildDock(){
+    if(styleDock) return;
+    styleDock=document.createElement('div'); styleDock.className='style-dock'; styleDock.setAttribute('role','group'); styleDock.setAttribute('aria-label','Choix du style du site');
+    styleDock.innerHTML=
+      '<span class="sd-label">Ton style</span>'+
+      swatchBtn('default','Original','#FF5A3C')+
+      swatchBtn('aurora','Aurora','linear-gradient(135deg,#818cf8,#a78bfa)')+
+      swatchBtn('glass','Liquid Glass','linear-gradient(135deg,#c9d2ff,#ffd7ec)')+
+      swatchBtn('kinetic','Kinetic','#d4ff3d')+
+      '<a class="sd-cta" href="#contact">Discutons →</a>'+
+      '<button class="sd-close" type="button" aria-label="Fermer le sélecteur">✕</button>';
+    document.body.appendChild(styleDock);
+    styleDock.addEventListener('click', function(e){
+      var b=e.target.closest('[data-style]');
+      if(b){ var k=b.getAttribute('data-style'); applyStyle(k==='default'?null:k, true); saveStyle(k); return; }
+      if(e.target.closest('.sd-cta')){ closeDock(); return; }
+      if(e.target.closest('.sd-close')){ closeDock(); }
+    });
+  }
+  function openDock(){ buildDock(); updateDockActive(currentStyle()); void styleDock.offsetWidth; styleDock.classList.add('on'); }
+  function closeDock(){ if(styleDock) styleDock.classList.remove('on'); }
+  function buildFab(){
+    if(styleFab) return;
+    styleFab=document.createElement('button'); styleFab.className='style-fab'; styleFab.type='button'; styleFab.setAttribute('aria-label','Changer le style du site');
+    styleFab.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.3"/><circle cx="17" cy="10.5" r="1.3"/><circle cx="8.5" cy="7.5" r="1.3"/><circle cx="6.5" cy="12" r="1.3"/><path d="M12 3a9 9 0 1 0 0 18 2.2 2.2 0 0 0 1.8-3.5 2.2 2.2 0 0 1 1.8-3.5H17a4 4 0 0 0 4-4c0-4-4-6-9-6z"/></svg>';
+    document.body.appendChild(styleFab);
+    styleFab.addEventListener('click', function(){ buildDock(); if(styleDock.classList.contains('on')) closeDock(); else openDock(); });
+  }
+  function revealFab(){ buildFab(); void styleFab.offsetWidth; styleFab.classList.add('show'); }
+
   function castSpell(){
     if(spelling) return; spelling=true;
     var root=document.documentElement;
@@ -1979,11 +2054,12 @@
       root.classList.remove.apply(root.classList, ALL_THEMES);
       if(i<seq.length){ root.classList.add(seq[i].c); setFx(seq[i].fx); if(i>0) flash(); showToast('✨ Style : <strong>'+seq[i].label+'</strong>'); i++; setTimeout(tick, hold); }
       else {
-        flash(); removeFx();
-        showToast('Le design change tout. <a href="#contact" data-cta>On crée le tien&nbsp;?</a>');
-        var cta=spellToast&&spellToast.querySelector('[data-cta]'); if(cta) cta.addEventListener('click', removeToast);
+        flash(); removeToast();
+        var saved=currentStyle();
+        applyStyle(saved==='default'?null:saved, false); // applique le style retenu (défaut si aucun)
         setTimeout(function(){ root.classList.remove('spell-morphing'); spelling=false; }, 700);
-        setTimeout(removeToast, 5600);
+        revealFab();
+        setTimeout(openDock, 480); // laisse le calque se dissiper avant d'ouvrir le choix
       }
     }
     setTimeout(tick, 60); // laisse la transition s'armer avant le 1er univers
@@ -2068,6 +2144,9 @@
 
   // Démo : __magicShow() ouvre le magicien, __magicRun() lance directement le sort de style
   window.__magicShow=function(){ open(); }; window.__magicRun=castSpell;
+
+  // Restaure le style choisi lors d'une visite précédente + expose le sélecteur
+  (function(){ var s=currentStyle(); if(s!=='default'){ applyStyle(s, false); revealFab(); } })();
 
   // Le magicien attend dans le coin ; il surgit quand on clique sa main
   buildPeek();
