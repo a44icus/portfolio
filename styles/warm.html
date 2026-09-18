@@ -166,34 +166,12 @@ h1,h2,h3{ margin:0; font-family:var(--ff-s); font-weight:600; letter-spacing:-.0
 footer{ border-top:1px solid var(--line); padding:2.5rem var(--gut); display:flex; justify-content:space-between; flex-wrap:wrap; gap:1rem; color:var(--dim); font-size:.85rem; }
 footer a{ color:var(--terra); font-weight:600; }
 
-/* ---------- PROJETS : catalogue 3D feuilletable ---------- */
-.catalog{ margin-top:.5rem; }
-.cat-stage{ position:relative; width:min(88vw,440px); height:min(72vh,600px); margin:0 auto; perspective:2400px; }
-.cat-page{ position:absolute; inset:0; transform-style:preserve-3d; transform-origin:left center; transition:transform 1s cubic-bezier(.7,0,.22,1); will-change:transform; cursor:pointer; }
-.cat-page.flipped{ transform:rotateY(-162deg); }
-.cat-face{ position:absolute; inset:0; -webkit-backface-visibility:hidden; backface-visibility:hidden; border-radius:6px; overflow:hidden; box-shadow:0 34px 66px -26px rgba(120,80,50,.55); }
-.cat-front{ background:var(--card); }
-.cat-media{ position:absolute; inset:0; background-size:cover; background-position:center; background-color:var(--paper-2); }
-.cat-front::after{ content:''; position:absolute; inset:0; background:linear-gradient(to top, rgba(28,22,18,.74), transparent 48%); }
-.cat-meta{ position:absolute; left:0; right:0; bottom:0; z-index:2; display:flex; align-items:flex-end; gap:1rem; padding:1.4rem 1.5rem; color:#faf6ef; }
-.cat-num{ font-family:var(--ff-s); font-size:2rem; line-height:.9; opacity:.85; }
-.cat-info{ flex:1; min-width:0; }
-.cat-c{ font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--clay); }
-.cat-t{ font-family:var(--ff-s); font-weight:600; font-size:1.45rem; margin:.2rem 0 0; color:#faf6ef; letter-spacing:-.01em; }
-.cat-link{ width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.55); display:grid; place-items:center; color:#faf6ef; flex-shrink:0; font-size:1.05rem; transition:background .2s, color .2s; }
-.cat-link:hover{ background:#faf6ef; color:var(--ink); }
-.cat-back{ transform:rotateY(180deg); background:repeating-linear-gradient(45deg,#efe7d9,#efe7d9 13px,#e7dcc8 13px,#e7dcc8 26px); display:grid; place-items:center; border:1px solid var(--line); }
-.cat-back-mark{ font-family:var(--ff-s); font-style:italic; font-size:2.6rem; color:var(--clay); opacity:.5; }
-.cat-ui{ display:flex; align-items:center; justify-content:center; gap:1.7rem; margin-top:2.2rem; }
-.cat-nav{ width:54px; height:54px; border-radius:50%; border:1px solid var(--line); background:transparent; color:var(--ink); font-size:1.2rem; cursor:pointer; transition:background .2s, color .2s, border-color .2s, transform .2s; }
-.cat-nav:hover{ background:var(--terra); color:#faf6ef; border-color:var(--terra); transform:translateY(-2px); }
-.cat-nav:disabled{ opacity:.35; cursor:default; }
-.cat-nav:disabled:hover{ background:transparent; color:var(--ink); border-color:var(--line); transform:none; }
-.cat-count{ font-family:var(--ff-s); font-size:1.15rem; min-width:6ch; text-align:center; display:inline-flex; gap:.35rem; justify-content:center; }
-.cat-count .sep{ color:var(--dim); }
-.cat-hint{ text-align:center; font-size:.78rem; color:var(--dim); margin-top:1rem; letter-spacing:.02em; }
-@media (max-width:520px){ .cat-stage{ height:66vh; } .cat-t{ font-size:1.25rem; } }
-@media (prefers-reduced-motion:reduce){ .cat-page{ transition:none; } }
+/* ---------- PROJETS : carrousel 3D WebGL (roue de cartes) ---------- */
+.ring{ margin-top:.5rem; }
+.ring-stage{ position:relative; height:min(82vh,720px); touch-action:pan-y; }
+.ring-stage canvas{ display:block; width:100%; height:100%; cursor:grab; outline:none; }
+.ring-stage canvas:active{ cursor:grabbing; }
+.ring-hint{ text-align:center; font-size:.78rem; color:var(--dim); margin-top:.5rem; letter-spacing:.02em; }
 
 /* ---------- LIGHTBOX ---------- */
 .lb{ position:fixed; inset:0; z-index:1200; background:rgba(44,36,32,.85); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; padding:4vw; }
@@ -256,14 +234,9 @@ footer a{ color:var(--terra); font-weight:600; }
 <main>
   <section class="section" id="travaux"><div class="wrap">
     <div class="sec-head reveal"><div><span class="eyebrow">Sélection</span><h2 id="t-travaux" style="margin-top:1rem">Huit projets, huit intentions.</h2></div><p>Un catalogue à feuilleter — page après page, projet après projet.</p></div>
-    <div class="catalog reveal" id="catalog">
-      <div class="cat-stage" id="catStage" role="group" aria-label="Catalogue des projets"></div>
-      <div class="cat-ui">
-        <button class="cat-nav" id="catPrev" type="button" aria-label="Projet précédent">←</button>
-        <div class="cat-count"><span id="catCur">01</span><span class="sep">/</span><span id="catTotal">08</span></div>
-        <button class="cat-nav" id="catNext" type="button" aria-label="Projet suivant">→</button>
-      </div>
-      <div class="cat-hint">Cliquez la page ou glissez pour tourner</div>
+    <div class="ring reveal" id="ring">
+      <div class="ring-stage" id="ringStage" aria-label="Projets en carrousel 3D"><canvas id="ringCanvas"></canvas></div>
+      <div class="ring-hint">Molette ou glisser pour faire tourner · survolez une carte</div>
     </div>
   </div></section>
 
@@ -379,51 +352,119 @@ footer a{ color:var(--terra); font-weight:600; }
 })();
 </script>
 <script>
-/* ================= WARM : catalogue projets 3D feuilletable ================= */
+/* ================= WARM : carrousel 3D WebGL (Three.js) des projets ================= */
 (function(){
-  if(!window.loadPortfolio) return;
+  if(!window.loadPortfolio || !window.THREE) return;
+  var stage=document.getElementById('ringStage'), canvas=document.getElementById('ringCanvas');
+  if(!stage || !canvas) return;
   var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   loadPortfolio().then(function(data){
-    var stage=document.getElementById('catStage'); if(!stage) return;
-    var IMG=(window.PF&&PF.img)||function(u){return u;}, E=(window.PF&&PF.esc)||function(s){return s==null?'':String(s);};
-    var projects=data.projects||[]; var n=projects.length; if(!n) return;
-    document.getElementById('catTotal').textContent=('0'+n).slice(-2);
+    var projects=(data.projects||[]); var N=projects.length; if(!N) return;
+    var IMGF=(window.PF&&PF.img)||function(u){return u;};
     function href(p){ return (p.slug&&(p.intro_body||p.approach_body||p.lede))?('../projets/projet.html?p='+encodeURIComponent(p.slug)):(p.link&&p.link!=='#'?p.link:null); }
-    stage.innerHTML=projects.map(function(p,i){
-      var h=href(p), num=('0'+(i+1)).slice(-2);
-      return '<div class="cat-page" data-i="'+i+'">'+
-        '<div class="cat-face cat-front">'+
-          '<div class="cat-media" style="background-image:url(\''+E(IMG(p.image_url,{w:900}))+'\')"></div>'+
-          '<div class="cat-meta"><span class="cat-num">'+num+'</span>'+
-            '<div class="cat-info"><span class="cat-c">'+E(p.category)+(p.year?' · '+E(p.year):'')+'</span><h3 class="cat-t">'+E(p.title)+'</h3></div>'+
-            (h?'<a class="cat-link" href="'+E(h)+'" aria-label="Voir le projet '+E(p.title)+'">↗</a>':'')+
-          '</div>'+
-        '</div>'+
-        '<div class="cat-face cat-back"><span class="cat-back-mark">sd</span></div>'+
-      '</div>';
-    }).join('');
-    var pages=[].slice.call(stage.querySelectorAll('.cat-page'));
-    var cur=0, prevBtn=document.getElementById('catPrev'), nextBtn=document.getElementById('catNext'), curEl=document.getElementById('catCur');
-    function layout(){
-      pages.forEach(function(pg,i){ pg.classList.toggle('flipped', i<cur); pg.style.zIndex=(i<cur)?i:(n-i); });
-      curEl.textContent=('0'+(cur+1)).slice(-2);
-      prevBtn.disabled=(cur===0); nextBtn.disabled=(cur===n-1);
+
+    var renderer=new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    var maxAniso=renderer.capabilities.getMaxAnisotropy();
+    var scene=new THREE.Scene();
+    var camera=new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+    var wheel=new THREE.Group(); scene.add(wheel);
+    var TILT=-0.52; wheel.rotation.x=TILT;               // le haut de la roue s'éloigne (profondeur)
+    var R=4.5, CW=2.16, CH=3.0, step=Math.PI*2/N;
+
+    // ---- fabrique la texture d'une carte (fond crème + entête texte + image) ----
+    function spaced(g,txt,x,y,ls){ for(var i=0;i<txt.length;i++){ g.fillText(txt[i],x,y); x+=g.measureText(txt[i]).width+ls; } }
+    function wrap(g,txt,x,y,maxw,lh){ var words=(txt||'').split(' '),line='',yy=y; for(var i=0;i<words.length;i++){ var t=line?line+' '+words[i]:words[i]; if(g.measureText(t).width>maxw && line){ g.fillText(line,x,yy); line=words[i]; yy+=lh; } else line=t; } if(line) g.fillText(line,x,yy); return yy; }
+    function makeTex(p){
+      return new Promise(function(resolve){
+        var W=440,H=612,r=24, cv=document.createElement('canvas'); cv.width=W; cv.height=H; var g=cv.getContext('2d');
+        g.fillStyle='#faf6ef'; g.fillRect(0,0,W,H);
+        var iy=128, ih=H-iy;
+        function drawText(){
+          g.textBaseline='top';
+          g.fillStyle='#c65f3e'; g.font='700 15px Manrope, system-ui, sans-serif';
+          spaced(g, ((p.category||'').toUpperCase())+(p.year?'   ·   '+p.year:''), 28, 30, 2.2);
+          g.fillStyle='#2c2420'; g.font='600 33px Fraunces, Georgia, serif';
+          wrap(g, p.title||'', 28, 52, W-56, 34);
+        }
+        function mask(){ g.globalCompositeOperation='destination-in'; g.beginPath();
+          var x=0,y=0,w=W,h=H; g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+          g.fillStyle='#000'; g.fill(); g.globalCompositeOperation='source-over';
+        }
+        function finish(){ mask(); var t=new THREE.CanvasTexture(cv); t.anisotropy=maxAniso; t.needsUpdate=true; resolve(t); }
+        var img=new Image(); img.crossOrigin='anonymous';
+        img.onload=function(){ g.save(); g.beginPath(); g.rect(0,iy,W,ih); g.clip();
+          var s=Math.max(W/img.width, ih/img.height), dw=img.width*s, dh=img.height*s, dx=(W-dw)/2, dy=iy+(ih-dh)/2;
+          g.drawImage(img,dx,dy,dw,dh); g.restore(); drawText(); finish(); };
+        img.onerror=function(){ g.fillStyle='#ede5d7'; g.fillRect(0,iy,W,ih); drawText(); finish(); };
+        img.src=IMGF(p.image_url,{w:520});
+      });
     }
-    function next(){ if(cur<n-1){ cur++; layout(); } }
-    function prev(){ if(cur>0){ cur--; layout(); } }
-    layout();
-    nextBtn.addEventListener('click', next); prevBtn.addEventListener('click', prev);
-    // clic sur la page = tourner (sauf le lien projet) ; glisser = tourner ; pas de double
-    var x0=null, moved=false;
-    stage.addEventListener('pointerdown', function(e){ x0=e.clientX; moved=false; });
-    stage.addEventListener('pointermove', function(e){ if(x0!=null && Math.abs(e.clientX-x0)>10) moved=true; });
-    stage.addEventListener('pointerup', function(e){ if(x0==null) return; var d=e.clientX-x0; x0=null; if(moved){ if(d<-45) next(); else if(d>45) prev(); } });
-    stage.addEventListener('click', function(e){ if(moved){ moved=false; return; } if(e.target.closest('.cat-link')) return; next(); });
-    // clavier quand le catalogue est visible
-    var vis=false;
-    if('IntersectionObserver' in window){ new IntersectionObserver(function(es){ vis=es[0].isIntersecting; },{threshold:.3}).observe(document.getElementById('catalog')); }
-    addEventListener('keydown', function(e){ if(!vis) return; if(e.key==='ArrowRight'){ next(); } else if(e.key==='ArrowLeft'){ prev(); } });
-  }).catch(function(){});
+
+    var cards=[];
+    (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function(){
+      projects.forEach(function(p,i){
+        makeTex(p).then(function(tex){
+          var mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, side:THREE.DoubleSide});
+          var mesh=new THREE.Mesh(new THREE.PlaneGeometry(CW,CH), mat);
+          var a0=i*step;
+          mesh.position.set(Math.sin(a0)*R, Math.cos(a0)*R, 0);
+          mesh.rotation.z=a0;                          // tangente à la roue
+          mesh.userData={ a0:a0, hover:false, pop:0, href:href(p) };
+          wheel.add(mesh); cards.push(mesh);
+          renderOnce();
+        });
+      });
+    });
+
+    var rot=0, target=0;
+    function resize(){ var w=stage.clientWidth||innerWidth, h=stage.clientHeight||600;
+      renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+      // cadrage : la carte avant (bas) est mise en avant, les cartes arrière s'estompent vers le haut
+      camera.position.set(0, -0.3, R*3.05 + (w<680? R*0.9 : 0)); camera.lookAt(0,-1.35,0); renderOnce(); }
+    addEventListener('resize', resize); resize();
+
+    // molette = rotation ; glisser = rotation
+    canvas.addEventListener('wheel', function(e){ e.preventDefault(); target += e.deltaY*0.0016; }, {passive:false});
+    var dragX=null, dragged=false;
+    canvas.addEventListener('pointerdown', function(e){ dragX=e.clientX; dragged=false; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointerup', function(e){ dragX=null; if(!dragged){ var m=hovered(); if(m&&m.userData.href) location.href=m.userData.href; } });
+
+    var ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), hoverIdx=-1;
+    function hovered(){ return hoverIdx>=0?cards[hoverIdx]:null; }
+    canvas.addEventListener('pointermove', function(e){
+      var r=canvas.getBoundingClientRect();
+      if(dragX!=null){ var dx=e.clientX-dragX; if(Math.abs(dx)>3) dragged=true; target += dx*0.006; dragX=e.clientX; }
+      ndc.x=((e.clientX-r.left)/r.width)*2-1; ndc.y=-((e.clientY-r.top)/r.height)*2+1;
+      ray.setFromCamera(ndc,camera); var hits=ray.intersectObjects(cards);
+      var idx=hits.length?cards.indexOf(hits[0].object):-1;
+      if(idx!==hoverIdx){ hoverIdx=idx; cards.forEach(function(m,i){ m.userData.hover=(i===idx); }); canvas.style.cursor=idx>=0?'pointer':'grab'; }
+    });
+    canvas.addEventListener('pointerleave', function(){ dragX=null; hoverIdx=-1; cards.forEach(function(m){ m.userData.hover=false; }); });
+
+    var _v=new THREE.Vector3();
+    function step_(){
+      rot += (target-rot)*0.09; wheel.rotation.z=rot; wheel.updateMatrixWorld(true);
+      for(var i=0;i<cards.length;i++){ var m=cards[i], d=m.userData;
+        d.pop += ((d.hover?1:0)-d.pop)*0.16; var h=d.pop;
+        m.position.z = 0 + h*3.1;                     // se détache vers l'avant
+        m.rotation.z = d.a0*(1-h);                    // se redresse
+        m.rotation.y = 0.22*h;                        // légèrement incliné à droite
+        m.rotation.x = -TILT*h;                       // face caméra (annule l'inclinaison de la roue)
+        var s=1+0.26*h; m.scale.set(s,s,1);
+        m.getWorldPosition(_v);
+        var dn=(_v.z + R)/(2*R); dn=dn<0?0:(dn>1?1:dn); // profondeur 0..1
+        m.material.opacity = h>0? 1 : (0.16+0.84*dn);
+        m.renderOrder = h>0? 9999 : Math.round(_v.z*100);
+      }
+    }
+    function renderOnce(){ step_(); renderer.render(scene,camera); }
+    var running=true;
+    document.addEventListener('visibilitychange', function(){ running=!document.hidden; if(running) loop(); });
+    function loop(){ if(!running) return; step_(); renderer.render(scene,camera); requestAnimationFrame(loop); }
+    loop(); renderOnce();
+  }).catch(function(e){ if(window.console) console.error('ring3d', e); });
 })();
 </script>
 <script src="render.js"></script>
