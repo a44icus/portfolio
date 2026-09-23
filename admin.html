@@ -43,6 +43,19 @@
   .tab{ border:0; background:transparent; font:inherit; font-weight:600; font-size:.92rem; color:var(--muted); padding:.5rem .9rem; border-radius:100px; cursor:pointer; }
   .tab.active{ background:var(--ink); color:var(--paper); }
   .panel{ display:none; } .panel.active{ display:block; }
+  .maint-bar{ display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;
+    padding:.85rem 1.1rem; border-radius:12px; margin-bottom:1.2rem; border:1px solid var(--line);
+    background:rgba(120,120,130,.08); transition:background .3s, border-color .3s; }
+  .maint-bar[data-on="1"]{ background:rgba(255,90,60,.12); border-color:rgba(255,90,60,.5); }
+  .maint-left{ display:flex; align-items:center; gap:.7rem; }
+  .maint-dot{ width:11px; height:11px; border-radius:50%; background:#23C562; box-shadow:0 0 0 4px rgba(35,197,98,.18); flex-shrink:0; }
+  .maint-bar[data-on="1"] .maint-dot{ background:#FF5A3C; box-shadow:0 0 0 4px rgba(255,90,60,.2); }
+  .maint-left strong{ display:block; font-size:.95rem; }
+  .maint-state{ font-size:.82rem; color:var(--muted); }
+  .maint-right{ display:flex; align-items:center; gap:.6rem; flex:1; min-width:260px; justify-content:flex-end; }
+  .maint-right input{ flex:1; max-width:360px; }
+  #maintToggle[data-on="1"]{ background:#FF5A3C; border-color:#FF5A3C; color:#fff; }
+  @media (max-width:640px){ .maint-right{ justify-content:stretch; } .maint-right input{ max-width:none; } }
   /* collection items */
   .item{ border:1px solid var(--line); border-radius:12px; padding:1rem; background:#fff; margin-bottom:.9rem; }
   .item-head{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.7rem; }
@@ -86,6 +99,19 @@
   </section>
 
   <section id="managerView" class="hidden">
+    <div class="maint-bar" id="maintBar" data-on="0">
+      <div class="maint-left">
+        <span class="maint-dot"></span>
+        <div>
+          <strong>Mode maintenance</strong>
+          <span class="maint-state" id="maintState">Chargement…</span>
+        </div>
+      </div>
+      <div class="maint-right">
+        <input type="text" id="maintMsg" placeholder="Message affiché aux visiteurs (optionnel)">
+        <button class="btn" id="maintToggle" type="button" disabled>…</button>
+      </div>
+    </div>
     <div class="tabs" id="tabs">
       <button class="tab active" data-tab="carousel">Carrousel</button>
       <button class="tab" data-tab="projects">Projets</button>
@@ -201,7 +227,7 @@
   });
 
   var started=false;
-  function initAll(){ if(started) return; started=true; initCarousel(); initProjects(); initCollections(); initPlaces(); initMethod(); initSettings(); }
+  function initAll(){ if(started) return; started=true; initMaintenance(); initCarousel(); initProjects(); initCollections(); initPlaces(); initMethod(); initSettings(); }
 
   /* ---- Généric collection editor ---- */
   function editor(cfg){
@@ -466,6 +492,33 @@
     {group:'Pied de page'},
     {key:'footer_copyright',label:'Copyright'}
   ];
+  function initMaintenance(){
+    var bar=document.getElementById('maintBar'), state=document.getElementById('maintState'),
+        btn=document.getElementById('maintToggle'), msg=document.getElementById('maintMsg');
+    var cur=false;
+    function paint(){
+      bar.setAttribute('data-on', cur?'1':'0'); btn.setAttribute('data-on', cur?'1':'0'); btn.disabled=false;
+      state.textContent = cur ? 'EN MAINTENANCE — le site est masqué aux visiteurs (toi : ajoute ?preview à l’URL pour le voir).' : 'En ligne — visible par tous.';
+      btn.textContent = cur ? 'Désactiver la maintenance' : 'Mettre en maintenance';
+    }
+    sb.from('portfolio_settings').select('key,value').in('key',['maintenance','maintenance_message']).then(function(r){
+      var m={}; ((r&&r.data)||[]).forEach(function(x){ m[x.key]=x.value; });
+      cur = (String(m.maintenance||'').toLowerCase()==='on');
+      if(m.maintenance_message!=null) msg.value=m.maintenance_message;
+      paint();
+    });
+    btn.addEventListener('click', function(){
+      var next=!cur; btn.disabled=true; btn.textContent='…';
+      sb.from('portfolio_settings').upsert([{key:'maintenance', value: next?'on':'off'}, {key:'maintenance_message', value: msg.value||''}]).then(function(r){
+        if(r.error){ toast('Erreur : '+r.error.message,'err'); paint(); return; }
+        cur=next; paint(); toast(cur?'🔧 Site mis en maintenance.':'✓ Site remis en ligne.','ok');
+      });
+    });
+    msg.addEventListener('change', function(){
+      sb.from('portfolio_settings').upsert([{key:'maintenance_message', value: msg.value||''}]).then(function(r){ if(!r.error) toast('Message de maintenance enregistré.','ok'); });
+    });
+  }
+
   function initSettings(){
     var form=document.getElementById('settingsForm');
     sb.from('portfolio_settings').select('*').then(function(r){
