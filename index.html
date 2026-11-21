@@ -2153,9 +2153,9 @@
   function castSpell(){
     if(spelling) return; spelling=true;
     // IMPORTANT : le site de base ne change JAMAIS de style. Le magicien annonce
-    // une destination (overlay) puis TÉLÉPORTE vers la version Liquid Glass. Aucun restyle ici.
+    // une destination (overlay) puis TÉLÉPORTE vers la planète-portfolio (/planete/). Aucun restyle ici.
     flash();
-    var dests=[ { url:'styles/glass.html', label:'Liquid Glass' } ];
+    var dests=[ { url:'planete/index.html', label:'la Planète' } ]; // le magicien emmène sur la planète-portfolio
     var d=dests[Math.floor(Math.random()*dests.length)];
     showToast('✨ Le magicien t’ouvre un univers…');
     setTimeout(function(){ showToast('✨ Direction : <strong>'+d.label+'</strong>'); flash(); }, 850);
