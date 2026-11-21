@@ -24,13 +24,7 @@ const SECTIONS = [
   { id: 'parcours', label: 'Parcours',        title: 'Quinze ans, résumés',       color: '#06b6d4' },
   { id: 'contact',  label: 'Contact',         title: 'Un projet en tête ?',       color: '#ffb703' },
 ];
-// répartition régulière des îles sur le globe (spirale de Fibonacci), la première face à la caméra
-(function placeIslands() {
-  const n = SECTIONS.length, golden = Math.PI * (3 - Math.sqrt(5));
-  const dirs = SECTIONS.map((_, i) => { const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), p = i * golden; return new THREE.Vector3(Math.cos(p) * r, y * 0.92, Math.sin(p) * r).normalize(); });
-  const q = new THREE.Quaternion().setFromUnitVectors(dirs[0], new THREE.Vector3(0, 0.25, 1).normalize());
-  SECTIONS.forEach((s, i) => { s.dir = dirs[i].applyQuaternion(q); });
-})();
+// les emplacements (en pleine terre) sont choisis par world.js
 
 /* ---------- scène ---------- */
 const canvas = $('#scene');
@@ -43,10 +37,21 @@ scene.background = new THREE.Color('#070b18');
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1200);
 camera.position.set(0, 9, 52);
 
-scene.add(new THREE.HemisphereLight('#cfe3ff', '#2a2440', 0.95));
-const sun = new THREE.DirectionalLight('#fff1dc', 2.3); sun.position.set(40, 30, 35); scene.add(sun);
-const rim = new THREE.DirectionalLight('#8fb4ff', 0.6); rim.position.set(-40, -10, -30); scene.add(rim);
+// éclairage de la surface de Social World (ciel du biome océan)
+scene.add(new THREE.HemisphereLight(new THREE.Color('#2f8ae8').lerp(new THREE.Color('#ffffff'), 0.35), new THREE.Color('#3f8a2a').multiplyScalar(0.8), 1.05));
+scene.add(new THREE.AmbientLight('#ffffff', 0.18));
+const sun = new THREE.DirectionalLight('#fff0dc', 2.6); sun.position.set(40, 30, 35); scene.add(sun);
+const rim = new THREE.DirectionalLight('#8fb4ff', 0.35); rim.position.set(-40, -10, -30); scene.add(rim);
 
+// ciel de la surface (dégradé du biome océan), visible quand on marche
+const skyU = { uUp: { value: new THREE.Vector3(0, 1, 0) }, uMix: { value: 0 } };
+const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, depthTest: false, uniforms: skyU,   // opaque : dessiné en premier, sous tout le reste
+  vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 uUp; uniform float uMix; varying vec3 vD; void main(){ float k = dot(normalize(vD), uUp); vec3 zen = vec3(0.184, 0.541, 0.910), hor = vec3(0.769, 0.902, 1.0); vec3 c = mix(hor, zen, smoothstep(-0.05, 0.55, k)); gl_FragColor = vec4(mix(vec3(0.027, 0.043, 0.094), c, uMix), 1.0); }',
+}));
+sky.renderOrder = -10; scene.add(sky);
+const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: false, transparent: true });
 // étoiles
 {
   const g = new THREE.BufferGeometry(), p = [], c = [];
@@ -55,7 +60,7 @@ const rim = new THREE.DirectionalLight('#8fb4ff', 0.6); rim.position.set(-40, -1
     p.push(v.x, v.y, v.z); const k = 0.6 + Math.random() * 0.4; c.push(k, k, k * (0.9 + Math.random() * 0.2));
   }
   g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: false })));
+  scene.add(new THREE.Points(g, starMat));
 }
 // halo d'atmosphère
 {
@@ -71,6 +76,8 @@ const planet = buildPlanet(SECTIONS);
 const world = new THREE.Group();
 world.add(planet.groundMesh, planet.waterMesh, planet.decor, planet.clouds);
 scene.add(world);
+// la caméra part face au pavillon « Profil »
+camera.position.copy(SECTIONS[0].dir).multiplyScalar(innerWidth / innerHeight < 0.8 ? 72 : 52).addScaledVector(new THREE.Vector3(0, 1, 0), 6);
 
 /* ---------- vue orbitale ---------- */
 const controls = new OrbitControls(camera, canvas);
@@ -240,7 +247,7 @@ const avatar = new THREE.Group();
   const hair = part(new THREE.SphereGeometry(0.2, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), '#3a2a22', 1.0); hair.scale.y = 0.75;
   part(new THREE.SphereGeometry(0.028, 10, 8), '#1a1a1a', 1.0, -0.07, 0.17);
   part(new THREE.SphereGeometry(0.028, 10, 8), '#1a1a1a', 1.0, 0.07, 0.17);
-  avatar.visible = false; scene.add(avatar);
+  avatar.scale.setScalar(0.72); avatar.visible = false; scene.add(avatar);
 }
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, vr: 0, ground: true, walkT: 0 };
 const keys = new Set();
@@ -306,7 +313,7 @@ function stepWalk(dt) {
   up.copy(P.dir);
   if (turnIn) P.fwd.applyAxisAngle(up, -turnIn * 2.4 * dt);
   const inWater = planet.isWet(P.dir);
-  const speed = (inWater ? 2.6 : 4.6) * Math.max(-1, Math.min(1, fwdIn));
+  const speed = (inWater ? 2.2 : 4.2) * Math.max(-1, Math.min(1, fwdIn));
   if (speed) {
     const axis = tmpA.crossVectors(P.dir, P.fwd).normalize();
     const next = tmpB.copy(P.dir).applyAxisAngle(axis, speed * dt / P.r).normalize();
@@ -330,13 +337,13 @@ function stepWalk(dt) {
   const sw = Math.sin(P.walkT) * 0.6; avatar.userData.legL.rotation.x = sw; avatar.userData.legR.rotation.x = -sw;
 
   // caméra à la troisième personne
-  const target = tmpA.copy(avatar.position).addScaledVector(P.fwd, -6.2).addScaledVector(up, 4.6);
+  const target = tmpA.copy(avatar.position).addScaledVector(P.fwd, -3.7).addScaledVector(up, 3.9);
   SECTIONS.forEach(s => { if (target.clone().normalize().dot(s.dir) > Math.cos((PAV_R + 1.2) / SEA_R)) { const l = target.length(), m = planet.heightDir(s.dir) + 4.4; if (l < m) target.setLength(m); } });
-  const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.6;   // la caméra reste au-dessus du relief
+  const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;   // la caméra reste au-dessus du relief
   if (target.length() < clear) target.setLength(clear);
   camera.position.lerp(target, 1 - Math.exp(-dt * 6));
   camera.up.copy(up);
-  camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.9).addScaledVector(P.fwd, 2.2));
+  camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.65).addScaledVector(P.fwd, 1.8));
 
   // pavillon à proximité
   let best = null, bd = -1; SECTIONS.forEach(s => { const d = s.dir.dot(P.dir); if (d > bd) { bd = d; best = s; } });
@@ -357,6 +364,12 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   planet.waterUniforms.uTime.value = t;
   if (!reduce) { planet.clouds.rotation.y += dt * 0.025; planet.animate(t); }
+  // à pied : ciel bleu autour de la caméra, étoiles effacées
+  skyU.uMix.value = THREE.MathUtils.lerp(skyU.uMix.value, mode === 'walk' ? 1 : 0, 1 - Math.exp(-dt * 2.5));
+  sky.position.copy(camera.position); skyU.uUp.value.copy(camera.position).normalize(); sky.visible = skyU.uMix.value > 0.01;
+  starMat.opacity = 1 - skyU.uMix.value;
+  // à pied, les nuages montent au-dessus de la caméra
+  planet.clouds.scale.setScalar(THREE.MathUtils.lerp(planet.clouds.scale.x, mode === 'walk' ? 1.3 : 1, 1 - Math.exp(-dt * 3)));
   if (mode === 'orbit') {
     if (camAnim) {
       const k = Math.min(1, (performance.now() - camAnim.t0) / camAnim.dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
@@ -368,6 +381,7 @@ function frame() {
   } else stepWalk(dt);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   sun.position.copy(camera.position).add(sunOff.set(22, 26, 4).applyQuaternion(camera.quaternion));
+  planet.waterUniforms.uSun.value.copy(sun.position).normalize();
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   updateLabels();
   renderer.render(scene, camera);
