@@ -12,10 +12,7 @@
 
   // Destinations = tous les univers sauf celui courant (+ retour à l'Original)
   var ALL = [
-    { id: 'aurora',   label: 'Aurora',        href: 'aurora.html' },
     { id: 'glass',    label: 'Liquid Glass',  href: 'glass.html' },
-    { id: 'kinetic',  label: 'Kinetic',       href: 'kinetic.html' },
-    { id: 'warm',     label: 'Warm Luxe',     href: 'warm.html' },
     { id: 'original', label: "l'Original",    href: '../index.html' }
   ];
   var cur = document.documentElement.getAttribute('data-variant') || '';

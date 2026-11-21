@@ -1,7 +1,7 @@
 /* ============================================================================
    Portfolio Stéphane Donchery — couche de données partagée
    Récupère UNE seule fois tout le contenu Supabase (photos + textes) et
-   l'expose aux 4 variantes de style (aurora / glass / kinetic / warm).
+   l'expose à la version Liquid Glass (styles/glass.html).
    Aucune logique de rendu ici : uniquement la donnée, normalisée.
    ----------------------------------------------------------------------------
    Usage :

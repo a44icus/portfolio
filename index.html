@@ -790,89 +790,6 @@
   .magic-prompt #magicien{ transform-box:fill-box; transform-origin:center bottom; animation:mgcBob 3.8s ease-in-out infinite; }
   @keyframes mgcBob{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-4px) rotate(-1deg);} }
 
-  /* ===== Sort de style : métamorphose RADICALE du site (couleurs + typo + formes + textures) ===== */
-  html.spell-morphing *{ transition: background-color .5s ease, color .5s ease, border-color .5s ease, fill .5s ease, stroke .5s ease, box-shadow .5s ease, border-radius .5s ease, filter .5s ease, letter-spacing .5s ease, text-shadow .5s ease, -webkit-text-stroke-color .5s ease !important; }
-
-  /* — AURORA : nuit premium, dégradés aurore, verre dépoli, halos (Linear / Vercel) — */
-  html.spell-aurora, html.spell-aurora #services, html.spell-aurora #voix, html.spell-aurora #contact{
-    --paper:#08080c!important; --paper-dim:#12121c!important; --ink:#f4f5ff!important; --muted:#9aa0c4!important; --line:rgba(255,255,255,.1)!important;
-    --panel:#0b0b14!important; --panel-fg:#f4f5ff!important; --nav-bg:rgba(8,8,12,.55)!important;
-    --coral:#a78bfa!important; --cobalt:#818cf8!important; --lime:#22d3ee!important; }
-  html.spell-aurora h1, html.spell-aurora h2, html.spell-aurora .project-title, html.spell-aurora .svc-name{
-    font-weight:800 !important; letter-spacing:-.02em !important; text-transform:none !important; text-shadow:0 0 44px rgba(129,140,248,.4) !important; }
-  html.spell-aurora .project, html.spell-aurora .svc, html.spell-aurora .quote, html.spell-aurora .stat,
-  html.spell-aurora .nav-cta, html.spell-aurora .btn, html.spell-aurora .pill, html.spell-aurora .carousel,
-  html.spell-aurora img, html.spell-aurora .project-visual{ border-radius:18px !important; }
-  html.spell-aurora .project, html.spell-aurora .svc, html.spell-aurora .quote, html.spell-aurora .stat{
-    background:rgba(255,255,255,.045) !important; border:1px solid rgba(255,255,255,.1) !important;
-    box-shadow:0 24px 70px -34px rgba(129,140,248,.65), inset 0 1px 0 rgba(255,255,255,.08) !important; backdrop-filter:blur(8px) !important; }
-  html.spell-aurora .nav-cta{ background:linear-gradient(135deg,#818cf8,#a78bfa) !important; color:#0b0b14 !important; border:none !important; box-shadow:0 10px 30px -8px rgba(129,140,248,.6) !important; }
-  html.spell-aurora img, html.spell-aurora .project-visual{ filter:saturate(1.05) contrast(1.02) !important; }
-
-  /* — LIQUID GLASS : clair irisé, verre translucide, flou, reflets (Apple 2025) — */
-  html.spell-glass, html.spell-glass #services, html.spell-glass #voix, html.spell-glass #contact{
-    --paper:#e9edfb!important; --paper-dim:#f2ecfa!important; --ink:#1a1730!important; --muted:#5a5578!important; --line:rgba(255,255,255,.6)!important;
-    --panel:#dfe4fb!important; --panel-fg:#1a1730!important; --nav-bg:rgba(255,255,255,.5)!important;
-    --coral:#7c5cff!important; --cobalt:#3b82f6!important; --lime:#06b6d4!important; --ff-display:'Manrope', sans-serif!important; }
-  html.spell-glass body{ background:linear-gradient(135deg,#e8ecff 0%,#ffe9f3 55%,#e6fbff 100%) !important; background-attachment:fixed !important; }
-  html.spell-glass h1, html.spell-glass h2, html.spell-glass .project-title, html.spell-glass .svc-name{
-    font-weight:700 !important; letter-spacing:-.02em !important; text-transform:none !important; }
-  html.spell-glass .project, html.spell-glass .svc, html.spell-glass .quote, html.spell-glass .stat,
-  html.spell-glass .nav-cta, html.spell-glass .btn, html.spell-glass .pill, html.spell-glass .carousel,
-  html.spell-glass img, html.spell-glass .project-visual{ border-radius:26px !important; }
-  html.spell-glass .project, html.spell-glass .svc, html.spell-glass .quote, html.spell-glass .stat{
-    background:rgba(255,255,255,.42) !important; border:1px solid rgba(255,255,255,.7) !important;
-    box-shadow:0 30px 60px -28px rgba(60,60,110,.4), inset 0 1px 0 rgba(255,255,255,.9) !important; backdrop-filter:blur(16px) saturate(1.4) !important; }
-  html.spell-glass .nav-cta{ background:rgba(255,255,255,.6) !important; color:#241f45 !important; border:1px solid rgba(255,255,255,.9) !important; box-shadow:0 6px 18px -8px rgba(60,60,110,.5) !important; }
-  html.spell-glass img, html.spell-glass .project-visual{ filter:saturate(1.08) brightness(1.02) !important; }
-
-  /* — KINETIC EDITORIAL : noir + vert acide, typo cinétique, grille, mono — */
-  html.spell-kinetic, html.spell-kinetic #services, html.spell-kinetic #voix, html.spell-kinetic #contact{
-    --paper:#0d0d0d!important; --paper-dim:#151515!important; --ink:#f5f5f2!important; --muted:#8a8a8a!important; --line:rgba(255,255,255,.14)!important;
-    --panel:#000000!important; --panel-fg:#f5f5f2!important; --nav-bg:rgba(13,13,13,.72)!important;
-    --coral:#d4ff3d!important; --cobalt:#d4ff3d!important; --lime:#d4ff3d!important; --ff-display:'Space Mono', monospace!important; }
-  html.spell-kinetic h1, html.spell-kinetic h2, html.spell-kinetic .project-title, html.spell-kinetic .svc-name,
-  html.spell-kinetic .num, html.spell-kinetic .marquee-item, html.spell-kinetic .section-tag, html.spell-kinetic .mark{
-    text-transform:uppercase !important; letter-spacing:-.02em !important; }
-  html.spell-kinetic .section-tag{ color:#d4ff3d !important; }
-  html.spell-kinetic .project, html.spell-kinetic .svc, html.spell-kinetic .quote, html.spell-kinetic .stat,
-  html.spell-kinetic .nav-cta, html.spell-kinetic .btn, html.spell-kinetic .pill, html.spell-kinetic .carousel,
-  html.spell-kinetic img, html.spell-kinetic .project-visual, html.spell-kinetic .sound-toggle{ border-radius:2px !important; }
-  html.spell-kinetic .project, html.spell-kinetic .svc, html.spell-kinetic .quote, html.spell-kinetic .stat{
-    border:1px solid rgba(255,255,255,.16) !important; box-shadow:none !important; }
-  html.spell-kinetic .nav-cta, html.spell-kinetic .btn{ background:#d4ff3d !important; color:#0d0d0d !important; border:none !important; }
-  html.spell-kinetic img, html.spell-kinetic .project-visual{ filter:grayscale(1) contrast(1.08) !important; }
-
-  /* — surfaces codées en dur remises au diapason de l'univers actif (Méthode, carrousel, contact, îlots clairs…) — */
-  html.spell-aurora .approche, html.spell-glass .approche, html.spell-kinetic .approche,
-  html.spell-aurora .carousel, html.spell-glass .carousel, html.spell-kinetic .carousel,
-  html.spell-aurora #contact, html.spell-glass #contact, html.spell-kinetic #contact{ background:var(--panel)!important; color:var(--panel-fg)!important; }
-  html.spell-aurora .approche, html.spell-glass .approche, html.spell-kinetic .approche,
-  html.spell-aurora .approche .section-head h2, html.spell-glass .approche .section-head h2, html.spell-kinetic .approche .section-head h2,
-  html.spell-aurora #contact .email-link, html.spell-glass #contact .email-link, html.spell-kinetic #contact .email-link{ color:var(--panel-fg)!important; }
-  html.spell-aurora #services, html.spell-glass #services, html.spell-kinetic #services,
-  html.spell-aurora #voix, html.spell-glass #voix, html.spell-kinetic #voix{ background:var(--paper)!important; color:var(--ink)!important; }
-  html.spell-aurora .quote, html.spell-glass .quote, html.spell-kinetic .quote{ background:var(--paper-dim)!important; }
-  html.spell-aurora .project-visual, html.spell-glass .project-visual, html.spell-kinetic .project-visual{ background-color:var(--paper-dim)!important; }
-
-  /* textures plein écran par univers */
-  .spell-fx{ position:fixed; inset:0; z-index:1249; pointer-events:none; opacity:0; transition:opacity .5s ease; }
-  .spell-fx.on{ opacity:1; }
-  .spell-fx.fx-aurora{ background:
-      radial-gradient(40% 40% at 18% 22%, rgba(99,102,241,.5), transparent 70%),
-      radial-gradient(42% 42% at 82% 26%, rgba(168,85,247,.45), transparent 70%),
-      radial-gradient(52% 52% at 60% 94%, rgba(34,211,238,.4), transparent 70%);
-    filter:blur(46px); mix-blend-mode:screen; animation:auroraDrift 16s ease-in-out infinite alternate; }
-  .spell-fx.fx-glass{ background:
-      radial-gradient(50% 40% at 12% 8%, rgba(124,92,255,.14), transparent 60%),
-      radial-gradient(46% 40% at 88% 16%, rgba(6,182,212,.14), transparent 60%);
-    mix-blend-mode:multiply; opacity:.75; }
-  .spell-fx.fx-kinetic{ background:
-      repeating-linear-gradient(0deg, rgba(212,255,61,.055) 0 1px, transparent 1px 46px),
-      repeating-linear-gradient(90deg, rgba(212,255,61,.055) 0 1px, transparent 1px 46px);
-    mix-blend-mode:screen; opacity:.85; }
-  @keyframes auroraDrift{ 0%{ transform:translate3d(-3%,-2%,0) scale(1.06);} 100%{ transform:translate3d(4%,3%,0) scale(1.16);} }
-
   /* flash de sort (émane de la baguette, en bas à droite) */
   .spell-flash{ position:fixed; inset:0; z-index:1306; pointer-events:none; opacity:0; background:radial-gradient(circle at 84% 82%, #fff 0%, rgba(255,255,255,.55) 22%, transparent 60%); }
   .spell-flash.go{ animation:spellFlash .55s ease-out; }
@@ -886,7 +803,7 @@
   .spell-toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
   .spell-toast a{ color:#ffd400; text-decoration:none; border-bottom:2px solid currentColor; margin-left:.15rem; }
   @media (max-width:600px){ .spell-toast{ bottom:24px; font-size:.85rem; padding:.55rem .9rem; } }
-  @media (prefers-reduced-motion: reduce){ .spell-flash.go{ animation:none; } .spell-fx{ display:none; } }
+  @media (prefers-reduced-motion: reduce){ .spell-flash.go{ animation:none; } }
 
   /* ===== Sélecteur de style : le visiteur garde l'univers qu'il préfère ===== */
   .style-dock{ position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(20px); z-index:1308;
@@ -2186,31 +2103,22 @@
   function onYes(e){ if(e&&e.stopPropagation) e.stopPropagation(); collapse(); setTimeout(castSpell, 300); }
 
   /* ===== Le sort de style : métamorphose RADICALE du site puis retour ===== */
-  var spelling=false, spellToast=null, spellFx=null, spellFlash=null;
-  var ALL_THEMES=['spell-aurora','spell-glass','spell-kinetic'];
+  var spelling=false, spellToast=null, spellFlash=null;
   function showToast(html){
     if(!spellToast){ spellToast=document.createElement('div'); spellToast.className='spell-toast'; spellToast.setAttribute('role','status'); document.body.appendChild(spellToast); }
     spellToast.innerHTML=html; void spellToast.offsetWidth; spellToast.classList.add('on');
   }
   function removeToast(){ if(!spellToast) return; var t=spellToast; spellToast=null; t.classList.remove('on'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 460); }
-  function setFx(name){ // texture plein écran (scanlines / grain / trame)
-    if(!spellFx){ spellFx=document.createElement('div'); spellFx.className='spell-fx'; spellFx.setAttribute('aria-hidden','true'); document.body.appendChild(spellFx); }
-    spellFx.className='spell-fx'+(name?(' fx-'+name+' on'):'');
-  }
-  function removeFx(){ if(spellFx){ spellFx.classList.remove('on'); var f=spellFx; spellFx=null; setTimeout(function(){ if(f.parentNode) f.parentNode.removeChild(f); }, 550); } }
   function flash(){ // éclair qui émane de la baguette
     if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if(!spellFlash){ spellFlash=document.createElement('div'); spellFlash.className='spell-flash'; spellFlash.setAttribute('aria-hidden','true'); document.body.appendChild(spellFlash); }
     spellFlash.classList.remove('go'); void spellFlash.offsetWidth; spellFlash.classList.add('go');
   }
-  /* — Sélecteur : lance les 4 sites-variantes (pages autonomes /styles/*.html) — */
+  /* — Sélecteur : Original ou Liquid Glass (page autonome /styles/glass.html) — */
   var styleDock=null, styleFab=null;
   var VARIANTS=[
-    { id:'default', label:'Original',     href:null,                  sw:'#FF5A3C' },
-    { id:'aurora',  label:'Aurora',       href:'styles/aurora.html',  sw:'linear-gradient(135deg,#818cf8,#a78bfa)' },
-    { id:'glass',   label:'Liquid Glass', href:'styles/glass.html',   sw:'linear-gradient(135deg,#c9d2ff,#ffd7ec)' },
-    { id:'kinetic', label:'Kinetic',      href:'styles/kinetic.html', sw:'#d4ff3d' },
-    { id:'warm',    label:'Warm Luxe',    href:'styles/warm.html',    sw:'linear-gradient(135deg,#e9d9c3,#c65f3e)' }
+    { id:'default', label:'Original',     href:null,                sw:'#FF5A3C' },
+    { id:'glass',   label:'Liquid Glass', href:'styles/glass.html', sw:'linear-gradient(135deg,#c9d2ff,#ffd7ec)' }
   ];
   function buildDock(){
     if(styleDock) return;
@@ -2245,14 +2153,9 @@
   function castSpell(){
     if(spelling) return; spelling=true;
     // IMPORTANT : le site de base ne change JAMAIS de style. Le magicien annonce
-    // une destination (overlay) puis TÉLÉPORTE vers l'un des 4 sites. Aucun restyle ici.
+    // une destination (overlay) puis TÉLÉPORTE vers la version Liquid Glass. Aucun restyle ici.
     flash();
-    var dests=[
-      { url:'styles/aurora.html',  label:'Aurora' },
-      { url:'styles/glass.html',   label:'Liquid Glass' },
-      { url:'styles/kinetic.html', label:'Kinetic' },
-      { url:'styles/warm.html',    label:'Warm Luxe' }
-    ];
+    var dests=[ { url:'styles/glass.html', label:'Liquid Glass' } ];
     var d=dests[Math.floor(Math.random()*dests.length)];
     showToast('✨ Le magicien t’ouvre un univers…');
     setTimeout(function(){ showToast('✨ Direction : <strong>'+d.label+'</strong>'); flash(); }, 850);
@@ -2436,6 +2339,7 @@
 })();
 </script>
 
+<script src="js/site-data.js"></script>
 <!-- Contenu dynamique (CMS Supabase) -->
 <script>
 (function(){
@@ -2534,7 +2438,7 @@
   }
   function applyServices(rows){
     if(!rows||!rows.length) return; var l=document.querySelector('.svc-list'); if(!l) return; l.innerHTML='';
-    var DEF={"identité visuelle":{"lead":"Une identité forte se reconnaît en un coup d'œil et se décline sans effort. Je pars de votre histoire, de vos valeurs et de votre marché pour construire un système graphique complet, pensé pour durer.","pour":"Création d'entreprise, refonte d'une image vieillissante, lancement d'une marque ou d'un produit.","livrables":["Logo et ses variantes","Palette de couleurs","Typographies","Charte graphique","Papeterie","Kit réseaux sociaux","Signalétique"],"etapes":["Immersion","Pistes créatives","Affinage","Charte & fichiers"],"cta":"Une marque à créer ou à rafraîchir ?"},"direction artistique":{"lead":"Je donne un cap visuel à vos projets : un concept clair, un ton, des images qui se répondent. Je coordonne ensuite les talents — photographes, illustrateurs, développeurs — pour que chaque support raconte la même histoire.","pour":"Campagnes, lancements, événements, et toutes les marques qui veulent une image cohérente sur chaque support.","livrables":["Concept & moodboard","Univers visuel","Direction de shooting","Déclinaisons de campagne","Coordination des intervenants"],"etapes":["Brief","Concept","Production","Déclinaisons"],"cta":"Une campagne ou un lancement en vue ?"},"édition & print":{"lead":"Du livre à l'affiche, je soigne la lisibilité, le rythme et le détail typographique. Je prépare des fichiers impeccables pour l'imprimeur et je peux suivre la fabrication jusqu'au bon à tirer, choix du papier et des finitions compris.","pour":"Éditeurs, entreprises, collectivités, artistes : tous les projets imprimés qui doivent être beaux, sans mauvaise surprise à la livraison.","livrables":["Livres & catalogues","Revues & magazines","Plaquettes & brochures","Affiches & flyers","Fichiers prêts à imprimer","Suivi de fabrication"],"etapes":["Gabarit","Mise en page","Corrections","BAT & impression"],"cta":"Un livre, une revue ou une affiche à imprimer ?"},"web & interaction":{"lead":"Je conçois des sites qui donnent envie de rester : clairs, rapides et agréables sur mobile. Du prototype à la mise en ligne, je m'occupe de l'arborescence, du design et de l'intégration, pour un site à votre image et facile à faire évoluer.","pour":"Indépendants, artisans, PME et associations qui veulent une vitrine en ligne qui leur ressemble.","livrables":["Site vitrine sur mesure","Maquettes & prototype","Design system","Intégration responsive","Mise en ligne"],"etapes":["Arborescence","Maquettes","Développement","Mise en ligne"],"cta":"Un site à créer ou à refondre ?"},"motion & vidéo":{"lead":"Un logo qui s'anime, une vidéo habillée à vos couleurs, des formats courts pour les réseaux : le mouvement capte l'attention et donne du caractère à votre marque. Je travaille sous After Effects et Premiere.","pour":"Marques présentes sur les réseaux sociaux, événements, présentations et vidéos d'entreprise.","livrables":["Animation de logo","Habillage vidéo","Formats réseaux sociaux","Motion design","Montage"],"etapes":["Script","Storyboard","Animation","Exports"],"cta":"Envie de donner du mouvement à votre image ?"},"packaging & production":{"lead":"Je conçois vos packagings et supports physiques, puis je suis leur fabrication jusqu'à l'atelier. Un seul interlocuteur de la création au produit fini, pour un résultat fidèle à la maquette.","pour":"Producteurs, brasseurs, commerçants et entreprises qui veulent des supports qui se remarquent.","livrables":["Étiquettes & packaging","PLV","Grand format","Impression textile","Covering de véhicules","Découpe"],"etapes":["Conception","Fichiers techniques","Validation","Fabrication"],"cta":"Un produit à habiller ou un support à fabriquer ?"}};
+    var DEF=window.SVC_DETAILS||{}; // js/site-data.js
     function PANEL(d, lead){ var h='<div class="svc-panel"><div class="svc-b svc-b--lead"><span class="svc-label">En bref</span><p class="svc-lead">'+A(lead)+'</p></div>';
       if(d.pour) h+='<div class="svc-b svc-b--for"><span class="svc-label">Idéal pour</span><p>'+A(d.pour)+'</p></div>';
       if(d.livrables&&d.livrables.length) h+='<div class="svc-b svc-b--deliv"><span class="svc-label">Ce que je livre</span><ul class="svc-deliv-list">'+d.livrables.map(function(x){ return '<li>'+A(x)+'</li>'; }).join('')+'</ul></div>';

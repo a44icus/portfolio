@@ -1,5 +1,5 @@
 /* ============================================================================
-   Sélecteur de style partagé entre les variantes (aurora / glass / kinetic / warm)
+   Sélecteur de style de la version Liquid Glass : Original ou Liquid Glass.
    + Original. Construit le dock (#switch) et le bouton flottant (#switchFab).
    Chaque variante est une page autonome ; on navigue simplement entre elles.
    ============================================================================ */
@@ -7,10 +7,7 @@
   'use strict';
   var VARIANTS = [
     { id: 'original', label: 'Original',     href: '../index.html', ready: true },
-    { id: 'aurora',   label: 'Aurora',       href: 'aurora.html',   ready: true },
-    { id: 'glass',    label: 'Liquid Glass', href: 'glass.html',    ready: true },
-    { id: 'kinetic',  label: 'Kinetic',      href: 'kinetic.html',  ready: true },
-    { id: 'warm',     label: 'Warm Luxe',    href: 'warm.html',     ready: true }
+    { id: 'glass',    label: 'Liquid Glass', href: 'glass.html',    ready: true }
   ];
 
   var cur = document.documentElement.getAttribute('data-variant') || '';
