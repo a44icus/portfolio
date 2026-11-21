@@ -349,8 +349,17 @@
   }
   .project:hover .project-visual::after{ background: linear-gradient(180deg, rgba(23,23,30,0) 0%, rgba(23,23,30,0.12) 100%); }
 
+  /* projets personnels : 2 grandes cartes */
+  .perso{ border-top:1px solid var(--line); }
+  .perso-grid{ grid-template-columns: repeat(2, 1fr); grid-auto-rows: 400px; }
+  .perso .project-visual{ background-position: center top; }
+
   @media (max-width: 900px){
     .grid{ grid-template-columns: 1fr 1fr; grid-auto-rows: 260px; }
+    .perso-grid{ grid-auto-rows: 300px; }
+  }
+  @media (max-width: 600px){
+    .perso .project-info{ background: linear-gradient(to top, rgba(23,23,30,0.92) 0%, rgba(23,23,30,0.55) 55%, rgba(23,23,30,0.15) 100%); }
   }
   @media (max-width: 600px){
     .grid{ grid-template-columns: 1fr; grid-auto-rows: 280px; }
@@ -852,6 +861,7 @@
   <div class="nav-right">
     <nav class="nav-links" aria-label="Navigation principale">
       <a href="#travaux">Travaux</a>
+      <a href="#perso">Perso</a>
       <a href="#services">Services</a>
       <a href="#approche">Approche</a>
       <a href="#profil">Profil</a>
@@ -871,6 +881,7 @@
 
 <div class="mobile-menu" id="mobileMenu" hidden>
   <a href="#travaux">Travaux</a>
+  <a href="#perso">Perso</a>
   <a href="#services">Services</a>
   <a href="#approche">Approche</a>
   <a href="#profil">Profil</a>
@@ -1029,9 +1040,38 @@
   </div>
 </section>
 
+<section id="perso" class="perso">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">03 — Projets personnels</span>
+      <h2>Mes propres terrains de jeu.</h2>
+    </div>
+    <div class="grid perso-grid">
+      <a class="project reveal" href="https://cleenclasse.fr/" target="_blank" rel="noopener" aria-label="Clé en classe, site de séances pour professeurs des écoles (nouvel onglet)">
+        <div class="project-visual" style="background-image:url('images/perso/cle-en-classe.webp')"></div>
+        <span class="project-idx">01 / Web · Éducation</span>
+        <span class="project-arrow" aria-hidden="true">↗</span>
+        <div class="project-info">
+          <p class="project-title">Clé en classe</p>
+          <p class="project-meta">Séances prêtes à l'emploi et outils TBI pour les professeurs des écoles, de la PS au CM2 — 2026</p>
+        </div>
+      </a>
+      <a class="project reveal" href="https://social-world-eight.vercel.app/" target="_blank" rel="noopener" aria-label="Social World, réseau social dans une galaxie (nouvel onglet)">
+        <div class="project-visual" style="background-image:url('images/perso/social-world.webp')"></div>
+        <span class="project-idx">02 / Web · Expérimental</span>
+        <span class="project-arrow" aria-hidden="true">↗</span>
+        <div class="project-info">
+          <p class="project-title">Social World</p>
+          <p class="project-meta">Un réseau social dans une galaxie à l'échelle 1:1 : chacun choisit sa planète, la décore et reçoit des visiteurs — 2026</p>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
 <section id="carrousel" class="carousel-sec" aria-label="Galerie photo">
   <div class="carousel-head reveal">
-    <span class="section-tag">03 — Une passion pour la photo</span>
+    <span class="section-tag">04 — Une passion pour la photo</span>
     <h2>En images.</h2>
   </div>
   <div class="carousel" id="carousel">
@@ -1048,7 +1088,7 @@
 <section id="approche" class="approche">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">04 — Méthode</span>
+      <span class="section-tag">05 — Méthode</span>
       <h2>Une méthode en quatre temps.</h2>
     </div>
     <div class="method-stepper" id="methodStepper">
@@ -1105,7 +1145,7 @@
 <section id="voix" class="voix">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">05 — Ils en parlent</span>
+      <span class="section-tag">06 — Ils en parlent</span>
       <h2>La confiance, ça se raconte.</h2>
     </div>
     <div class="quotes">
@@ -1131,7 +1171,7 @@
 <section id="instagram" class="insta">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">06 — Instagram</span>
+      <span class="section-tag">07 — Instagram</span>
       <h2>Derniers clichés.</h2>
     </div>
     <!-- Elfsight Social Feed | Untitled Social Feed -->
@@ -1143,7 +1183,7 @@
 <section id="parcours" class="parcours">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">07 — Parcours</span>
+      <span class="section-tag">08 — Parcours</span>
       <h2>Quinze ans, résumés.</h2>
     </div>
     <div class="cv-grid">
@@ -1172,7 +1212,7 @@
 <section id="contact" class="contact">
   <canvas class="shape-field" id="contactCanvas" aria-hidden="true"></canvas>
   <div class="contact-content">
-    <span class="section-tag">08 — Contact</span>
+    <span class="section-tag">09 — Contact</span>
     <h2>Un projet en tête ?<br><em>Écrivez-moi.</em></h2>
     <a class="email-link" href="mailto:stephane.donchery@gmail.com">stephane.donchery@gmail.com</a><button class="copy-email" type="button" data-email="stephane.donchery@gmail.com" aria-label="Copier l'adresse email">Copier</button>
     <ul class="socials">
@@ -1489,7 +1529,7 @@
   });
 
   /* numéros filigranes */
-  document.querySelectorAll('section.services, section.travaux, section.press, section.approche, section.voix, section.parcours').forEach(function(s){
+  document.querySelectorAll('section.services, section.travaux, section.perso, section.press, section.approche, section.voix, section.parcours').forEach(function(s){
     var tag = s.querySelector('.section-tag'); if(!tag) return;
     var m = tag.textContent.match(/\d+/); if(!m) return;
     var w = document.createElement('span'); w.className='watermark'; w.setAttribute('aria-hidden','true'); w.textContent = m[0];
@@ -2316,7 +2356,7 @@
     if(m.footer_copyright!=null){ var fc=document.querySelector('footer p'); if(fc) fc.textContent=m.footer_copyright; }
   }
   function applyProjects(rows){
-    if(!rows||!rows.length) return; var g=document.querySelector('.grid'); if(!g) return; g.innerHTML='';
+    if(!rows||!rows.length) return; var g=document.querySelector('#travaux .grid'); if(!g) return; g.innerHTML='';
     function projHref(p){
       if(p.slug && (p.intro_body||p.approach_body||p.lede)) return 'projets/projet.html?p='+encodeURIComponent(p.slug);
       var l=(p.link||'').trim(); return (l&&l!=='#')?l:'#';
