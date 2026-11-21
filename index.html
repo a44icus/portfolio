@@ -927,10 +927,10 @@
   @media (max-width:600px){ .magic-prompt{ right:10px; bottom:10px; width:56vw; } }
 </style>
 </head>
-<body>
+<body class="sound-off">
 
 <a class="skip" href="#top">Aller au contenu</a>
-<button id="soundToggle" class="sound-toggle" type="button" aria-pressed="true" aria-label="Activer ou désactiver le son de la guitare" title="Son guitare : activé"></button>
+<button id="soundToggle" class="sound-toggle" type="button" aria-pressed="false" aria-label="Activer ou désactiver le son de la guitare" title="Son guitare : coupé"></button>
 <div class="preloader" id="preloader" aria-hidden="true">
   <svg class="logo-anim" viewBox="0 0 180.38 131.63" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Stéphane Donchery">
     <defs>
@@ -1678,17 +1678,21 @@
   (function(){
     var btn=document.getElementById('soundToggle'); if(!btn) return;
     var stored=null; try{ stored=localStorage.getItem('guitarSound'); }catch(e){}
-    var on = stored!=='off';
+    var on = stored==='on'; // son coupé par défaut : il ne s'active que si la personne l'a choisi
     function apply(){
       document.body.classList.toggle('sound-off', !on);
       btn.setAttribute('aria-pressed', on?'true':'false');
       btn.title = on ? 'Son guitare : activé' : 'Son guitare : coupé';
     }
     apply();
+    // l'invitation a-t-elle déjà été vue ? la personne a-t-elle ensuite recoupé le son (= refus) ?
+    var hintSeen=false, hintOptOut=false;
+    try{ hintSeen=localStorage.getItem('guitarHintSeen')==='1'; hintOptOut=localStorage.getItem('guitarHintOff')==='1'; }catch(e){}
     btn.addEventListener('click', function(){
       on=!on; apply();
       try{ localStorage.setItem('guitarSound', on?'on':'off'); }catch(e){}
       if(on){ hideHint(); var c=getCtx(); if(c) playNote(0.6, 0.7); } // petit retour sonore à l'activation
+      else if(hintSeen){ hintOptOut=true; try{ localStorage.setItem('guitarHintOff','1'); }catch(e){} } // recoupé après l'invitation : on ne la propose plus
     });
 
     /* invitation : on joue avec les cordes alors que le son est coupé → la main pointe l'interrupteur */
@@ -1701,9 +1705,19 @@
       hint.style.left=(r.right+6)+'px';
       hint.style.top=(r.top + r.height*0.32 - 20)+'px'; // vise la moitié haute (« ON ») de l'interrupteur
     }
-    function hideHint(){ clearTimeout(hintTimer); hint.classList.remove('on'); document.body.classList.remove('sound-hinting'); }
+    var strums=0, lastCounted=0;
+    function hideHint(){ clearTimeout(hintTimer); hint.classList.remove('on'); document.body.classList.remove('sound-hinting'); strums=0; }
     window.__soundHint=function(){
-      if(on) return;
+      if(on || hintOptOut) return;
+      var now=Date.now();
+      if(!hint.classList.contains('on')){
+        var gap=now-lastCounted;
+        if(gap < 400) return;              // clic + sortie de la corde dans la foulée = un seul coup
+        if(gap > 8000) strums=0;           // coups trop espacés : on recompte
+        lastCounted=now; strums++;
+        if(strums < 3) return;             // l'invitation n'apparaît qu'au 3e coup de corde
+        if(!hintSeen){ hintSeen=true; try{ localStorage.setItem('guitarHintSeen','1'); }catch(e){} }
+      }
       placeHint(); hint.classList.add('on'); document.body.classList.add('sound-hinting');
       clearTimeout(hintTimer); hintTimer=setTimeout(hideHint, 4000); // reste visible tant qu'on continue de jouer
     };
