@@ -292,21 +292,48 @@
   /* services */
   .services{ border-top:1px solid var(--line); }
   .svc-list{ border-top:1px solid var(--line); }
-  .svc{
-    display:grid; grid-template-columns: 3rem 1fr auto; gap: 1.5rem; align-items:center;
-    padding: 1.6rem .4rem; border-bottom:1px solid var(--line); position:relative;
+  .svc{ border-bottom:1px solid var(--line); position:relative; }
+  /* ligne cliquable : déplie le descriptif */
+  .svc-row{
+    display:grid; grid-template-columns: 3rem 1fr auto 2rem; gap: 1.5rem; align-items:center;
+    width:100%; padding: 1.6rem .4rem; position:relative;
+    background:none; border:0; margin:0; color:inherit; font:inherit; text-align:left; cursor:pointer;
     transition: padding .35s cubic-bezier(.2,.8,.2,1), color .35s ease;
   }
-  .svc::before{ content:''; position:absolute; inset:0; background: var(--ink); transform: scaleY(0); transform-origin:bottom; transition: transform .4s cubic-bezier(.2,.8,.2,1); z-index:0; }
-  .svc > *{ position:relative; z-index:1; }
-  .svc:hover{ color: var(--paper); padding-left: 1.4rem; }
-  .svc:hover::before{ transform: scaleY(1); }
-  .svc:hover .svc-idx{ color: var(--lime); }
-  .svc:hover .svc-tags{ color: rgba(250,250,247,0.7); }
+  .svc-row::before{ content:''; position:absolute; inset:0; background: var(--ink); transform: scaleY(0); transform-origin:bottom; transition: transform .4s cubic-bezier(.2,.8,.2,1); z-index:0; }
+  .svc-row > *{ position:relative; z-index:1; }
+  .svc.open .svc-row{ color: var(--paper); padding-left: 1.4rem; }
+  .svc.open .svc-row::before{ transform: scaleY(1); }
+  .svc.open .svc-idx{ color: var(--lime); }
+  .svc.open .svc-tags{ color: rgba(250,250,247,0.7); }
+  @media (hover: hover){ /* pas d'effet de survol « collé » sur écran tactile */
+    .svc-row:hover{ color: var(--paper); padding-left: 1.4rem; }
+    .svc-row:hover::before{ transform: scaleY(1); }
+    .svc-row:hover .svc-idx{ color: var(--lime); }
+    .svc-row:hover .svc-tags{ color: rgba(250,250,247,0.7); }
+  }
+  .svc-row:focus-visible{ outline:2px solid var(--coral); outline-offset:-2px; }
   .svc-idx{ font-family: var(--ff-mono); font-size:.85rem; color: var(--muted); transition: color .3s ease; }
   .svc-name{ font-family: var(--ff-display); font-weight:700; font-size: clamp(1.3rem,3vw,2rem); }
   .svc-tags{ font-size:.85rem; color: var(--muted); text-align:right; max-width:22ch; transition: color .3s ease; }
-  @media (max-width: 680px){ .svc{ grid-template-columns: 2rem 1fr; } .svc-tags{ display:none; } }
+  /* « + » qui devient « × » à l'ouverture */
+  .svc-plus{ width:2rem; height:2rem; justify-self:end; position:relative; transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+  .svc-plus::before, .svc-plus::after{ content:''; position:absolute; left:50%; top:50%; width:14px; height:2px; margin:-1px 0 0 -7px; background: currentColor; border-radius:2px; }
+  .svc-plus::after{ transform: rotate(90deg); }
+  .svc.open .svc-plus{ transform: rotate(45deg); color: var(--lime); }
+  .svc-desc{ display:grid; grid-template-rows: 0fr; transition: grid-template-rows .45s cubic-bezier(.2,.8,.2,1); }
+  .svc.open .svc-desc{ grid-template-rows: 1fr; }
+  .svc-desc-in{ overflow:hidden; }
+  .svc-desc p{ margin:0; padding: 1.3rem .4rem 0 calc(3rem + 1.5rem + 1.4rem); max-width: 72ch; color: var(--muted); line-height:1.7; font-size:1.02rem; }
+  .svc-desc p:last-child{ padding-bottom: 1.9rem; }
+  .svc-desc .svc-desc-tags{ display:none; font-family: var(--ff-mono); font-size:.78rem; letter-spacing:.04em; }
+  @media (max-width: 680px){
+    .svc-row{ grid-template-columns: 2rem 1fr 2rem; }
+    .svc-tags{ display:none; }
+    .svc-desc p{ padding-left: calc(2rem + 1.5rem + .4rem); }
+    .svc-desc .svc-desc-tags{ display:block; padding-top: .9rem; }
+  }
+  @media (prefers-reduced-motion: reduce){ .svc-desc, .svc-plus{ transition:none; } }
 
   /* travaux */
   .travaux{ border-top:1px solid var(--line); }
@@ -947,12 +974,30 @@
       <h2>Des services, une même exigence.</h2>
     </div>
     <div class="svc-list">
-      <div class="svc reveal"><span class="svc-idx">01</span><span class="svc-name">Identité visuelle</span><span class="svc-tags">Logo, système graphique, charte, déclinaisons</span></div>
-      <div class="svc reveal"><span class="svc-idx">02</span><span class="svc-name">Direction artistique</span><span class="svc-tags">Concept, univers visuel, campagnes</span></div>
-      <div class="svc reveal"><span class="svc-idx">03</span><span class="svc-name">Édition & print</span><span class="svc-tags">Livres, revues, affiches, suivi d'impression</span></div>
-      <div class="svc reveal"><span class="svc-idx">04</span><span class="svc-name">Web & interaction</span><span class="svc-tags">Sites vitrines, design system, prototypage</span></div>
-      <div class="svc reveal"><span class="svc-idx">05</span><span class="svc-name">Motion & vidéo</span><span class="svc-tags">Animation de logo, habillage, montage (After Effects, Premiere)</span></div>
-      <div class="svc reveal"><span class="svc-idx">06</span><span class="svc-name">Packaging & production</span><span class="svc-tags">Grand format, impression textile, covering, découpe</span></div>
+      <div class="svc reveal">
+        <button class="svc-row" type="button" aria-expanded="false" aria-controls="svc-d01"><span class="svc-idx">01</span><span class="svc-name">Identité visuelle</span><span class="svc-tags">Logo, système graphique, charte, déclinaisons</span><span class="svc-plus" aria-hidden="true"></span></button>
+        <div class="svc-desc" id="svc-d01"><div class="svc-desc-in"><p class="svc-desc-tags">Logo, système graphique, charte, déclinaisons</p><p>Je construis l'identité de votre marque de A à Z : recherche, logo, palette, typographies et règles d'usage. Tout est réuni dans une charte claire, avec les déclinaisons utiles au quotidien — papeterie, réseaux sociaux, signalétique. L'objectif : une image cohérente et reconnaissable, qui tient sur tous les supports.</p></div></div>
+      </div>
+      <div class="svc reveal">
+        <button class="svc-row" type="button" aria-expanded="false" aria-controls="svc-d02"><span class="svc-idx">02</span><span class="svc-name">Direction artistique</span><span class="svc-tags">Concept, univers visuel, campagnes</span><span class="svc-plus" aria-hidden="true"></span></button>
+        <div class="svc-desc" id="svc-d02"><div class="svc-desc-in"><p class="svc-desc-tags">Concept, univers visuel, campagnes</p><p>Je définis l'univers visuel d'un projet ou d'une campagne : concept, ton, images, mise en scène. Je coordonne ensuite les intervenants — photographes, illustrateurs, développeurs — pour que chaque support raconte la même histoire.</p></div></div>
+      </div>
+      <div class="svc reveal">
+        <button class="svc-row" type="button" aria-expanded="false" aria-controls="svc-d03"><span class="svc-idx">03</span><span class="svc-name">Édition & print</span><span class="svc-tags">Livres, revues, affiches, suivi d'impression</span><span class="svc-plus" aria-hidden="true"></span></button>
+        <div class="svc-desc" id="svc-d03"><div class="svc-desc-in"><p class="svc-desc-tags">Livres, revues, affiches, suivi d'impression</p><p>Livres, revues, catalogues, affiches, plaquettes : je conçois la maquette, compose les pages et prépare des fichiers prêts pour l'imprimeur. Je peux suivre la fabrication jusqu'au bon à tirer, choix du papier et des finitions compris.</p></div></div>
+      </div>
+      <div class="svc reveal">
+        <button class="svc-row" type="button" aria-expanded="false" aria-controls="svc-d04"><span class="svc-idx">04</span><span class="svc-name">Web & interaction</span><span class="svc-tags">Sites vitrines, design system, prototypage</span><span class="svc-plus" aria-hidden="true"></span></button>
+        <div class="svc-desc" id="svc-d04"><div class="svc-desc-in"><p class="svc-desc-tags">Sites vitrines, design system, prototypage</p><p>Je conçois des sites vitrines et des interfaces sur mesure, du prototype à la mise en ligne : arborescence, maquettes, design system et intégration. Des sites rapides, agréables sur mobile et faciles à faire évoluer.</p></div></div>
+      </div>
+      <div class="svc reveal">
+        <button class="svc-row" type="button" aria-expanded="false" aria-controls="svc-d05"><span class="svc-idx">05</span><span class="svc-name">Motion & vidéo</span><span class="svc-tags">Animation de logo, habillage, montage (After Effects, Premiere)</span><span class="svc-plus" aria-hidden="true"></span></button>
+        <div class="svc-desc" id="svc-d05"><div class="svc-desc-in"><p class="svc-desc-tags">Animation de logo, habillage, montage (After Effects, Premiere)</p><p>Je donne du mouvement à votre image : animation de logo, habillage vidéo, formats courts pour les réseaux sociaux et montage, sous After Effects et Premiere. Des animations au service du message, jamais gratuites.</p></div></div>
+      </div>
+      <div class="svc reveal">
+        <button class="svc-row" type="button" aria-expanded="false" aria-controls="svc-d06"><span class="svc-idx">06</span><span class="svc-name">Packaging & production</span><span class="svc-tags">Grand format, impression textile, covering, découpe</span><span class="svc-plus" aria-hidden="true"></span></button>
+        <div class="svc-desc" id="svc-d06"><div class="svc-desc-in"><p class="svc-desc-tags">Grand format, impression textile, covering, découpe</p><p>Étiquettes, packagings, PLV, grand format, textile, covering de véhicules, découpe : je prépare les fichiers et je suis la production jusqu'à l'atelier. Un seul interlocuteur de la création au produit fini, pour un résultat fidèle à la maquette.</p></div></div>
+      </div>
     </div>
   </div>
 </section>
@@ -1267,6 +1312,13 @@
     // referme le menu si on repasse en desktop
     window.matchMedia('(min-width: 821px)').addEventListener('change', e=>{ if(e.matches) setMenu(false); });
   }
+
+  /* ---- services : clic sur une ligne = déplier / replier son descriptif ---- */
+  document.addEventListener('click', e=>{
+    const row = e.target.closest('.svc-row'); if(!row || row.disabled) return;
+    const svc = row.closest('.svc'); const open = !svc.classList.contains('open');
+    svc.classList.toggle('open', open); row.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
 
   /* ---- liens projets placeholder : ne pas remonter en haut de page ---- */
   document.querySelectorAll('a.project[href="#"]').forEach(a=>{
@@ -2374,8 +2426,11 @@
   }
   function applyServices(rows){
     if(!rows||!rows.length) return; var l=document.querySelector('.svc-list'); if(!l) return; l.innerHTML='';
-    rows.forEach(function(s,i){ var d=document.createElement('div'); d.className='svc';
-      d.innerHTML='<span class="svc-idx">'+('0'+(i+1)).slice(-2)+'</span><span class="svc-name">'+A(s.name)+'</span><span class="svc-tags">'+A(s.tags)+'</span>';
+    var DEF={"identité visuelle":"Je construis l'identité de votre marque de A à Z : recherche, logo, palette, typographies et règles d'usage. Tout est réuni dans une charte claire, avec les déclinaisons utiles au quotidien — papeterie, réseaux sociaux, signalétique. L'objectif : une image cohérente et reconnaissable, qui tient sur tous les supports.","direction artistique":"Je définis l'univers visuel d'un projet ou d'une campagne : concept, ton, images, mise en scène. Je coordonne ensuite les intervenants — photographes, illustrateurs, développeurs — pour que chaque support raconte la même histoire.","édition & print":"Livres, revues, catalogues, affiches, plaquettes : je conçois la maquette, compose les pages et prépare des fichiers prêts pour l'imprimeur. Je peux suivre la fabrication jusqu'au bon à tirer, choix du papier et des finitions compris.","web & interaction":"Je conçois des sites vitrines et des interfaces sur mesure, du prototype à la mise en ligne : arborescence, maquettes, design system et intégration. Des sites rapides, agréables sur mobile et faciles à faire évoluer.","motion & vidéo":"Je donne du mouvement à votre image : animation de logo, habillage vidéo, formats courts pour les réseaux sociaux et montage, sous After Effects et Premiere. Des animations au service du message, jamais gratuites.","packaging & production":"Étiquettes, packagings, PLV, grand format, textile, covering de véhicules, découpe : je prépare les fichiers et je suis la production jusqu'à l'atelier. Un seul interlocuteur de la création au produit fini, pour un résultat fidèle à la maquette."};
+    rows.forEach(function(s,i){ var d=document.createElement('div'); d.className='svc'; var n=('0'+(i+1)).slice(-2);
+      var desc=(s.description&&String(s.description).trim())||DEF[String(s.name||'').trim().toLowerCase()]||'';
+      d.innerHTML='<button class="svc-row" type="button" aria-expanded="false"'+(desc?' aria-controls="svc-d'+n+'"':' disabled')+'><span class="svc-idx">'+n+'</span><span class="svc-name">'+A(s.name)+'</span><span class="svc-tags">'+A(s.tags)+'</span>'+(desc?'<span class="svc-plus" aria-hidden="true"></span>':'')+'</button>'+
+        (desc?'<div class="svc-desc" id="svc-d'+n+'"><div class="svc-desc-in"><p class="svc-desc-tags">'+A(s.tags)+'</p><p>'+A(desc)+'</p></div></div>':'');
       l.appendChild(d); });
   }
   function applyParcours(rows){

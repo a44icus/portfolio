@@ -238,7 +238,7 @@
     var wrap=document.getElementById(cfg.mount), countEl=document.getElementById(cfg.count), data=[];
     function load(){ sb.from(cfg.table).select('*').order('position',{ascending:true}).then(function(r){ data=r.data||[]; render(); }); }
     function upd(row,patch){ sb.from(cfg.table).update(patch).eq('id',row.id).then(function(r){ toast(r.error?('Erreur : '+r.error.message):'Enregistré ✓', r.error?'err':'ok'); }); }
-    function add(){ var pos=data.length?Math.max.apply(null,data.map(function(r){return r.position||0;}))+1:0; var blank={position:pos}; cfg.fields.forEach(function(f){ blank[f.key]=f.def||''; }); sb.from(cfg.table).insert(blank).then(function(r){ if(r.error) toast(r.error.message,'err'); else load(); }); }
+    function add(){ var pos=data.length?Math.max.apply(null,data.map(function(r){return r.position||0;}))+1:0; var blank={position:pos}; cfg.fields.forEach(function(f){ if(!f.noInsert) blank[f.key]=f.def||''; }); sb.from(cfg.table).insert(blank).then(function(r){ if(r.error) toast(r.error.message,'err'); else load(); }); }
     function del(row){ if(!confirm('Supprimer définitivement ?')) return; var after=function(){ sb.from(cfg.table).delete().eq('id',row.id).then(function(){ load(); toast('Supprimé.','ok'); }); }; if(cfg.image&&row[cfg.image]&&row[cfg.image+'_path']){ sb.storage.from(BUCKET).remove([row[cfg.image+'_path']]).then(after,after); } else after(); }
     function move(i,d){ var j=i+d; if(j<0||j>=data.length) return; var a=data[i],b=data[j]; Promise.all([sb.from(cfg.table).update({position:b.position}).eq('id',a.id),sb.from(cfg.table).update({position:a.position}).eq('id',b.id)]).then(load); }
     function render(){
@@ -268,7 +268,7 @@
           if(f.type==='textarea'){ el=document.createElement('textarea'); }
           else if(f.type==='select'){ el=document.createElement('select'); f.options.forEach(function(o){ var op=document.createElement('option'); op.value=o.value; op.textContent=o.label; el.appendChild(op); }); }
           else { el=document.createElement('input'); el.type='text'; }
-          el.value=row[f.key]==null?'':row[f.key];
+          el.value=row[f.key]==null?'':row[f.key]; if(f.placeholder) el.placeholder=f.placeholder;
           el.onchange=function(){ var p={}; p[f.key]=el.value; upd(row,p); row[f.key]=el.value; };
           g.appendChild(el); fw.appendChild(g);
         });
@@ -416,7 +416,7 @@
   function initCollections(){
     editor({ table:'portfolio_services', mount:'svcList', count:'svcCount', addBtn:'svcAdd', singular:'service', plural:'services', twoCol:true,
       title:function(r){ return r.name||'Service'; },
-      fields:[ {key:'name',label:'Nom'},{key:'tags',label:'Détails / tags'} ] });
+      fields:[ {key:'name',label:'Nom'},{key:'tags',label:'Détails / tags'},{key:'description',label:'Descriptif dépliable',type:'textarea',noInsert:true,placeholder:'Vide = le site affiche le texte par défaut'} ] });
     editor({ table:'portfolio_parcours', mount:'parList', count:'parCount', addBtn:'parAdd', singular:'ligne', plural:'lignes', twoCol:true,
       title:function(r){ return r.title||'Ligne'; },
       fields:[ {key:'kind',label:'Type',type:'select',options:[{value:'experience',label:'Expérience'},{value:'formation',label:'Formation'}],def:'experience'},{key:'period',label:'Période / lieu'},{key:'title',label:'Intitulé'},{key:'detail',label:'Détail',type:'textarea'} ] });
