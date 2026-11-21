@@ -8,7 +8,7 @@
      const data = await loadPortfolio();
      data.settings.hero_line1   // "Des formes"
      data.projects[0].title     // "Rond Point Evasion"
-     PF.img(url, {w:900})       // URL optimisée (transform Supabase)
+     PF.img(url, {w:900})       // URL optimisée (redimensionnement Vercel)
    ============================================================================ */
 (function (global) {
   'use strict';
@@ -16,18 +16,20 @@
   var SB_URL = 'https://iqnjgvhmeflczvftyter.supabase.co';
   var SB_KEY = 'sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i';
 
-  /* Optimisation d'image à la volée (uniquement pour les fichiers hébergés
-     dans le Storage Supabase ; les autres URLs sont renvoyées telles quelles). */
+  /* Optimisation d'image à la volée via Vercel (/_vercel/image), uniquement
+     pour les fichiers du Storage (Supabase ou Firebase) ; les autres URLs
+     sont renvoyées telles quelles. En local, l'original est servi. */
   function img(url, opts) {
-    if (!url || url.indexOf('/storage/v1/object/public/') === -1) return url || '';
     opts = opts || {};
-    var w = opts.w || 1200,
-        q = opts.q || 76,
-        resize = opts.resize || 'contain';
-    var out = url.replace('/object/public/', '/render/image/public/') +
-              '?width=' + w + (opts.h ? '&height=' + opts.h : '') +
-              '&resize=' + resize + '&quality=' + q;
-    return out;
+    return vimg(url, opts.w || 1200, opts.q || 76);
+  }
+  function vimg(u, s, q) {
+    if (!u || !/^https:\/\/(iqnjgvhmeflczvftyter\.supabase\.co\/storage\/v1\/object\/public\/|firebasestorage\.googleapis\.com\/)/.test(u)) return u || '';
+    var h = location.hostname;
+    if (location.protocol === 'file:' || h === 'localhost' || h === '127.0.0.1') return u;
+    var S = [256, 640, 1080, 1600, 1920], w = 1920;
+    for (var i = 0; i < S.length; i++) { if (S[i] >= s) { w = S[i]; break; } }
+    return '/_vercel/image?url=' + encodeURIComponent(u) + '&w=' + w + '&q=' + q;
   }
 
   /* Échappement HTML (texte issu du CMS = donnée, jamais du code). */

@@ -197,7 +197,7 @@
   var toastEl=document.getElementById('toast'), toastT=null;
   function toast(t,type){ toastEl.textContent=t; toastEl.className='msg show '+(type||'info'); clearTimeout(toastT); toastT=setTimeout(function(){ toastEl.className='msg'; },2200); }
   function slug(n){ return n.toLowerCase().replace(/[^a-z0-9.]+/g,'-').replace(/^-+|-+$/g,''); }
-  function tx(u,s,q,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(q||70) : u; }
+  function tx(u,s,q){ /* redimensionnement via Vercel (/_vercel/image) */ if(!u||(u.indexOf('https://iqnjgvhmeflczvftyter.supabase.co/storage/v1/object/public/')!==0&&u.indexOf('https://firebasestorage.googleapis.com/')!==0)) return u||''; var h=location.hostname; if(location.protocol==='file:'||h==='localhost'||h==='127.0.0.1') return u; var S=[256,640,1080,1600,1920],w=1920; for(var i=0;i<S.length;i++){ if(S[i]>=s){ w=S[i]; break; } } return '/_vercel/image?url='+encodeURIComponent(u)+'&w='+w+'&q='+(q||70); }
 
   /* ---- Auth ---- */
   document.getElementById('sendLinkBtn').addEventListener('click',function(){

@@ -212,7 +212,7 @@
 
   function q(id){ return document.getElementById(id); }
   function esc(s){ var d=document.createElement('div'); d.textContent=(s==null?'':String(s)); return d.innerHTML; }
-  function imgTx(u,s,qual,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(qual||72) : u; }
+  function imgTx(u,s,q){ /* redimensionnement via Vercel (/_vercel/image) */ if(!u||(u.indexOf('https://iqnjgvhmeflczvftyter.supabase.co/storage/v1/object/public/')!==0&&u.indexOf('https://firebasestorage.googleapis.com/')!==0)) return u||''; var h=location.hostname; if(location.protocol==='file:'||h==='localhost'||h==='127.0.0.1') return u; var S=[256,640,1080,1600,1920],w=1920; for(var i=0;i<S.length;i++){ if(S[i]>=s){ w=S[i]; break; } } return '/_vercel/image?url='+encodeURIComponent(u)+'&w='+w+'&q='+(q||72); }
   function paras(txt){ if(!txt) return ''; return String(txt).split(/\n{2,}/).map(function(p){ return '<p>'+esc(p.trim()).replace(/\n/g,'<br>')+'</p>'; }).join(''); }
 
   var params=new URLSearchParams(location.search);

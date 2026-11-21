@@ -1684,7 +1684,7 @@
 (function(){
   var SB_URL='https://iqnjgvhmeflczvftyter.supabase.co';
   var SB_KEY='sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i';
-  window.__imgTx = window.__imgTx || function(u,s,q,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(q||72) : u; };
+  window.__imgTx = window.__imgTx || function(u,s,q){ /* redimensionnement via Vercel (/_vercel/image) */ if(!u||(u.indexOf('https://iqnjgvhmeflczvftyter.supabase.co/storage/v1/object/public/')!==0&&u.indexOf('https://firebasestorage.googleapis.com/')!==0)) return u||''; var h=location.hostname; if(location.protocol==='file:'||h==='localhost'||h==='127.0.0.1') return u; var S=[256,640,1080,1600,1920],w=1920; for(var i=0;i<S.length;i++){ if(S[i]>=s){ w=S[i]; break; } } return '/_vercel/image?url='+encodeURIComponent(u)+'&w='+w+'&q='+(q||72); };
   var track=document.getElementById('carouselTrack');
   if(!track) return;
   var dotsEl=document.getElementById('carouselDots');
@@ -1788,7 +1788,7 @@
     if(p.anim) wrap.setAttribute('data-anim',p.anim);
     wrap.style.left=p.x+'%'; wrap.style.top=p.y+'%'; wrap.style.width=p.w+'%'; wrap.style.setProperty('--rot',(p.rot||0)+'deg');
     var src=p.url; // pièces uploadées via l'admin (stockage Supabase) : optimisées à la volée, ratio préservé
-    if(src && src.indexOf('/storage/v1/object/public/')>-1){ src=src.replace('/object/public/','/render/image/public/')+'?width=900&height=900&resize=contain&quality=80'; }
+    src=window.__imgTx(src,900,80);
     var img=document.createElement('img'); img.alt=''; img.decoding='async'; img.src=src;
     wrap.appendChild(img); coll.appendChild(wrap);
     return {wrap:wrap,img:img,d:(p.d!=null?p.d:8)};
@@ -2148,7 +2148,7 @@
   var el=document.getElementById('travelMap');
   if(!el || !window.maplibregl || !window.supabase) return;
   var sb=window.supabase.createClient('https://iqnjgvhmeflczvftyter.supabase.co','sb_publishable_teWyLYgztv54ga9926jJcA_W62wBq0i');
-  window.__imgTx = window.__imgTx || function(u,s,q,m){ return (u && u.indexOf('/storage/v1/object/public/')>-1) ? u.replace('/object/public/','/render/image/public/')+'?width='+s+'&height='+s+'&resize='+(m||'contain')+'&quality='+(q||72) : u; };
+  window.__imgTx = window.__imgTx || function(u,s,q){ /* redimensionnement via Vercel (/_vercel/image) */ if(!u||(u.indexOf('https://iqnjgvhmeflczvftyter.supabase.co/storage/v1/object/public/')!==0&&u.indexOf('https://firebasestorage.googleapis.com/')!==0)) return u||''; var h=location.hostname; if(location.protocol==='file:'||h==='localhost'||h==='127.0.0.1') return u; var S=[256,640,1080,1600,1920],w=1920; for(var i=0;i<S.length;i++){ if(S[i]>=s){ w=S[i]; break; } } return '/_vercel/image?url='+encodeURIComponent(u)+'&w='+w+'&q='+(q||72); };
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   var map=new maplibregl.Map({
