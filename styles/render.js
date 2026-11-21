@@ -122,10 +122,12 @@
     var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); }, {threshold:.12});
     document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
     document.querySelectorAll('.hstat .n').forEach(function(n){
-      var target=parseInt(n.getAttribute('data-count'),10)||0, t0=null;
+      // « 10 800 » saisi dans l'admin : on ne garde que les chiffres, puis on réaffiche avec séparateur de milliers
+      var target=parseInt(String(n.getAttribute('data-count')||'').replace(/\D/g,''),10)||0, t0=null;
+      var fmt=function(v){ return String(v).replace(/\B(?=(\d{3})+(?!\d))/g,' '); };
       var io2=new IntersectionObserver(function(es){ if(es[0].isIntersecting){ io2.disconnect();
-        if(reduce){ n.firstChild.textContent=target; return; }
-        (function step(ts){ if(!t0)t0=ts; var p=Math.min((ts-t0)/1200,1); n.firstChild.textContent=Math.round(target*(1-Math.pow(1-p,3))); if(p<1) requestAnimationFrame(step); })(performance.now());
+        if(reduce){ n.firstChild.textContent=fmt(target); return; }
+        (function step(ts){ if(!t0)t0=ts; var p=Math.min((ts-t0)/1200,1); n.firstChild.textContent=fmt(Math.round(target*(1-Math.pow(1-p,3)))); if(p<1) requestAnimationFrame(step); })(performance.now());
       } },{threshold:.5}); io2.observe(n);
     });
     var nav=$('#nav'); if(nav) addEventListener('scroll', function(){ nav.classList.toggle('scrolled', scrollY>40); }, {passive:true});

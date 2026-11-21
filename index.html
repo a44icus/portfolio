@@ -1326,17 +1326,20 @@
       ScrollTrigger.create({
         trigger: el, start: 'top 90%', once:true,
         onEnter(){
-          const target = +el.dataset.count || 0;
-          if(reduced){ numSpan.textContent = target; return; }
+          const target = statNum(el.dataset.count);
+          if(reduced){ numSpan.textContent = statFmt(target); return; }
           gsap.to(obj, { v: target, duration: 1.6, ease:'power2.out',
-            onUpdate(){ numSpan.textContent = Math.round(obj.v); } });
+            onUpdate(){ numSpan.textContent = statFmt(Math.round(obj.v)); } });
         }
       });
     });
   } else {
     document.querySelectorAll('.reveal').forEach(el=>{ el.style.opacity = 1; el.style.transform = 'none'; });
-    document.querySelectorAll('.num[data-count]').forEach(el=> el.querySelector('span').textContent = el.dataset.count);
+    document.querySelectorAll('.num[data-count]').forEach(el=> el.querySelector('span').textContent = statFmt(statNum(el.dataset.count)));
   }
+  // « 10 800 » saisi dans l'admin : on ne garde que les chiffres, puis on réaffiche avec séparateur de milliers
+  function statNum(v){ return parseInt(String(v||'').replace(/\D/g,''),10) || 0; }
+  function statFmt(v){ return String(v).replace(/\B(?=(\d{3})+(?!\d))/g,' '); }
 
   /* ---- shape field canvas ---- */
   function rand(min, max){ return Math.random() * (max - min) + min; }
