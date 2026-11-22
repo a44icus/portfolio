@@ -479,7 +479,7 @@ export function buildPlanet(anchors, quality = 'high') {
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, maxRelief: MAX_H * S, edges, pathDir, onPlaza };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, pathDir, onPlaza };
 }
 
 /* ---------- feuillage « peint » : des dizaines de petites feuilles découpées ---------- */

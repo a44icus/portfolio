@@ -56,7 +56,50 @@ export function makeCar() {
     const w = new THREE.Group(); w.add(new THREE.Mesh(tyre, dark), new THREE.Mesh(hub, mat(CREAM))); pivot.add(w);
     wheels.push({ pivot, w, front: z > 0 });
   }
-  car.userData = { body, wheels };
+  /* ----- l'aéroglisseur : jupe gonflable sous la caisse, ventilateur caréné à l'arrière ----- */
+  const rubber = mat('#262838', { roughness: 0.9 });
+  const skirt = new THREE.Group(); body.add(skirt);
+  {
+    // boudin : un tore étiré en ovale tout autour de la caisse
+    const g = new THREE.TorusGeometry(0.42, 0.1, 10, 40).rotateX(Math.PI / 2);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) * 1.42);
+    g.computeVertexNormals();
+    const ring = new THREE.Mesh(g, rubber); ring.position.y = 0.11; skirt.add(ring);
+    const floor = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 24).scale(1, 1, 1.42), rubber); floor.position.y = 0.12; skirt.add(floor);
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.022, 6, 40).rotateX(Math.PI / 2).scale(1, 1, 1.42), mat(CREAM)); stripe.position.y = 0.2; skirt.add(stripe);
+  }
+  const fan = new THREE.Group(); fan.position.set(0, 0.37, -0.42); body.add(fan);
+  const blades = new THREE.Group();
+  {
+    const duct = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.045, 10, 28), lime); duct.position.y = 0.24; fan.add(duct);
+    const grid = mat('#3a3c4e', { roughness: 0.6 });
+    for (const x of [-0.13, 0.13]) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.06), grid); s.position.set(x, 0.05, 0); fan.add(s); }
+    blades.position.y = 0.24; fan.add(blades);
+    for (let k = 0; k < 4; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.17, 0.012), grid); b.position.y = 0.085; const arm = new THREE.Group(); arm.rotation.z = k * Math.PI / 2; arm.add(b); b.rotation.y = 0.5; blades.add(arm); }
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), mat(CREAM)); blades.add(nose);
+    const rudder = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.32, 0.1), lime); rudder.position.set(0, 0.24, -0.08); fan.add(rudder);
+  }
+  /**
+   * k : 0 = voiture, 1 = aéroglisseur. Les roues se replient sous la caisse, la jupe se gonfle, le ventilateur sort du coffre.
+   * spin : rotation des pales.
+   */
+  function setHover(k, spin = 0) {
+    const e = k * k * (3 - 2 * k), pop = Math.max(0, Math.min(1, (k - 0.35) / 0.65)), over = pop < 1 ? pop + Math.sin(pop * Math.PI) * 0.25 : 1;
+    skirt.visible = k > 0.01; skirt.scale.set(0.8 + 0.2 * e, Math.max(0.02, e), 0.8 + 0.2 * e);
+    fan.visible = pop > 0.01; fan.scale.setScalar(Math.max(0.01, over));
+    blades.rotation.z = spin;
+    body.position.y = 0.08 * e;
+    wheels.forEach(w => {
+      const s = Math.max(0.001, 1 - e);
+      w.pivot.scale.setScalar(s);
+      w.pivot.position.y = 0.15 + 0.1 * e;
+      w.pivot.position.x = Math.sign(w.pivot.position.x) * (0.33 - 0.08 * e);
+      w.pivot.visible = e < 0.98;
+    });
+  }
+  setHover(0);
+  car.userData = { body, wheels, setHover };
   return car;
 }
 

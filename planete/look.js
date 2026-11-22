@@ -91,6 +91,32 @@ export function makePost(renderer, scene, camera, quality) {
   };
 }
 
+/* ---------- embruns soulevés par l'aéroglisseur ---------- */
+export function makeSpray(count) {
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.05, 0), new THREE.MeshStandardMaterial({ color: '#f4fbff', emissive: '#bfe9ff', emissiveIntensity: 0.35, roughness: 0.3 }), count);
+  mesh.frustumCulled = false;
+  const S = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < count; i++) { S.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), life: 0, max: 1 }); mesh.setMatrixAt(i, zero); }
+  let next = 0, acc = 0;
+  return {
+    mesh,
+    /** rate : gouttes par seconde ; emit(out) place une goutte (position, vitesse) */
+    update(dt, rate, emit) {
+      acc += rate * dt;
+      while (acc >= 1) { acc -= 1; const s = S[next]; next = (next + 1) % count; emit(s.p, s.v); s.life = s.max = 0.45 + Math.random() * 0.4; }
+      S.forEach((s, i) => {
+        if (s.life <= 0) { mesh.setMatrixAt(i, zero); return; }
+        s.life -= dt;
+        const up = sc.copy(s.p).normalize();
+        s.v.addScaledVector(up, -9 * dt); s.v.multiplyScalar(Math.exp(-dt * 1.5)); s.p.addScaledVector(s.v, dt);
+        const k = Math.max(0, s.life / s.max), r = (0.5 + 0.9 * (1 - k)) * Math.min(1, k * 4);
+        mesh.setMatrixAt(i, m4.compose(s.p, q, sc.setScalar(r)));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
 /* ---------- feuilles qui volent ---------- */
 export function makeLeaves(planet, count) {
   const geo = new THREE.PlaneGeometry(0.09, 0.06);
