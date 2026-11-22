@@ -12,7 +12,7 @@ export const DEFAULTS = {
   },
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
   eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
-  sable: { couleur: '#fbc85b', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
+  sable: { couleur: '#fee09f', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
   herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
     jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
@@ -21,7 +21,7 @@ export const DEFAULTS = {
   turbo: { largeur: 0.12, duree: 3, couleurDebut: '#ffea00', couleurMilieu: '#4c00ff', couleurFin: '#e63528', milieu: 0.12, eclat: 2.3 },
   voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 14, saut: 1.7, raideur: 0.9 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
-  son: { actif: true, general: 0.8, musique: 0.45, ambiance: 0.7, vehicules: 0.8, effets: 0.8 },
+  son: { actif: true, general: 0.51, musique: 0.45, ambiance: 0.7, vehicules: 0.17, effets: 0.8 },
 };
 const KEY = 'planete-reglages';
 const clone = o => JSON.parse(JSON.stringify(o));
