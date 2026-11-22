@@ -127,6 +127,7 @@ const FNOISE_GLSL = `
                mix(mix(fh(i + vec3(0, 0, 1)), fh(i + vec3(1, 0, 1)), f.x), mix(fh(i + vec3(0, 1, 1)), fh(i + vec3(1, 1, 1)), f.x), f.y), f.z);
   }`;
 const GLITTER_GLSL = `
+  uniform float uTiltA; uniform float uTiltF; uniform float uTiltB; uniform float uScrH;
   float glitHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   /** 1 sur le pixel qui contient la paillette de cette case (point fixe du monde), 0 ailleurs. */
   float glitter(vec3 wp, float cellsPerUnit, float density, float t) {
@@ -139,7 +140,9 @@ const GLITTER_GLSL = `
     float pw = max(length(fwidth(wp)), 1e-5);
     float onPx = 1.0 - step(0.6 * pw, length(dv));
     float tw = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * (2.0 + 3.0 * o.x) + h * 80.0), 3.0);
-    return onPx * tw;
+    // pas de paillette là où le flou de maquette agit : il recopiait ce point d'un pixel en petits cadres autour de lui
+    float tk = uTiltA * smoothstep(uTiltB, uTiltB + 0.32, abs(gl_FragCoord.y / uScrH - uTiltF));
+    return onPx * tw * (1.0 - smoothstep(0.02, 0.15, tk));
   }`;
 const WAVES_GLSL = `
   float swWaves(vec3 p, float t) {
@@ -450,7 +453,7 @@ export function buildPlanet(anchors, quality = 'high') {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   // sable pailleté : de minuscules éclats qui scintillent selon l'angle de vue, seulement sur le sable et les routes de terre
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uTime = waterUniforms.uTime; Object.assign(sh.uniforms, SAND);
+    sh.uniforms.uTime = waterUniforms.uTime; Object.assign(sh.uniforms, SAND, TILT);
     sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = GLITTER_GLSL + 'uniform float uTime;\nuniform float uGlitS;\nuniform float uGlitSI;\nuniform float uGlitDay;\nuniform vec3 uSand;\nuniform float uSandMix;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       diffuseColor.rgb = mix(diffuseColor.rgb, uSand, uSandMix * smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r));`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -467,7 +470,7 @@ export function buildPlanet(anchors, quality = 'high') {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
     uShallow: { value: new THREE.Color('#34bdb0') }, uTeal: { value: new THREE.Color('#38b5bf') }, uFoam: { value: 1 }, uGlitW: { value: 0.05 }, uGlitWI: { value: 0.7 }, uGlitDay: { value: 1 }, uFoamEdge: { value: 1 }, uFoamLine: { value: 1 }, uFoamGap: { value: 1 }, uFoamLen: { value: 0.5 },
-    uDeep: { value: new THREE.Color('#0b4766') },
+    uDeep: { value: new THREE.Color('#0b4766') }, ...TILT,
   };
   const wMat = waterMaterial(waterUniforms), water = new THREE.Group();
   const d = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), nn = new THREE.Vector3(), q = new THREE.Vector3();
@@ -798,7 +801,29 @@ export function buildPlanet(anchors, quality = 'high') {
     const s = 0.07 + rng() * 0.17;
     rocks.push([place(d, h * S, s, s * (0.6 + rng() * 0.4)), new THREE.Color(STYLE.rockColor).multiplyScalar(0.85 + rng() * 0.25)]);
   }
-  inst(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), rocks);
+  // pierres violettes opalescentes : la lumière entre un peu dans la pierre (diffusion sous la surface, surtout à contre-jour)
+  // et des reflets laiteux rose, bleu et or changent avec l'angle de vue sur chaque facette
+  const rockM = new THREE.MeshStandardMaterial({ roughness: 0.55, flatShading: true });
+  rockM.onBeforeCompile = sh => {
+    sh.uniforms.uSun = waterUniforms.uSun; sh.uniforms.uSunColor = waterUniforms.uSunColor; sh.uniforms.uGlitDay = SAND.uGlitDay;
+    sh.fragmentShader = 'uniform vec3 uSun;\nuniform vec3 uSunColor;\nuniform float uGlitDay;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      {
+        vec3 Vv = normalize(vViewPosition), Ls = normalize((viewMatrix * vec4(uSun, 0.0)).xyz);
+        float nv = clamp(dot(normal, Vv), 0.0, 1.0), fr = pow(1.0 - nv, 2.2);
+        float day = 0.35 + 0.65 * uGlitDay;
+        // diffusion : lueur douce dans la masse, plus forte quand le soleil est derrière la pierre
+        float back = pow(clamp(dot(-Vv, Ls), 0.0, 1.0), 2.5), wrap = clamp((dot(normal, Ls) + 0.6) / 1.6, 0.0, 1.0);
+        vec3 inner = diffuseColor.rgb * vec3(1.05, 0.85, 1.2);
+        totalEmissiveRadiance += inner * (0.06 * wrap + 0.55 * back * (0.4 + 0.6 * nv)) * day;
+        // jeu de couleurs de l'opale : teinte qui tourne avec l'angle, pastel, plus vive sur les bords
+        float hue = dot(normal, vec3(5.1, 7.3, 3.7)) + nv * 2.2;   // chaque facette a sa couleur, qui glisse quand on tourne autour
+        vec3 opal = mix(0.5 + 0.5 * cos(6.2832 * (hue + vec3(0.0, 0.33, 0.67))), vec3(1.0), 0.2);
+        diffuseColor.rgb *= mix(vec3(1.0), opal * 1.25, 0.32);   // les facettes éclairées prennent elles aussi la teinte changeante
+        totalEmissiveRadiance += opal * (0.1 * pow(nv, 4.0) + 0.45 * fr) * day * mix(vec3(1.0), uSunColor, 0.3);
+      }`);
+  };
+  rockM.customProgramCacheKey = () => 'rock-opal';
+  inst(new THREE.DodecahedronGeometry(1, 0), rockM, rocks);
 
   {
     const pads = [], blooms = [], padCols = ['#7fae3a', '#5f9a34', '#9ab83a', '#6e9e2e'], bloomCols = ['#ff7ab8', '#ffffff', '#c58cff'];
@@ -943,6 +968,8 @@ function scaleMat(m, U, code, key) {
 }
 
 /** Sable : paillettes et teinte (barre de réglages). */
+/** Flou de maquette (réglé par app.js) : les paillettes s'effacent là où il agit. */
+export const TILT = { uTiltA: { value: 0 }, uTiltF: { value: 0.5 }, uTiltB: { value: 0.14 }, uScrH: { value: 1 } };
 export const SAND = { uGlitS: { value: 0.06 }, uGlitSI: { value: 0.9 }, uGlitDay: { value: 1 }, uSand: { value: new THREE.Color('#f59a46') }, uSandMix: { value: 0 } };
 
 /** Vent commun à l'herbe (force et direction), réglé par la météo. */

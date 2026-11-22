@@ -346,7 +346,20 @@ export function makeFauna(planet, quality = 'high') {
   // couleur par point : sombre le jour (moucherons), jaune-vert lumineux qui clignote la nuit (lucioles)
   const midgeCol = new Float32Array(Math.max(1, NM) * 3); for (let i = 0; i < NM; i++) { midgeCol[i * 3] = 0.12; midgeCol[i * 3 + 1] = 0.095; midgeCol[i * 3 + 2] = 0.08; }
   const midgeGeo = new THREE.BufferGeometry(); midgeGeo.setAttribute('position', new THREE.BufferAttribute(midgePos, 3)); midgeGeo.setAttribute('color', new THREE.BufferAttribute(midgeCol, 3));
-  const midges = new THREE.Points(midgeGeo, new THREE.PointsMaterial({ vertexColors: true, size: 0.09, sizeAttenuation: true }));   // ~5 pixels à quelques mètres (à 0,03 on ne les voyait pas)
+  // point rond (et non carré) : un disque net au centre ; la nuit, un halo doux autour (les lucioles)
+  const midgeU = { uGlow: { value: 0 } };
+  const midgeMat = new THREE.PointsMaterial({ vertexColors: true, size: 0.09, sizeAttenuation: true, transparent: true, depthWrite: false });
+  midgeMat.onBeforeCompile = sh => {
+    sh.uniforms.uGlow = midgeU.uGlow;
+    sh.fragmentShader = 'uniform float uGlow;\n' + sh.fragmentShader.replace('#include <map_particle_fragment>', `#include <map_particle_fragment>
+      { float r = length(gl_PointCoord - 0.5) * 2.0;
+        float core = 1.0 - smoothstep(0.2, 0.3, r), halo = 1.0 - smoothstep(0.2, 1.0, r);
+        float a = max(core, halo * halo * 0.55 * uGlow);
+        if (a < 0.01) discard;
+        diffuseColor.a *= a; }`);
+  };
+  midgeMat.customProgramCacheKey = () => 'midges-round';
+  const midges = new THREE.Points(midgeGeo, midgeMat);   // ~5 pixels à quelques mètres (à 0,03 on ne les voyait pas)
   midges.frustumCulled = false; if (NM) group.add(midges);
   swarms.forEach(w => { const R0 = planet.heightDir(w.home) + w.hgt; w.c = w.home.clone().multiplyScalar(R0); });   // positions de départ
   { let k = 0; swarms.forEach(w => { for (let i = 0; i < w.n; i++, k++) { midgePos[k * 3] = w.c.x; midgePos[k * 3 + 1] = w.c.y; midgePos[k * 3 + 2] = w.c.z; } }); }
@@ -650,7 +663,7 @@ export function makeFauna(planet, quality = 'high') {
     /* ===== moucherons : seules les nuées proches sont animées (les autres sont trop loin pour être vues) ===== */
     // la nuit, les moucherons deviennent des lucioles : plus gros, lumineux, plus lents
     const glow = ease(Math.min(1, Math.max(0, (night - 0.35) / 0.4)));
-    midges.visible = true; midges.material.size = (0.09 + 0.06 * glow) * zM;
+    midges.visible = true; midges.material.size = (0.3 + 0.3 * glow) * zM; midgeU.uGlow.value = glow;   // (le disque n'occupe que le centre du point : le reste est le halo)
     if (NM) {
       let k = 0;
       midgeGeo.setDrawRange(0, swarms.slice(0, nM).reduce((s, w) => s + w.n, 0));

@@ -12,7 +12,7 @@ import { makeAmbience } from './ambience.js';
 import { makeFauna } from './fauna.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
-import { SAND, GRASS, TREE, BUSH, LUPIN, WIND } from './world.js';
+import { SAND, GRASS, TREE, BUSH, LUPIN, WIND, TILT } from './world.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -146,10 +146,11 @@ controls.addEventListener('start', () => { controls.autoRotate = false; camAnim 
 let mode = 'orbit';
 let camAnim = null;
 function flyTo(dir, dist = SEA_R + 34, dur = 1100) {
+  const upFrom = camera.up.clone();
   if (PL.cam) endPlaneCam();
   const from = camera.position.clone(), fromLen = from.length(), toLen = dist;
   const qa = new THREE.Quaternion(), qb = new THREE.Quaternion().setFromUnitVectors(from.clone().normalize(), dir.clone().normalize());
-  camAnim = { t0: performance.now(), dur: reduce ? 1 : dur, from, fromLen, toLen, qa, qb };
+  camAnim = { t0: performance.now(), dur: reduce ? 1 : dur, from, fromLen, toLen, qa, qb, up: upFrom.y > 0.9999 ? null : upFrom };   // l'horizon se redresse pendant le trajet
   controls.autoRotate = false;
 }
 
@@ -180,8 +181,24 @@ function updateLabels() {
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let downAt = null;
 canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointermove', e => {
+  if (PL.follow && downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) stopFollow();
+  if (!e.buttons && e.pointerType === 'mouse') canvas.style.cursor = mode === 'orbit' && !PL.follow && overPlane(e) ? 'pointer' : '';   // la main signale qu'on peut cliquer l'avion
+});
+addEventListener('wheel', () => stopFollow(), { passive: true });
+addEventListener('keydown', e => { if (e.key === 'Escape') stopFollow(); });
+const plScr = new THREE.Vector3();
+function overPlane(e) {   // l'avion est petit à l'écran : on accepte un clic tout près
+  if (!PL.on || !plane.visible) return false;
+  plScr.copy(plane.position).project(camera);
+  const sx = (plScr.x + 1) / 2 * innerWidth, sy = (1 - plScr.y) / 2 * innerHeight;
+  return plScr.z < 1 && plane.position.dot(camera.position) > 0 && Math.hypot(e.clientX - sx, e.clientY - sy) < 44;
+}
 canvas.addEventListener('pointerup', e => {
   if (mode !== 'orbit' || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  if (PL.follow) { stopFollow(); return; }
+  // clic sur l'avion (ou tout près : il est petit à l'écran) : on le suit
+  if (overPlane(e)) { startFollow(); canvas.style.cursor = ''; return; }
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects([planet.groundMesh, planet.decor], true)[0];
@@ -361,7 +378,7 @@ function setWalk(on) {
     P.fwd.copy(s.dir).sub(P.dir.clone().multiplyScalar(P.dir.dot(s.dir))).normalize();
     P.r = planet.groundRadius(P.dir) + 2; P.vr = 0; P.ground = false; P.speed = 0;
     camF.copy(P.fwd); P.mv.copy(P.fwd);
-    stopPlane();
+    stopPlane(); sunT.set(0, 0, 0);   // le soleil sera replacé de trois quarts derrière la voiture
     mode = 'walk'; controls.enabled = false; controls.autoRotate = false; camAnim = null; avatar.visible = true;
     hasLanded = true; document.body.classList.remove('nudge');
     walkBtn.textContent = 'Décoller'; document.body.classList.add('walking'); closePanel();
@@ -626,7 +643,7 @@ function hitTrunks(dt) {
 }
 /* ---------- biplan : au décollage la voiture se transforme, monte dans le ciel puis fait le tour de la planète ---------- */
 const plane = makeBiplane(); plane.visible = false; scene.add(plane);
-const PL = { on: false, t: 0, dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, r0: 0, speed: 0, bank: 0, pitch: 0, cam: 0, roll: 0 };
+const PL = { on: false, t: 0, dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, r0: 0, speed: 0, bank: 0, pitch: 0, cam: 0, roll: 0, follow: false };
 const PL_ALT = SEA_R + 9, PL_CAM_T = 4.6, AX = new THREE.Vector3(1, 0, 0), AZ = new THREE.Vector3(0, 0, 1), WY = new THREE.Vector3(0, 1, 0);
 const plM = new THREE.Matrix4(), plX = new THREE.Vector3(), plQ = new THREE.Quaternion(), plA = new THREE.Vector3(), plB = new THREE.Vector3(), plFrom = new THREE.Vector3(), plUp = new THREE.Vector3();
 const smooth01 = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
@@ -637,7 +654,21 @@ function startPlane() {
   plane.visible = true; plane.scale.setScalar(0.01);
   audio.impact(2.2, 0, 'sol');
 }
-function stopPlane() { PL.on = false; PL.cam = 0; plane.visible = false; avatar.scale.setScalar(TUNE.voiture.taille); }
+function stopPlane() { if (PL.follow) { PL.follow = false; controls.enabled = true; camera.up.set(0, 1, 0); } PL.on = false; PL.cam = 0; plane.visible = false; avatar.scale.setScalar(TUNE.voiture.taille); }
+/** Clic sur l'avion : la caméra le prend en chasse ; un glisser, la molette, Échap ou un nouveau clic la rendent. */
+function startFollow() { PL.follow = true; PL.cam = 1; camAnim = null; controls.enabled = false; controls.autoRotate = false; }
+function stopFollow() {
+  if (!PL.follow) return;
+  PL.follow = false; PL.cam = 0; controls.enabled = true;
+  flyTo(camera.position.clone().normalize(), SEA_R + 40, 1300);   // recule en douceur jusqu'à la vue de la planète
+}
+function followCamera(dt) {
+  const k = 1 - Math.exp(-dt * 3);
+  plA.copy(plane.position).addScaledVector(PL.fwd, -6).addScaledVector(PL.dir, 2.4);
+  camera.position.lerp(plA, k);
+  camera.up.lerp(PL.dir, k).normalize();
+  camera.lookAt(plB.copy(plane.position).addScaledVector(PL.fwd, 2));
+}
 function endPlaneCam() { PL.cam = 0; controls.enabled = true; camera.up.set(0, 1, 0); controls.update(); }
 function updatePlane(dt) {
   if (!PL.on) return;
@@ -855,7 +886,7 @@ const tuneHooks = {
     W.uShallow.value.set(T.eau.bord); W.uTeal.value.set(T.eau.milieu); W.uDeep.value.set(T.eau.large);
     W.uFoam.value = T.eau.ecume; W.uGlitW.value = T.eau.paillettes; W.uGlitWI.value = T.eau.eclatPaillettes;
     SAND.uGlitS.value = T.sable.paillettes; SAND.uGlitSI.value = T.sable.eclatPaillettes; SAND.uSand.value.set(T.sable.couleur); SAND.uSandMix.value = T.sable.forceCouleur;
-    post.grade.uniforms.uSat.value = T.post.saturation; post.bloom.radius = T.post.bloomRayon; post.bloom.threshold = T.post.bloomSeuil; post.setBand(T.post.zoneNette);
+    post.grade.uniforms.uSat.value = T.post.saturation; post.bloom.radius = T.post.bloomRayon; post.bloom.threshold = T.post.bloomSeuil; post.setBand(T.post.zoneNette); TILT.uTiltB.value = T.post.zoneNette;
     W.uFoamEdge.value = T.eau.largeurLisere; W.uFoamLine.value = T.eau.epaisseurTraits; W.uFoamGap.value = T.eau.espacementTraits; W.uFoamLen.value = T.eau.longueurTraits;
     GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur;
     LUPIN.uLupS.value = T.lupins.taille; LUPIN.uLupH.value = T.lupins.hauteur; LUPIN.uLupWind.value = T.lupins.vent; LUPIN.uFlorD.value = T.lupins.fleurs; LUPIN.uFlorS.value = T.lupins.tailleFleurs; planet.setLupinDensity(T.lupins.densite);
@@ -901,7 +932,7 @@ $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTuneP
    - si la machine n'arrive pas à suivre, la définition baisse un peu, puis remonte quand ça va mieux. */
 let pxScale = 1;
 const PR_MIN = Math.min(PR, quality === 'low' ? 0.75 : 0.85);
-function resize() { const w = innerWidth, h = innerHeight, pr = Math.max(PR_MIN, PR * pxScale); renderer.setPixelRatio(pr); renderer.setSize(w, h, false); post.setSize(w, h, pr); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = innerWidth, h = innerHeight, pr = Math.max(PR_MIN, PR * pxScale); renderer.setPixelRatio(pr); renderer.setSize(w, h, false); post.setSize(w, h, pr); TILT.uScrH.value = Math.max(1, Math.round(h * pr)); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 let lastInput = 0;
 for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart']) addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true });
@@ -932,6 +963,7 @@ function paceFrame(now) {
 }
 const clock = new THREE.Clock();
 const sunOff = new THREE.Vector3(), sunDir = new THREE.Vector3(), camR = new THREE.Vector3(), camFw = new THREE.Vector3();
+const sunT = new THREE.Vector3(), sunM = new THREE.Matrix4(), sunX = new THREE.Vector3(), sunY = new THREE.Vector3(), sunZ = new THREE.Vector3(), shadowC = new THREE.Vector3(); let sunHour = 0;
 let shadowBox = 0;
 function setShadowBox(half, near, far) {
   const c = sun.shadow.camera;
@@ -954,22 +986,34 @@ function frame(now) {
       const k = Math.min(1, (performance.now() - camAnim.t0) / camAnim.dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
       const q = camAnim.qa.clone().slerp(camAnim.qb, e);
       camera.position.copy(camAnim.from).normalize().applyQuaternion(q).multiplyScalar(camAnim.fromLen + (camAnim.toLen - camAnim.fromLen) * e);
-      if (k >= 1) camAnim = null;
+      if (camAnim.up) camera.up.copy(camAnim.up).lerp(WY, e).normalize();
+      if (k >= 1) { if (camAnim.up) camera.up.copy(WY); camAnim = null; }
     }
-    if (PL.cam) planeCamera(); else controls.update();
+    if (PL.follow) followCamera(dt); else if (PL.cam) planeCamera(); else controls.update();
   } else stepWalk(dt);
   updatePlane(dt);
   if (zones) zones.update(dt, t, mode === 'walk' ? carBody : null);
   fauna.update(dt, t, mode === 'walk', avatar.position, Math.abs(P.speed), ambience.night);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   if (mode === 'walk') {
-    // lumière rasante venue du haut à gauche de l'image : de longues ombres vers le bas à droite
-    camR.set(1, 0, 0).applyQuaternion(camera.quaternion); camFw.set(0, 0, -1).applyQuaternion(camera.quaternion);
-    sunDir.copy(up).multiplyScalar(1.05).addScaledVector(camR, -0.75).addScaledVector(camFw, 0.55);
-    sunDir.addScaledVector(up, 0).normalize();
-    sun.target.position.copy(avatar.position);
-    sun.position.copy(avatar.position).addScaledVector(sunDir, 26);
-    setShadowBox(10, 1, 60);
+    // le soleil est accroché au monde (et non plus à la caméra) : les ombres restent en place quand on tourne autour de la voiture.
+    // Sa direction au sol est transportée de proche en proche quand on roule, et tourne lentement avec l'heure de la journée.
+    up.copy(avatar.position).normalize();
+    if (sunT.lengthSq() < 1e-6) {   // à l'atterrissage : de trois quarts, venu du haut à gauche de l'image
+      camR.crossVectors(P.fwd, up).normalize();
+      sunT.copy(camR).multiplyScalar(-0.75).addScaledVector(P.fwd, 0.55); sunHour = ambience.state.hour;
+    }
+    let dh = ambience.state.hour - sunHour; if (dh > 12) dh -= 24; if (dh < -12) dh += 24; sunHour = ambience.state.hour;
+    sunT.addScaledVector(up, -sunT.dot(up)).normalize().applyAxisAngle(up, -dh / 24 * Math.PI * 2);
+    sunDir.copy(up).multiplyScalar(1.05).addScaledVector(sunT, 0.93).normalize();
+    // boîte d'ombre calée sur la grille de ses texels : sinon les bords des ombres frémissent quand elle suit la voiture
+    const SB = 10, texel = 2 * SB / sun.shadow.mapSize.x;
+    sunM.lookAt(sunDir, sunZ.set(0, 0, 0), sun.shadow.camera.up); sunX.setFromMatrixColumn(sunM, 0); sunY.setFromMatrixColumn(sunM, 1);   // axes de l'image d'ombre
+    const px = avatar.position.dot(sunX), py = avatar.position.dot(sunY);
+    shadowC.copy(avatar.position).addScaledVector(sunX, Math.round(px / texel) * texel - px).addScaledVector(sunY, Math.round(py / texel) * texel - py);
+    sun.target.position.copy(shadowC);
+    sun.position.copy(shadowC).addScaledVector(sunDir, 26);
+    setShadowBox(SB, 1, 60);
     planet.waterUniforms.uSun.value.copy(sunDir);
   } else {
     sun.position.copy(camera.position).add(sunOff.set(22, 26, 4).applyQuaternion(camera.quaternion));
@@ -1001,6 +1045,7 @@ function frame(now) {
   const wantFov = mode === 'walk' ? TUNE.camera.focale + 7 * P.boost : 42;
   if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
   post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou : 0, 1 - Math.exp(-dt * 3)), 0.5);
+  TILT.uTiltA.value = post.tilt > 0.02 ? post.tilt : 0;
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   pollGamepad(dt);
   updateLabels();

@@ -86,6 +86,12 @@ export function makePost(renderer, scene, camera, quality) {
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.45, 1.05);
+  // three.js prend un écart-type égal au rayon du noyau : coupé à 1 sigma, ce flou est presque « en boîte » et donnait
+  // des halos carrés autour des points très lumineux (lucioles, paillettes du sable). Coupé à 2 sigmas, le halo est rond.
+  bloom.separableBlurMaterials.forEach(m => {
+    const r = m.defines.KERNEL_RADIUS, s = Math.max(1, r / 2);
+    m.uniforms.gaussianCoefficients.value = Array.from({ length: r }, (_, i) => 0.39894 * Math.exp(-0.5 * i * i / (s * s)) / s);
+  });
   composer.addPass(bloom);
   const tiltH = new ShaderPass(TiltShift), tiltV = new ShaderPass(TiltShift), tiltH2 = new ShaderPass(TiltShift), tiltV2 = new ShaderPass(TiltShift);
   // 4 passes partout : avec 2 seulement (ancienne version téléphone), un point brillant (paillette du sable) était recopié en petits carrés
