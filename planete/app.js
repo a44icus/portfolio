@@ -76,14 +76,14 @@ const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAt
   g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
   scene.add(new THREE.Points(g, starMat));
 }
-// halo d'atmosphère
+// halo d'atmosphère : retiré (la planète se détache directement sur l'espace)
 {
   const atmo = new THREE.Mesh(new THREE.SphereGeometry(SEA_R + 8, 64, 48), new THREE.ShaderMaterial({
     side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }',
     fragmentShader: 'varying vec3 vN; varying vec3 vV; void main(){ float f=pow(1.-abs(dot(vN,vV)),2.2); gl_FragColor=vec4(vec3(1.,.6,.45)*f*1.3, f); }',
   }));
-  scene.add(atmo);
+  void atmo;
 }
 
 performance.mark('planet-start');
