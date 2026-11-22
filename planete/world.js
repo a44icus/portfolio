@@ -355,13 +355,27 @@ export function buildPlanet(anchors, quality = 'high') {
   const parent = sites.map((_, k) => k), find = k => (parent[k] === k ? k : (parent[k] = find(parent[k])));
   const edges = [], extra = [];
   for (const e of cands) { const ra = find(e.i), rb = find(e.j); if (ra !== rb) { parent[ra] = rb; edges.push(e); } else extra.push(e); }
-  extra.filter(e => e.len * SEA_R < 26).slice(0, 2).forEach(e => edges.push(e));   // quelques boucles
+  // quelques boucles, mais jamais deux traversées d'eau côte à côte (sinon deux ponts se chevauchent : on n'en garde qu'un)
+  const wetPts = e => { const out = []; for (const r of e.runs) for (let i = r.i0; i <= r.i1; i++) out.push(e.point(i / e.M * e.len)); return out; };
+  const clash = (a, b) => { const A = wetPts(a), B = wetPts(b), c = Math.cos(4 / SEA_R); if (!A.length || !B.length) return false; for (const p of A) for (const q of B) if (p.dot(q) > c) return true; return false; };
+  for (let k = edges.length - 1; k > 0; k--) for (let j = 0; j < k; j++) if (clash(edges[k], edges[j]) && edges.length > sites.length - 1) { edges.splice(k, 1); break; }
+  let loops = 0;
+  for (const e of extra) { if (loops >= 2 || e.len * SEA_R >= 26) continue; if (edges.some(f => clash(e, f))) continue; edges.push(e); loops++; }
 
   // ponts : chaque passage sur l'eau, prolongé d'un peu de terre de chaque côté
   const bridges = [];
   const LIFT = (R - 0.3) * S + 1.25;   // assez haut pour que l'aéroglisseur passe dessous
-  for (const e of edges) for (const r of e.runs) {
-    const t0 = Math.max(0, r.i0 / e.M * e.len - 2.6 / SEA_R), t1 = Math.min(e.len, r.i1 / e.M * e.len + 2.6 / SEA_R);
+  // traversées d'une même route trop proches (leurs rampes se chevaucheraient) : un seul grand pont qui enjambe la bande de terre
+  const spans = [];
+  for (const e of edges) {
+    let cur = null;
+    for (const r of e.runs) {
+      const t0 = Math.max(0, r.i0 / e.M * e.len - 2.6 / SEA_R), t1 = Math.min(e.len, r.i1 / e.M * e.len + 2.6 / SEA_R);
+      if (cur && t0 < cur.t1 + 3 / SEA_R) cur.t1 = Math.max(cur.t1, t1);
+      else { cur = { e, t0, t1 }; spans.push(cur); }
+    }
+  }
+  for (const { e, t0, t1 } of spans) {
     const hA = e.groundAt(t0), hB = e.groundAt(t1), L = (t1 - t0) * SEA_R, arch = Math.min(0.3, L * 0.02);
     const deck = th => {
       const s2 = (th - t0) / (t1 - t0), base = hA + (hB - hA) * s2;
@@ -425,7 +439,7 @@ export function buildPlanet(anchors, quality = 'high') {
   /** Dessus du tablier sous cette direction (0 sinon). Avec r : seulement si l'on est déjà à hauteur du tablier (on peut passer dessous). */
   function bridgeR(dir, r) {
     const bi = bridgeAt(dir);
-    if (!bi || Math.abs(bi.lat) > 0.8) return 0;
+    if (!bi || Math.abs(bi.lat) > 1.0) return 0;   // tablier élargi
     if (r !== undefined && r < bi.top - 0.45) return 0;
     return bi.top;
   }
@@ -628,8 +642,36 @@ export function buildPlanet(anchors, quality = 'high') {
     pair(v.wood, v.leaves, null, list.map(p => p[1]), list.map(p => [p[1], p[2]]));
   });
 
+  const lcells = new Map(); let lupAttr = null, lupMats = [];
   const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null, padMesh = null, bloomMesh = null, lupinSpikes = null, lupinStems = null; const padState = [];
   const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
+  /** Couche les lupins touchés par le véhicule (points : roues et centre ; car : centre), à l'opposé de la voiture. */
+  const lupR = new THREE.Matrix4(), lupV = new THREE.Vector3(), lupU = new THREE.Vector3();
+  function crushLupins(points, radius, t, car) {
+    if (!lupAttr) return;
+    const arr = lupAttr.array, r2 = radius * radius; let lo = Infinity, hi = -1;
+    for (const p of points) {
+      const cx = Math.floor(p.x / GC), cy = Math.floor(p.y / GC), cz = Math.floor(p.z / GC);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+        const cell = lcells.get(((cx + a + 512) * 1024 + (cy + b + 512)) * 1024 + (cz + c + 512)); if (!cell) continue;
+        for (const i of cell) {
+          const e = lupMats[i].elements, dx = e[12] - p.x, dy = e[13] - p.y, dz = e[14] - p.z;
+          if (dx * dx + dy * dy + dz * dz > r2) continue;
+          if (arr[i * 3] > 0 && t - arr[i * 3] < 3) continue;   // déjà couché
+          // direction de chute : à l'opposé du véhicule, exprimée dans le repère du lupin
+          lupU.set(e[12], e[13], e[14]).normalize();
+          lupV.set(e[12] - car.x, e[13] - car.y, e[14] - car.z); lupV.addScaledVector(lupU, -lupV.dot(lupU));
+          if (lupV.lengthSq() < 1e-8) lupV.set(1, 0, 0);
+          lupR.extractRotation(lupMats[i]).transpose(); lupV.applyMatrix4(lupR); lupV.y = 0;
+          if (lupV.lengthSq() < 1e-8) lupV.set(1, 0, 0);
+          lupV.normalize();
+          arr[i * 3] = t; arr[i * 3 + 1] = lupV.x; arr[i * 3 + 2] = lupV.z;
+          if (i < lo) lo = i; if (i > hi) hi = i;
+        }
+      }
+    }
+    if (hi >= 0) { lupAttr.clearUpdateRanges(); lupAttr.addUpdateRange(lo * 3, (hi - lo + 1) * 3); lupAttr.needsUpdate = true; }
+  }
   /** Écrase l'herbe autour des points donnés (positions du monde), à l'instant t. */
   function crushGrass(points, radius, t) {
     if (!gattr) return;
@@ -719,16 +761,31 @@ export function buildPlanet(anchors, quality = 'high') {
       }
     }
     floret(new THREE.SphereGeometry(0.008, 5, 3).translate(0, 0.26 + 16 * 0.019, 0), 0, 0.26 + 16 * 0.019, 0, 0);
-    const lupSway = 'transformed.xz *= uLupS; transformed.y *= uLupS * uLupH;' + SWAY.replace('0.06 * max(transformed.y, 0.0)', '0.18 * uLupWind * max(transformed.y, 0.0)').replace(/\n\s*transformed \+= normal \* sin[^\n]*;/, '');
+    // couché au passage du véhicule : aCrush = (instant, direction locale x, z) ; il bascule à l'opposé de la voiture puis se redresse lentement
+    const LUP_CRUSH = `
+      { float cAge = uTime - aCrush.x;
+        float cf = aCrush.x > 0.0 ? smoothstep(0.0, 0.18, cAge) * (1.0 - smoothstep(4.0, 11.0, cAge)) : 0.0;
+        if (cf > 0.001) {
+          vec3 ck = normalize(vec3(aCrush.z, 0.0, -aCrush.y) + vec3(1e-5, 0.0, 0.0));   // axe = haut × direction de chute
+          float ca = 1.35 * cf + 0.12 * sin(cAge * 9.0) * cf * (1.0 - smoothstep(0.0, 1.2, cAge)), cc = cos(ca), cs = sin(ca);
+          transformed = transformed * cc + cross(ck, transformed) * cs + ck * dot(ck, transformed) * (1.0 - cc);
+        } }`;
+    const lupSway = 'transformed.xz *= uLupS; transformed.y *= uLupS * uLupH;' + SWAY.replace('0.06 * max(transformed.y, 0.0)', '0.18 * uLupWind * max(transformed.y, 0.0)').replace(/\n\s*transformed \+= normal \* sin[^\n]*;/, '') + LUP_CRUSH;
     const LUPU = { ...WINDU, ...LUPIN };
     const spikeM = scaleMat(new THREE.MeshStandardMaterial({ roughness: 0.55, emissive: '#2a1040', emissiveIntensity: 0.3 }), LUPU,
       'transformed = aCenter + (transformed - aCenter) * uFlorS * step(aRank, uFlorD);' + lupSway, 'lupin');
-    { const prev = spikeM.onBeforeCompile; spikeM.onBeforeCompile = (sh, r) => { prev(sh, r); sh.vertexShader = 'attribute vec3 aCenter;\nattribute float aRank;\n' + sh.vertexShader; }; }
+    { const prev = spikeM.onBeforeCompile; spikeM.onBeforeCompile = (sh, r) => { prev(sh, r); sh.vertexShader = 'attribute vec3 aCenter;\nattribute float aRank;\nattribute vec3 aCrush;\n' + sh.vertexShader; }; }
     const stemM = scaleMat(new THREE.MeshStandardMaterial({ color: '#5f7a24', roughness: 0.8 }), LUPU, lupSway, 'lupinStem');
+    { const prev = stemM.onBeforeCompile; stemM.onBeforeCompile = (sh, r) => { prev(sh, r); sh.vertexShader = 'attribute vec3 aCrush;\n' + sh.vertexShader; }; }
     for (let i = flowers.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = flowers[i]; flowers[i] = flowers[j]; flowers[j] = t; }   // ordre mélangé : la densité éclaircit partout pareil
     const spikeGeo = mergeGeos(spike); spikeGeo.setAttribute('aCenter', new THREE.Float32BufferAttribute(cen, 3)); spikeGeo.setAttribute('aRank', new THREE.Float32BufferAttribute(rnk, 1));
     lupinSpikes = inst(spikeGeo, spikeM, flowers, { cast: false }); lupinSpikes.userData.tint = flowers.map(f => [f[1]._g, f[1]._f]);
     lupinStems = inst(mergeGeos(stem), stemM, flowers.map(f => f[0]), { color: false, cast: false });
+    // état « couché » partagé par l'épi et la tige, et grille pour retrouver vite les lupins proches du véhicule
+    lupAttr = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, flowers.length) * 3), 3); lupAttr.setUsage(THREE.DynamicDrawUsage);
+    spikeGeo.setAttribute('aCrush', lupAttr); lupinStems.geometry.setAttribute('aCrush', lupAttr);
+    lupMats = flowers.map(f => f[0]);
+    lupMats.forEach((m, i) => { const e = m.elements, k = gkey(e[12], e[13], e[14]); let c = lcells.get(k); if (!c) lcells.set(k, c = []); c.push(i); });
   }
 
   // rochers
@@ -840,7 +897,9 @@ export function buildPlanet(anchors, quality = 'high') {
   function sandAt(dir) { const above = heightB(dir.x, dir.y, dir.z) - R; if (above < -0.25 || pathDir(dir) > 0.2) return 0; return 1 - smoothstep(0.8, 2.2, above); }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, sandAt, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, trunkSpots, barkM, treeMeshes, bushMesh, updatePads,
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, sandAt, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, crushLupins, map: MAP, treeDirs, trunkSpots, barkM, treeMeshes, bushMesh, updatePads,
+    /** Nénuphars (pour la faune) : home (direction), off (décalage poussé par la vague) ; padR : rayon de leur surface. */
+    pads: padState, padR: (R - 0.3) * S + 0.012,
     /** Lupins : densité (0 à 1), tige et épi suivent. */
     setLupinDensity(k) { if (lupinSpikes) lupinSpikes.count = lupinStems.count = Math.floor(lupinSpikes.instanceMatrix.count * k); },
     /** Lupins : une couleur par famille, chaque fleur garde sa nuance. */
@@ -951,6 +1010,25 @@ export function leafCluster(count, radius, stretch, size) {
 }
 
 /** Un modèle d'arbre : tronc élancé un peu penché, deux à quatre branches, un bouquet de feuilles au bout de chacune. */
+/**
+ * Tronc irrégulier : il penche un peu, se courbe doucement, s'évase au pied et porte de petites bosses.
+ * Renvoie la géométrie et center(y), le cœur du tronc à la hauteur y (pour y accrocher branches et feuillage).
+ */
+function crookedTrunk(H, r0, r1, r, amp = 1) {
+  const lean = new THREE.Vector3((r() - 0.5) * 0.2, 0, (r() - 0.5) * 0.2);
+  const a1 = r() * Math.PI * 2, a2 = r() * Math.PI * 2, d1 = new THREE.Vector3(Math.cos(a1), 0, Math.sin(a1)), d2 = new THREE.Vector3(Math.cos(a2), 0, Math.sin(a2));
+  const A1 = (0.05 + r() * 0.06) * amp, A2 = (0.02 + r() * 0.025) * amp, f1 = 0.7 + r() * 0.7, ph = r() * 6.28, kb = 2 + Math.floor(r() * 3);
+  const center = y => { const t = y / H; return new THREE.Vector3(0, y, 0).addScaledVector(lean, y).addScaledVector(d1, Math.sin(t * Math.PI * f1) * A1).addScaledVector(d2, Math.sin(t * Math.PI * 2.6 + ph) * A2 * t); };
+  const g = new THREE.CylinderGeometry(r1, r0, H, 7, 9).translate(0, H / 2, 0), P = g.attributes.position;
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), t = y / H, ang = Math.atan2(z, x);
+    // pied évasé, petites bosses (fonction de l'angle et de la hauteur : la couture du cylindre reste fermée)
+    const k = 1 + 0.55 * Math.pow(1 - t, 6) + 0.11 * Math.sin(ang * kb + y * 7 + ph) * Math.sin(y * 13 + ph * 2) + 0.06 * Math.sin(ang * 5 - y * 11);
+    const c = center(y); P.setXYZ(i, c.x + x * k, y, c.z + z * k);
+  }
+  g.computeVertexNormals();
+  return { geo: g, center };
+}
 function treeVariant(seed, quality) {
   let s0 = 977 + seed * 7919; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
   const wood = [], leaves = [], Yv = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion();
@@ -960,15 +1038,15 @@ function treeVariant(seed, quality) {
     return from.clone().addScaledVector(dir, len);
   };
   // tronc élancé, à peine penché ; la couronne commence vers le milieu et monte au-dessus
-  const H = 1.7 + r() * 0.6, lean = new THREE.Vector3((r() - 0.5) * 0.18, 1, (r() - 0.5) * 0.18).normalize();
-  const top = limb(new THREE.Vector3(), lean, H, 0.05, 0.02);
+  const H = 1.7 + r() * 0.6, trunk = crookedTrunk(H, 0.05, 0.02, r);
+  wood.push(trunk.geo); const top = trunk.center(H);
   const nc = 3 + Math.floor(r() * 3), per = quality === 'low' ? 46 : 70;
   for (let c = 0; c < nc; c++) {
     const last = c === nc - 1, y0 = H * (0.4 + 0.6 * c / (nc - 1));
     let tip = top;
     if (!last) {
       const a = r() * Math.PI * 2, dir = new THREE.Vector3(Math.cos(a) * 0.85, 0.55, Math.sin(a) * 0.85).normalize();
-      tip = limb(lean.clone().multiplyScalar(y0), dir, 0.18 + r() * 0.26, 0.022, 0.012);   // courte branche
+      tip = limb(trunk.center(y0), dir, 0.18 + r() * 0.26, 0.022, 0.012);   // courte branche, accrochée au tronc tordu
     }
     const rad = (last ? 0.45 : 0.38 + r() * 0.15) * (1 - 0.12 * c / nc);
     const g = leafCluster(per + (last ? 16 : 0), rad * 1.08, 1.05, 0.17);
@@ -979,12 +1057,12 @@ function treeVariant(seed, quality) {
 /** Un sapin : tronc fin et pâle, cinq à sept étages de feuilles aplatis, de plus en plus petits vers la pointe. */
 function pineVariant(seed, quality) {
   let s0 = 4111 + seed * 1213; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
-  const H = 1.9 + r() * 0.4, trunk = new THREE.CylinderGeometry(0.018, 0.045, H, 6).translate(0, H / 2, 0), leaves = [];
+  const H = 1.9 + r() * 0.4, trunkC = crookedTrunk(H, 0.045, 0.018, r, 0.55), trunk = trunkC.geo, leaves = [];   // sapin : tronc plus droit, mais pas tiré au cordeau
   const tiers = 5 + Math.floor(r() * 3), per = quality === 'low' ? 34 : 52;
   for (let i = 0; i < tiers; i++) {
     const k = i / (tiers - 1), y = H * (0.3 + 0.72 * k), rad = 0.5 - 0.38 * k;
     const g = leafCluster(Math.round(per * (1 - 0.45 * k)), rad, 0.42, 0.15);
-    g.translate((r() - 0.5) * 0.05, y, (r() - 0.5) * 0.05); leaves.push(g);
+    const c = trunkC.center(y); g.translate(c.x + (r() - 0.5) * 0.05, y, c.z + (r() - 0.5) * 0.05); leaves.push(g);
   }
   return { wood: mergeGeos([trunk]), leaves: mergeLeaves(leaves) };
 }

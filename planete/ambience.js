@@ -32,8 +32,8 @@ const walk2 = m => m === 'walk';
 
 export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUniforms, planet, post, quality, avatar, SEA_R }) {
   /* ---------- état ---------- */
-  const now = new Date();
-  const S = { hour: now.getHours() + now.getMinutes() / 60, timeMode: 'auto', target: null, weather: 'clear', weatherMode: 'auto', nextWeather: 60 + Math.random() * 60,
+  // la journée démarre à l'heure réglée (midi par défaut), puis le temps passe
+  const S = { hour: TUNE.ambiance.heure, timeMode: 'auto', target: null, weather: 'clear', weatherMode: 'auto', nextWeather: 60 + Math.random() * 60,
     W: { ...WEATHER.clear }, flash: 0, nextFlash: 5, night: 0 };
   const out = { sun: C('#fff'), sky: C('#fff'), gnd: C('#fff'), zen: C('#fff'), hor: C('#fff'), water: C('#fff'), sh: V(0, 0, 0), lit: V(0, 0, 0), sunI: 0, hemiI: 0, amb: 0, lamp: 0, exp: 1, bloom: 0.4 };
   function sample(h) {
@@ -128,9 +128,9 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
   const tmpC = new THREE.Color(), grey = new THREE.Color(), flashC = new THREE.Color('#e8ecff'), up = new THREE.Vector3(), right = new THREE.Vector3(), fwd = new THREE.Vector3();
   let lastLabel = '';
   function update(dt, t, mode, car, camera) {
-    // heure : cycle complet en 12 minutes ; un choix du menu y amène en douceur puis s'y tient
+    // heure : une journée complète en 10 minutes ; un choix du menu y amène en douceur puis s'y tient
     if (TUNE.ambiance.heureFixe) S.hour = TUNE.ambiance.heure;
-    else if (S.target === null) S.hour = (S.hour + dt * 24 / 720 * TUNE.ambiance.vitesseJour) % 24;
+    else if (S.target === null) S.hour = (S.hour + dt * 24 / 600 * TUNE.ambiance.vitesseJour) % 24;
     else { let d = S.target - S.hour; if (d > 12) d -= 24; if (d < -12) d += 24; S.hour = (S.hour + Math.sign(d) * Math.min(Math.abs(d), dt * 8) + 24) % 24; }
     // météo automatique : change toutes les 1 à 3 minutes
     if (S.weatherMode === 'auto' && (S.nextWeather -= dt) <= 0) {

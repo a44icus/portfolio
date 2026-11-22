@@ -88,7 +88,8 @@ export function makePost(renderer, scene, camera, quality) {
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.45, 1.05);
   composer.addPass(bloom);
   const tiltH = new ShaderPass(TiltShift), tiltV = new ShaderPass(TiltShift), tiltH2 = new ShaderPass(TiltShift), tiltV2 = new ShaderPass(TiltShift);
-  const tilts = quality === 'low' ? [tiltH, tiltV] : [tiltH, tiltV, tiltH2, tiltV2];
+  // 4 passes partout : avec 2 seulement (ancienne version téléphone), un point brillant (paillette du sable) était recopié en petits carrés
+  const tilts = [tiltH, tiltV, tiltH2, tiltV2];
   tilts.forEach(p => composer.addPass(p));
   const grade = new ShaderPass(Grade); composer.addPass(grade);
   composer.addPass(new OutputPass());
@@ -164,7 +165,7 @@ export function makeGroundLeaves(planet, count, spot) {
   const palette = ['#f07a32', '#e8502e', '#d93a2a', '#f2a23a', '#c94a2e', '#ee6aa4', '#e2b83a'].map(c => new THREE.Color(c));
   const CELL = 1, cells = new Map(), L = [];
   const key = p => ((Math.floor(p.x / CELL) + 512) * 1024 + (Math.floor(p.y / CELL) + 512)) * 1024 + (Math.floor(p.z / CELL) + 512);
-  const Y = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4(), dq = new THREE.Quaternion(), sc = new THREE.Vector3(), tmp = new THREE.Vector3(), ax = new THREE.Vector3();
+  const Y = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4(), dq = new THREE.Quaternion(), sc = new THREE.Vector3(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), ax = new THREE.Vector3();
   const rest = dir => Math.max(planet.heightDir(dir), planet.waterR) + (planet.onPlaza(dir, 0) ? 0.05 : 0.016);
   const lay = (l, dir) => {   // pose à plat, orientation au hasard
     l.p.copy(dir).multiplyScalar(rest(dir));
@@ -180,20 +181,27 @@ export function makeGroundLeaves(planet, count, spot) {
   const active = new Set();
   return {
     mesh, max: count,
-    /** car : position de la voiture ; speed : vitesse ; on : la voiture roule au sol */
-    update(dt, car, speed, on) {
+    /** car : position de la voiture ; speed : vitesse ; on : la voiture roule au sol ; hover : l'aéroglisseur glisse (il chasse les feuilles posées sur l'eau) */
+    update(dt, car, speed, on, hover = false) {
       let dirty = false;
-      if (on && Math.abs(speed) > 0.8) {
-        const reach = 0.5 + Math.abs(speed) * 0.07, cx = Math.floor(car.x / CELL), cy = Math.floor(car.y / CELL), cz = Math.floor(car.z / CELL);
+      if ((on || hover) && Math.abs(speed) > (on ? 0.8 : 0.4)) {
+        const reach = (on ? 0.5 : 0.75) + Math.abs(speed) * (on ? 0.07 : 0.09), cx = Math.floor(car.x / CELL), cy = Math.floor(car.y / CELL), cz = Math.floor(car.z / CELL);
         for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
           const k = ((cx + a + 512) * 1024 + (cy + b + 512)) * 1024 + (cz + c + 512), cell = cells.get(k); if (!cell) continue;
           for (let j = cell.length - 1; j >= 0; j--) {
             const l = L[cell[j]]; if (l.p.distanceTo(car) > reach) continue;
             const up = tmp.copy(l.p).normalize();
+            const onWater = l.p.length() < planet.waterR + 0.03;
+            if (hover && !on && !onWater) continue;   // l'aéroglisseur ne soulève que les feuilles sur l'eau
             ax.copy(l.p).sub(car).addScaledVector(up, -ax.copy(l.p).sub(car).dot(up));
             const away = ax.lengthSq() > 1e-6 ? ax.normalize() : ax.set(1, 0, 0);
-            l.v.copy(away).multiplyScalar(0.5 + Math.abs(speed) * (0.12 + Math.random() * 0.15)).addScaledVector(up, 0.9 + Math.abs(speed) * (0.1 + Math.random() * 0.14));
-            l.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(5 + Math.random() * 9);
+            if (onWater && !on) {   // sur l'eau : poussées de côté par le souffle, en rasant la surface et en tournoyant
+              l.v.copy(away).multiplyScalar(0.7 + Math.abs(speed) * (0.16 + Math.random() * 0.12)).addScaledVector(up, 0.35 + Math.random() * 0.45);
+              l.w.copy(up).multiplyScalar((Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 7)).add(tmp2.set(Math.random() - 0.5, 0, Math.random() - 0.5).multiplyScalar(3));
+            } else {
+              l.v.copy(away).multiplyScalar(0.5 + Math.abs(speed) * (0.12 + Math.random() * 0.15)).addScaledVector(up, 0.9 + Math.abs(speed) * (0.1 + Math.random() * 0.14));
+              l.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(5 + Math.random() * 9);
+            }
             l.fly = true; active.add(l); cell.splice(j, 1);
           }
         }

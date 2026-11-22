@@ -71,7 +71,22 @@ body.nudge .bottom{ bottom:50%; transform:translate(-50%, 50%) scale(1.3); }
 body.nudge #walkBtn{ animation:nudge 1.6s ease-in-out infinite; white-space:nowrap; }
 @keyframes nudge{ 0%,100%{ box-shadow:0 0 0 0 rgba(217,255,74,.7), 0 10px 30px -10px rgba(217,255,74,.6); } 50%{ box-shadow:0 0 0 18px rgba(217,255,74,0), 0 10px 40px -6px rgba(217,255,74,.9); } }
 @media (prefers-reduced-motion:reduce){ body.nudge #walkBtn{ animation:none; } }
-.hint{ position:fixed; left:50%; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 64px); transform:translateX(-50%); z-index:19; font-family:var(--mono); font-size:.72rem; letter-spacing:.06em; color:var(--muted); text-align:center; white-space:nowrap; pointer-events:none; text-shadow:0 1px 6px #000; }
+.hint{ position:fixed; left:50%; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 64px); transform:translateX(-50%); z-index:19; pointer-events:none;
+  display:flex; flex-wrap:wrap; justify-content:center; gap:.35rem 1rem; max-width:min(980px, calc(100vw - 470px)); width:max-content;   /* sans chevaucher la mini-carte */
+  padding:.5rem 1rem; border-radius:18px; background:rgba(12,10,30,.66); border:1px solid rgba(255,255,255,.16);
+  -webkit-backdrop-filter:blur(10px) saturate(1.2); backdrop-filter:blur(10px) saturate(1.2); box-shadow:0 6px 24px rgba(0,0,0,.25);
+  font-family:var(--ff); font-size:.86rem; font-weight:600; color:var(--ink); text-align:center; }
+.hint:empty{ display:none; }
+.hint{ transition:opacity .8s ease; }
+.hint.fade{ opacity:0; }
+/* écran tactile : au-dessus du joystick et des boutons (puis elle s'efface) */
+body.touch .hint{ bottom:calc(max(18px, env(safe-area-inset-bottom)) + 230px); }
+.hint .it{ white-space:nowrap; display:inline-flex; align-items:center; }
+.hint .x{ pointer-events:auto; cursor:pointer; position:absolute; top:-.55rem; right:-.55rem; width:1.45rem; height:1.45rem; border-radius:50%; display:grid; place-items:center;
+  background:#2a2350; border:1px solid rgba(255,255,255,.3); color:#fff; font:700 .95rem/1 var(--ff); padding:0; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+.hint .x:hover{ background:#3c3370; }
+.hint .k{ font-family:var(--mono); font-size:.74rem; font-weight:700; color:#fff; margin-right:.4rem; padding:.1rem .45rem; border-radius:6px;
+  background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); border-bottom-width:2px; }
 
 /* invite près d'un pavillon (mode à pied) */
 .prompt{ position:fixed; left:50%; top:22%; transform:translate(-50%,10px); z-index:21; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; }
@@ -151,7 +166,8 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   .panel{ top:auto; height:78vh; width:100%; border-left:0; border-top:1px solid var(--line); border-radius:22px 22px 0 0; transform:translateY(105%); }
   .panel.on{ transform:none; }
   .chip .lbl{ display:none; }
-  .hint{ font-size:.65rem; white-space:normal; width:90vw; }
+  .hint{ font-size:.76rem; max-width:94vw; gap:.3rem .7rem; padding:.45rem .7rem; }
+  .hint .k{ font-size:.68rem; }
 }
 @media (prefers-reduced-motion:reduce){ .panel,.intro,.isl{ transition:none; } }
 </style>
@@ -179,7 +195,7 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   setInterval(paint, 1000);
   var BUILD = 'v2026-11-22c';
   // fichiers attendus : ceux qui manquent dans la liste des téléchargements terminés sont les suspects
-  var WANT = ['app.js', 'world.js', 'props.js', 'look.js', 'ambience.js', 'audio.js', 'tune.js', 'three.module.min.js', 'OrbitControls.js', 'EffectComposer.js', 'RenderPass.js', 'UnrealBloomPass.js', 'ShaderPass.js', 'OutputPass.js', 'MaskPass.js', 'Pass.js', 'CopyShader.js', 'LuminosityHighPassShader.js', 'OutputShader.js', 'FontLoader.js', 'TextGeometry.js', 'BufferGeometryUtils.js', 'site-data.js', 'content.js', 'transition.js', 'maintenance.js'];
+  var WANT = ['app.js', 'world.js', 'fauna.js', 'props.js', 'look.js', 'ambience.js', 'audio.js', 'tune.js', 'three.module.min.js', 'OrbitControls.js', 'EffectComposer.js', 'RenderPass.js', 'UnrealBloomPass.js', 'ShaderPass.js', 'OutputPass.js', 'MaskPass.js', 'Pass.js', 'CopyShader.js', 'LuminosityHighPassShader.js', 'OutputShader.js', 'FontLoader.js', 'TextGeometry.js', 'BufferGeometryUtils.js', 'site-data.js', 'content.js', 'transition.js', 'maintenance.js'];
   var files = function () {
     var got = {}; try { performance.getEntriesByType('resource').forEach(function (r) { var n = r.name.split('?')[0].split('/').pop(); got[n] = Math.round(r.duration); }); } catch (e) { /* rien */ }
     var miss = WANT.filter(function (n) { return !(n in got); });
@@ -213,7 +229,7 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
     <svg viewBox="0 0 180.38 131.63" aria-hidden="true"><path fill="#f6406b" d="M178.91,80.13c0-.09.03-.18.03-.27V7c0-2.38-1.93-4.31-4.31-4.31s-4.31,1.93-4.31,4.31v47.92c-8.81-12.63-23.09-20.33-39.41-20.51-4.18-.05-8.36.52-12.37,1.68-14.9,4.28-25.53,14.34-31.03,26.52-1.49,3.3-1.19,7.14.66,10.25l3.8,6.38c1-12.24,7.69-23.85,19.02-30.6,6.16-3.67,13.04-5.55,20.03-5.55,3.24,0,6.5.4,9.71,1.22,10.17,2.58,18.72,8.96,24.09,17.97,3.63,6.09,5.55,13.04,5.54,20.09-.01,13.77-7.36,26.7-19.18,33.74-9.01,5.37-19.57,6.91-29.74,4.33-10.17-2.58-18.72-8.96-24.09-17.97-.43-.73-13.99-23.64-13.99-23.64,0,.03-17.78-29.83-17.78-29.83-.36-.59-9-14.52-27.88-14.52S5.75,46.22,5.75,61.79s14.76,19.95,26.61,23.47c1.37.41,5.83,1.77,5.83,1.77,14.18,4.4,22.86,7.52,22.86,15.91,0,10.66-10.81,18.7-25.15,18.7s-21.85-10.01-22.17-10.49c-1.29-1.99-3.95-2.55-5.94-1.27-2,1.29-2.58,3.96-1.29,5.96.38.59,9.52,14.42,29.4,14.42s33.77-11.74,33.77-27.32-14.71-19.72-28.93-24.14c0,0-4.52-1.39-5.93-1.81-12.72-3.77-20.44-6.67-20.44-15.2,0-10.83,9.82-18.69,23.35-18.69s20.26,9.96,20.49,10.34c0,0,31.68,53.33,31.75,53.44,6.55,10.99,16.98,18.77,29.38,21.91,3.93.99,7.9,1.49,11.85,1.49,8.52,0,16.91-2.29,24.42-6.77,14.41-8.58,23.37-24.35,23.39-41.14,0-.75-.04-1.5-.07-2.25Z"/></svg><span class="lbl">Revenir au site</span>
   </a>
   <div class="rightbar">
-  <button class="chip ghost" id="soundBtn" type="button" title="Couper le son" aria-label="Son">🔊</button>
+  <button class="chip ghost" id="soundBtn" type="button" title="Couper le son" aria-label="Son"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19.5 7.5C19.5 7.5 21 9 21 11.5C21 14 19.5 15.5 19.5 15.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13.8571V10.1429C2 9.03829 2.89543 8.14286 4 8.14286H6.9C7.09569 8.14286 7.28708 8.08544 7.45046 7.97772L13.4495 4.02228C14.1144 3.5839 15 4.06075 15 4.85714V19.1429C15 19.9392 14.1144 20.4161 13.4495 19.9777L7.45046 16.0223C7.28708 15.9146 7.09569 15.8571 6.9 15.8571H4C2.89543 15.8571 2 14.9617 2 13.8571Z" stroke="currentColor" stroke-width="1.5"/></svg></button>
   <button class="chip ghost" id="tuneBtn" type="button" title="Réglages" aria-label="Réglages">⚙</button>
   <button class="chip ghost" id="ambBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ambMenu"><span id="ambIcon">☀</span><span id="ambTime">12:00</span></button>
   <button class="chip ghost" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false"><span>Zones</span> ☰</button>
@@ -267,7 +283,7 @@ window.__planetStep && window.__planetStep('Chargement des modules du jeu');
 import('./app.js').catch(async e => {
   // on cherche lequel coince en les important un par un
   let culprit = '';
-  for (const m of ['three', './world.js', './look.js', './props.js', './ambience.js', './audio.js', './tune.js']) {
+  for (const m of ['three', './world.js', './look.js', './props.js', './ambience.js', './audio.js', './tune.js', './fauna.js']) {
     try { await import(m); } catch (e2) { culprit = ' — module en cause : ' + m + ' (' + (e2 && e2.message || e2) + ')'; break; }
   }
   window.__planetEarly && window.__planetEarly('import de app.js : ' + (e && e.message || e) + culprit);

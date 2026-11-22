@@ -12,6 +12,23 @@ import { leafCluster, LEAF_MAT, fadeNearCamera, SEA_R } from './world.js';
 
 const FONT_URL = new URL('./vendor/three/fonts/helvetiker_bold.typeface.json', import.meta.url).href;   // servie par le site (pas de CDN)
 const Y = new THREE.Vector3(0, 1, 0);
+
+/* ---------- logo « sd » (même tracé que sur le site) : autocollant sur les véhicules ---------- */
+const LOGO_PATH = 'M178.91,80.13c0-.09.03-.18.03-.27V7c0-2.38-1.93-4.31-4.31-4.31s-4.31,1.93-4.31,4.31v47.92c-8.81-12.63-23.09-20.33-39.41-20.51-4.18-.05-8.36.52-12.37,1.68-14.9,4.28-25.53,14.34-31.03,26.52-1.49,3.3-1.19,7.14.66,10.25l3.8,6.38c1-12.24,7.69-23.85,19.02-30.6,6.16-3.67,13.04-5.55,20.03-5.55,3.24,0,6.5.4,9.71,1.22,10.17,2.58,18.72,8.96,24.09,17.97,3.63,6.09,5.55,13.04,5.54,20.09-.01,13.77-7.36,26.7-19.18,33.74-9.01,5.37-19.57,6.91-29.74,4.33-10.17-2.58-18.72-8.96-24.09-17.97-.43-.73-13.99-23.64-13.99-23.64,0,.03-17.78-29.83-17.78-29.83-.36-.59-9-14.52-27.88-14.52S5.75,46.22,5.75,61.79s14.76,19.95,26.61,23.47c1.37.41,5.83,1.77,5.83,1.77,14.18,4.4,22.86,7.52,22.86,15.91,0,10.66-10.81,18.7-25.15,18.7s-21.85-10.01-22.17-10.49c-1.29-1.99-3.95-2.55-5.94-1.27-2,1.29-2.58,3.96-1.29,5.96.38.59,9.52,14.42,29.4,14.42s33.77-11.74,33.77-27.32-14.71-19.72-28.93-24.14c0,0-4.52-1.39-5.93-1.81-12.72-3.77-20.44-6.67-20.44-15.2,0-10.83,9.82-18.69,23.35-18.69s20.26,9.96,20.49,10.34c0,0,31.68,53.33,31.75,53.44,6.55,10.99,16.98,18.77,29.38,21.91,3.93.99,7.9,1.49,11.85,1.49,8.52,0,16.91-2.29,24.42-6.77,14.41-8.58,23.37-24.35,23.39-41.14,0-.75-.04-1.5-.07-2.25Z';
+const LOGO_TEX = {};
+/** Autocollant du logo, largeur w (la hauteur suit les proportions du logo), couleur au choix. Plan tourné vers +z. */
+function logoDecal(w, color = '#f6406b') {
+  if (!LOGO_TEX[color]) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 374;
+    const g = c.getContext('2d'), k = 480 / 180.38;
+    g.translate(16, (374 - 131.63 * k) / 2); g.scale(k, k);
+    g.fillStyle = color; g.fill(new Path2D(LOGO_PATH));
+    const tx = LOGO_TEX[color] = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 4;
+  }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 374 / 512), new THREE.MeshStandardMaterial({ map: LOGO_TEX[color], transparent: true, alphaTest: 0.35, roughness: 0.45, emissive: color, emissiveIntensity: 0.15, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  m.renderOrder = 2;
+  return m;
+}
 const WOOD = '#de8a4e', WOOD_DARK = '#a8583a', CREAM = '#fbe9d7';
 
 /** Les mots posés sur chaque zone (la police n'a pas d'accents : on ajoute celui de STÉPHANE). */
@@ -88,6 +105,7 @@ export function makeBiplane() {
   // deux ailes, la supérieure plus large et un peu avancée ; extrémités roses
   box(2.1, 0.05, 0.42, cream, 0, -0.14, 0.25, 0.02);
   box(2.35, 0.05, 0.44, cream, 0, 0.5, 0.32, 0.02);
+  [-0.55, 0.55].forEach(x => { const lg = logoDecal(0.42); lg.rotation.set(-Math.PI / 2, 0, Math.PI); lg.position.set(x, 0.527, 0.32); body.add(lg); });   // logos sur l'aile supérieure
   [-1, 1].forEach(sd => { box(0.22, 0.055, 0.43, pink, sd * 1.07, 0.5, 0.32, 0.02); box(0.2, 0.055, 0.41, pink, sd * 0.96, -0.14, 0.25, 0.02); });
   // haubans entre les ailes, mâts de cabane
   [-0.8, 0.8].forEach(x => { bar([x, -0.12, 0.14], [x, 0.48, 0.2]); bar([x, -0.12, 0.38], [x, 0.48, 0.44]); bar([x, -0.12, 0.14], [x, 0.48, 0.44], 0.008); });
@@ -169,6 +187,7 @@ export function makeCar() {
   // roue de secours sur le hayon
   const tyreGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.17, 22).rotateZ(Math.PI / 2), lugGeo = new THREE.BoxGeometry(0.18, 0.035, 0.05);
   const spare = new THREE.Group(); spare.position.set(0, 0.55, -0.67); body.add(spare);
+  { const lg = logoDecal(0.15, '#ffffff'); lg.rotation.y = Math.PI; lg.position.z = -0.067; spare.add(lg); }   // logo blanc, discret, sur la roue de secours
   { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 20).rotateX(Math.PI / 2), black); spare.add(t); const h = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.13, 10).rotateX(Math.PI / 2), bronze); spare.add(h); }
   // deux échappements sous le pare-chocs arrière ; flammes du turbo
   const flames = [];
@@ -206,6 +225,17 @@ export function makeCar() {
     const ring = new THREE.Mesh(g, rubber); ring.position.y = 0.2; skirt.add(ring);
     const floor = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.1, 24).scale(1, 1, 1.38), rubber); floor.position.y = 0.24; skirt.add(floor);
     const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.024, 6, 40).rotateX(Math.PI / 2).scale(1, 1, 1.38), mat('#38d2ff')); stripe.position.y = 0.3; skirt.add(stripe);
+    // logo sur chaque flanc de la jupe, plaqué sur sa courbure (le boudin est rond en hauteur et ovale en longueur)
+    [-1, 1].forEach(sd => {
+      const lg = logoDecal(0.3); lg.geometry = new THREE.PlaneGeometry(0.3, 0.3 * 374 / 512, 10, 6);
+      const P = lg.geometry.attributes.position, TR = 0.13, RX = 0.44 + TR, RZ = (0.44 + TR) * 1.38;
+      for (let i = 0; i < P.count; i++) {
+        const u = P.getX(i), v = P.getY(i);   // u : le long de la jupe, v : en hauteur
+        P.setZ(i, (Math.sqrt(Math.max(0, TR * TR - v * v)) - TR) + RX * (Math.sqrt(Math.max(0, 1 - (u / RZ) ** 2)) - 1) + 0.004);
+      }
+      lg.geometry.computeVertexNormals();
+      lg.rotation.y = sd * Math.PI / 2; lg.position.set(sd * RX, 0.2, 0); skirt.add(lg);
+    });
   }
   const fan = new THREE.Group(); fan.position.set(0, 0.55, -0.5); body.add(fan);
   const blades = new THREE.Group();
@@ -671,7 +701,7 @@ export async function buildZones(planet, sections) {
       const e = b.e;
       // planches
       for (let th = b.t0; th <= b.t1; th += 0.24 / SEA_R) {
-        const d = frame(e, th, 0), top = b.deck(th) + 0.07, w = 1.65 + Math.random() * 0.2;
+        const d = frame(e, th, 0), top = b.deck(th) + 0.07, w = 2.05 + Math.random() * 0.2;   // un peu plus large qu'avant
         {   // incline la planche selon la pente
           const pa = e.point(th - 0.05 / SEA_R).multiplyScalar(b.deck(th - 0.05 / SEA_R)), pb = e.point(th + 0.05 / SEA_R).multiplyScalar(b.deck(th + 0.05 / SEA_R));
           fwd.copy(pb).sub(pa).normalize(); right.crossVectors(d, fwd).normalize(); up.crossVectors(fwd, right).normalize();
@@ -680,7 +710,7 @@ export async function buildZones(planet, sections) {
         planks.push([m4.compose(p.copy(d).multiplyScalar(top - 0.035), q, sc.set(w, 1, 1)).clone(), new THREE.Color(WOOD).multiplyScalar(0.85 + Math.random() * 0.25)]);
       }
       // garde-corps : poteaux tous les mètres, deux lisses entre eux
-      for (const side of [-0.84, 0.84]) {
+      for (const side of [-1.05, 1.05]) {
         let prev = null;
         for (let th = b.t0 + 0.3 / SEA_R; th <= b.t1 - 0.3 / SEA_R + 1e-6; th += 1.0 / SEA_R) {
           const d = frame(e, th, side), base = b.deck(th) + 0.07, foot = d.clone().multiplyScalar(base);
@@ -694,7 +724,7 @@ export async function buildZones(planet, sections) {
         }
       }
       // piles dans l'eau
-      for (let th = b.t0 + 1.2 / SEA_R; th <= b.t1 - 1.2 / SEA_R; th += 2.4 / SEA_R) for (const side of [-0.7, 0.7]) {
+      for (let th = b.t0 + 1.2 / SEA_R; th <= b.t1 - 1.2 / SEA_R; th += 2.4 / SEA_R) for (const side of [-0.88, 0.88]) {
         const d = frame(e, th, side), top = b.deck(th) - 0.02, bed = Math.min(planet.heightDir(d), planet.waterR - 0.4), L = top - bed;
         if (L < 0.15 || !planet.isWet(d)) continue;
         piles.push(m4.compose(p.copy(d).multiplyScalar((top + bed) / 2), q, sc.set(1, L, 1)).clone());

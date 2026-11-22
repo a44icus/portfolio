@@ -4,7 +4,8 @@
    (bouton « Copier les réglages ») pour être transmises telles quelles.
    ============================================================================ */
 export const DEFAULTS = {
-  ambiance: { heureFixe: true, heure: 12.4, vitesseJour: 1, meteo: 'clear', vent: 2.1, brume: 1 },
+  ambiance: { heureFixe: false, heure: 12.4,   // le temps passe : une journée en 10 minutes (vitesse 1)
+    vitesseJour: 1, meteo: 'clear', vent: 2.1, brume: 1 },
   lumiere: {
     soleil: 1, ciel: 1, ambiante: 1, exposition: 1,
     teinteOmbres: '#9466d1', forceTeinteOmbres: 0,
@@ -15,13 +16,16 @@ export const DEFAULTS = {
   sable: { couleur: '#fee09f', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
   herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
-    jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
+    jaune: '#c9b52e', olive: '#63bb69', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#feecf2' },
   feuilles: { taille: 0.9, quantite: 0.69 },
   lupins: { densite: 1, taille: 0.95, hauteur: 0.9, vent: 0.7, fleurs: 0.88, tailleFleurs: 1.05, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.12, duree: 1.4, couleurDebut: '#ff6666', couleurMilieu: '#0008ff', couleurFin: '#5b28e6', milieu: 0.4, eclat: 0.55 },
   voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 30.5, saut: 1.7, raideur: 0.9, paillettes: 0.55, eclatPaillettes: 3 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
   son: { actif: true, general: 0.51, musique: 0.45, ambiance: 0.7, vehicules: 0.17, effets: 0.8 },
+  animaux: { taille: 1, lapins: 0.7, crabes: 0.55, tortues: 0.85, grenouilles: 0.7, martins: 0.7, colibris: 1, papillons: 1, abeilles: 0.85, poissons: 1, moucherons: 0.45,
+    // nombre d'individus (sur téléphone, environ deux tiers)
+    nombre: { lapins: 8, crabes: 8, tortues: 8, grenouilles: 6, martins: 3, colibris: 5, papillons: 15, abeilles: 15, poissons: 18, moucherons: 48 } },
 };
 const KEY = 'planete-reglages';
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -31,6 +35,8 @@ try { const saved = localStorage.getItem(KEY); if (saved) merge(TUNE, JSON.parse
 // anciennes valeurs par défaut enregistrées telles quelles : on prend les nouvelles
 if (TUNE.voiture.gravite === 17 || TUNE.voiture.gravite === 11) TUNE.voiture.gravite = DEFAULTS.voiture.gravite;
 if (TUNE.voiture.saut === 5.6) TUNE.voiture.saut = DEFAULTS.voiture.saut;
+// l'heure était figée par défaut et ce réglage a été enregistré tel quel : une fois, on laisse le temps passer
+try { if (!localStorage.getItem('planete-jour10')) { TUNE.ambiance.heureFixe = false; localStorage.setItem('planete-jour10', '1'); if (localStorage.getItem(KEY)) localStorage.setItem(KEY, JSON.stringify(TUNE)); } } catch (e) { TUNE.ambiance.heureFixe = false; }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(TUNE)); } catch (e) { /* rien */ } };
 
 /** Seuls les réglages qui diffèrent des valeurs d'origine (pour un export lisible). */
@@ -54,6 +60,7 @@ export async function toggleTunePanel(hooks) {
   gui = new GUI({ title: 'Réglages de la planète', width: 300 });
   Object.assign(gui.domElement.style, { top: 'calc(max(14px, env(safe-area-inset-top)) + 54px)', right: '16px', maxHeight: 'calc(100vh - 160px)', overflowY: 'auto', zIndex: 45 });
   const ch = (c, extra) => c.onChange(() => { save(); hooks.apply(); if (extra) extra(); });
+  const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
 
   const fA = gui.addFolder('Ambiance');
   ch(fA.add(TUNE.ambiance, 'heureFixe').name('Heure figée'));
@@ -160,9 +167,23 @@ export async function toggleTunePanel(hooks) {
   ch(fC.add(TUNE.camera, 'hauteur', 0.5, 20, 0.1).name('Hauteur'));
   ch(fC.add(TUNE.camera, 'focale', 15, 80, 1).name('Angle de vue'));
 
-  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fN, fC].forEach(f => f.close());
+  // animaux : taille (générale et par espèce) et bouton pour aller voir l'un d'eux (chaque clic passe au suivant)
+  const fZ = gui.addFolder('Animaux');
+  ch(fZ.add(TUNE.animaux, 'taille', 0.3, 3, 0.05).name('Taille (tous)'));
+  const SPECIES = [['lapins', 'Lapins', 'un lapin'], ['crabes', 'Crabes', 'un crabe'], ['tortues', 'Tortues', 'une tortue'], ['grenouilles', 'Grenouilles', 'une grenouille'],
+    ['martins', 'Martins-pêcheurs', 'un martin-pêcheur'], ['colibris', 'Colibris', 'un colibri'], ['papillons', 'Papillons', 'un papillon'], ['abeilles', 'Abeilles', 'une abeille'],
+    ['poissons', 'Poissons', 'un poisson'], ['moucherons', 'Moucherons', 'des moucherons']];
+  const go = {};
+  const MAXN = { lapins: 24, crabes: 24, tortues: 14, grenouilles: 16, martins: 6, colibris: 14, papillons: 40, abeilles: 42, poissons: 45, moucherons: 100 };
+  SPECIES.forEach(([k, n, one]) => {
+    ch(fZ.add(TUNE.animaux.nombre, k, 0, MAXN[k], 1).name('Nombre : ' + n.toLowerCase() + (k === 'moucherons' ? ' (nuées)' : '')));
+    ch(fZ.add(TUNE.animaux, k, 0.3, 3, 0.05).name('Taille : ' + n.toLowerCase()));
+    go[k] = () => { const r = hooks.locate && hooks.locate(k); if (r) toast(r); };
+    fZ.add(go, k).name('📍 Voir ' + one);
+  });
 
-  const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
+  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fN, fC, fZ].forEach(f => f.close());
+
   const actions = {
     copier() {
       const txt = JSON.stringify(changes(), null, 2);

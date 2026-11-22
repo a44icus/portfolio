@@ -9,6 +9,7 @@ import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, makeBiplane, buildZones, PAINT } from './props.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, makeTireTracks, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
+import { makeFauna } from './fauna.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
 import { SAND, GRASS, TREE, BUSH, LUPIN, WIND } from './world.js';
@@ -39,10 +40,10 @@ const canvas = $('#scene');
 // l'anticrénelage est fait par le post-traitement (MSAA) : inutile de le payer deux fois
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); window.__planetFail && window.__planetFail('Le processeur graphique a lâché (mémoire). Recharge la page.'); });
-const PR = Math.min(devicePixelRatio, quality === 'low' ? 1.3 : 1.6);
+const PR = Math.min(devicePixelRatio, quality === 'low' ? 1.1 : 1.6);   // téléphone : définition modérée (il chauffait vite)
 renderer.setPixelRatio(PR);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = quality === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;   // ombres douces trop coûteuses sur téléphone
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
@@ -130,6 +131,8 @@ const tracks = makeTireTracks(quality === 'low' ? 700 : 1400); scene.add(tracks.
 const trackLast = [new THREE.Vector3(), new THREE.Vector3()], trackOn = [false, false], trackPt = new THREE.Vector3(), trackDir = new THREE.Vector3();
 const trailHeads = [new THREE.Vector3(), new THREE.Vector3()], trailSide = new THREE.Vector3();
 const spray = makeSpray(quality === 'low' ? 70 : 140); scene.add(spray.mesh);
+// faune discrète (lapins, crabes, papillons, martins-pêcheurs, tortues, poissons) : visible et animée seulement en conduite
+const fauna = makeFauna(planet, quality); scene.add(fauna.group); stylizeTree(fauna.group, { cast: quality !== 'low', receive: true });
 // la caméra part face au pavillon « Profil »
 camera.position.copy(SECTIONS[0].dir).multiplyScalar(innerWidth / innerHeight < 0.8 ? 132 : 98).addScaledVector(new THREE.Vector3(0, 1, 0), 6);
 
@@ -303,9 +306,10 @@ function spring(xo, xk, vo, vk, target, k, c, dt) { for (let n = Math.ceil(dt * 
 // sur l'eau, on glisse à la surface (en aéroglisseur) ; sur terre, on roule sur le sol
 const WATER_R = planet.waterR + 0.02;
 const driveR = dir => Math.max(planet.heightDir(dir), WATER_R, planet.bridgeR(dir, P.r));   // sous un pont, l'aéroglisseur passe dessous
-const RAIL = 0.42, CAR = TUNE.voiture;
+const RAIL = 0.63, CAR = TUNE.voiture;   // écart max du centre de la voiture sur un pont (garde-corps à 1,05)
 let boostTouch = false;
 const crushPts = [0, 1, 2, 3].map(() => new THREE.Vector3());
+const lupPts = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
 // la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
 const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; } };
 const keys = new Set();
@@ -324,12 +328,25 @@ const joy = { x: 0, y: 0 };
 const gpad = { x: 0, y: 0, boost: false, jump: false, on: false, prev: [] };
 let near = null;
 const hintEl = $('#hint'), walkBtn = $('#walkBtn'), promptEl = $('#prompt');
+/** Aide des commandes : chaque touche en pastille, suivie de son action. */
 function setHint() {
-  hintEl.textContent = mode === 'orbit'
-    ? gpad.on ? 'Stick gauche : tourner la planète · stick droit : zoomer · A : ouvrir la zone visée · Start : atterrir' : (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
-    : gpad.on ? 'Stick ou gâchettes : conduire · A : sauter · B / RB : turbo · Y : redresser · X : ouvrir la zone · Start : décoller'
-    : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches · Maj : turbo · Espace : sauter · R : redresser · molette : recul · E : ouvrir la zone');
+  const H = mode === 'orbit'
+    ? gpad.on ? [['Stick G', 'tourner la planète'], ['Stick D', 'zoomer'], ['A', 'ouvrir la zone visée'], ['Start', 'atterrir']]
+      : touch ? [['Glisser', 'tourner'], ['Pincer', 'zoomer'], ['Toucher', 'ouvrir une zone']] : [['Glisser', 'tourner'], ['Molette', 'zoomer'], ['Clic', 'ouvrir une zone']]
+    : gpad.on ? [['Stick / gâchettes', 'conduire'], ['A', 'sauter'], ['B / RB', 'turbo'], ['Y', 'redresser'], ['X', 'ouvrir la zone'], ['Start', 'décoller']]
+      : touch ? [['Joystick', 'conduire'], ['Turbo', 'accélérer'], ['Saut', 'sauter'], ['Cercle', 'roule dedans pour ouvrir la zone']]
+        : [['ZQSD / ↑↓←→', 'conduire'], ['Maj', 'turbo'], ['Espace', 'sauter'], ['R', 'redresser'], ['Molette', 'recul'], ['E', 'ouvrir la zone']];
+  let closed = false; try { closed = localStorage.getItem('planete-aide-fermee') === '1'; } catch (e) { /* rien */ }
+  hintEl.innerHTML = closed ? '' : H.map(([k, t]) => `<span class="it"><span class="k">${k}</span>${t}</span>`).join('')
+    + (touch ? '' : '<span class="it"><span class="k">H</span>masquer</span>') + '<button class="x" type="button" aria-label="Fermer l’aide des commandes" title="Fermer (H pour la rouvrir)">×</button>';
+  // sur écran tactile, l'aide s'efface après quelques secondes (elle masquerait la scène)
+  hintEl.classList.remove('fade'); clearTimeout(setHint.t);
+  if (touch) setHint.t = setTimeout(() => hintEl.classList.add('fade'), 8000);
 }
+// fermer l'aide (croix) ; la touche H la rouvre ou la referme
+const toggleHint = close => { try { if (close) localStorage.setItem('planete-aide-fermee', '1'); else localStorage.removeItem('planete-aide-fermee'); } catch (e) { /* rien */ } setHint(); };
+hintEl.addEventListener('click', e => { if (e.target.closest('.x')) { e.stopPropagation(); toggleHint(true); } });
+addEventListener('keydown', e => { if ((e.key === 'h' || e.key === 'H') && !(e.target.closest && e.target.closest('input, textarea'))) toggleHint(hintEl.innerHTML !== ''); });
 let hasLanded = false;
 /** Au bout de 15 s sans avoir atterri, le bouton « Atterrir » vient au centre de l'écran. */
 function nudgeLanding() { if (!hasLanded && mode === 'orbit') { document.body.classList.add('nudge'); walkBtn.textContent = 'Atterrir et prendre le volant'; } }
@@ -422,13 +439,13 @@ function stepWalk(dt) {
     const cb = planet.bridgeAt(P.dir), latCur = cb && P.r > cb.top - 0.3 ? cb.lat : 9;
     const nb = planet.bridgeAt(next);
     if (nb && P.r > nb.top - 0.3 && nb.th > nb.b.t0 + 0.3 / SEA_R && nb.th < nb.b.t1 - 0.3 / SEA_R) {
-      if (Math.abs(latCur) <= 0.84 && Math.abs(nb.lat) > RAIL) {
+      if (Math.abs(latCur) <= 1.05 && Math.abs(nb.lat) > RAIL) {
         const e = nb.b.e, th = nb.th, sd = Math.sign(nb.lat);
         const tg = e.point(th + 0.3 / SEA_R).sub(e.point(th - 0.3 / SEA_R)).normalize(); if (tg.dot(P.fwd) * Math.sign(P.speed || 1) < 0) tg.negate();
         next.copy(e.point(th, sd * RAIL));
         P.fwd.lerp(tg.multiplyScalar(Math.sign(P.speed || 1)), 0.2).normalize(); P.mv.copy(P.fwd);
         P.speed *= 0.97;
-      } else if (Math.abs(latCur) > 0.84 && Math.abs(nb.lat) <= 0.84) { next.copy(P.dir); P.speed *= -0.3; }
+      } else if (Math.abs(latCur) > 1.05 && Math.abs(nb.lat) <= 1.05) { next.copy(P.dir); P.speed *= -0.3; }
     }
     const gNext = driveR(next);
     if (gNext - P.r <= 0.42) {   // les pentes passent, une falaise non
@@ -515,6 +532,14 @@ function stepWalk(dt) {
     avatar.updateMatrixWorld(true);
     avatar.userData.wheels.forEach((w, i) => avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)));
     planet.crushGrass(crushPts, 0.2, planet.waterUniforms.uTime.value + 0.001);
+  }
+  // les lupins se couchent au passage du véhicule (voiture ou aéroglisseur), à l'opposé de lui
+  if (P.ground && Math.abs(P.speed) > 0.3) {
+    avatar.updateMatrixWorld(true);
+    avatar.userData.wheels.forEach((w, i) => avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)));
+    lupPts[4].copy(avatar.position);
+    for (let i = 0; i < 4; i++) lupPts[i].copy(crushPts[i]);
+    planet.crushLupins(lupPts, 0.38 * TUNE.voiture.taille, planet.waterUniforms.uTime.value + 0.001, avatar.position);
   }
   // traces de pneus dans le sable (roues arrière), qui s'effacent doucement
   const tNow = planet.waterUniforms.uTime.value; tracks.uniforms.uTime.value = tNow;
@@ -800,9 +825,31 @@ const audio = makeAudio(); let waterProbe = 0, nearWater = 0;
 ambience.state.onFlash = far => audio.thunder(far);
 addEventListener('pointerdown', () => audio.start(), { once: true });
 $('#soundBtn')?.addEventListener('click', e => { e.stopPropagation(); audio.start(); TUNE.son.actif = !TUNE.son.actif; try { localStorage.setItem('planete-reglages', JSON.stringify(TUNE)); } catch (er) { /* rien */ } audio.applyVolumes(); syncSoundBtn(); });
-function syncSoundBtn() { const b = $('#soundBtn'); if (b) { b.textContent = TUNE.son.actif ? '🔊' : '🔇'; b.title = TUNE.son.actif ? 'Couper le son' : 'Activer le son'; } }
+// icône du haut-parleur (fournie) ; coupé : les ondes laissent place à une croix
+const SPK = '<path d="M2 13.8571V10.1429C2 9.03829 2.89543 8.14286 4 8.14286H6.9C7.09569 8.14286 7.28708 8.08544 7.45046 7.97772L13.4495 4.02228C14.1144 3.5839 15 4.06075 15 4.85714V19.1429C15 19.9392 14.1144 20.4161 13.4495 19.9777L7.45046 16.0223C7.28708 15.9146 7.09569 15.8571 6.9 15.8571H4C2.89543 15.8571 2 14.9617 2 13.8571Z" stroke="currentColor" stroke-width="1.5"/>';
+const SND_ON = `<svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19.5 7.5C19.5 7.5 21 9 21 11.5C21 14 19.5 15.5 19.5 15.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>${SPK}</svg>`;
+const SND_OFF = `<svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9.5L22 13.5M22 9.5L18 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>${SPK}</svg>`;
+function syncSoundBtn() { const b = $('#soundBtn'); if (b) { b.innerHTML = TUNE.son.actif ? SND_ON : SND_OFF; b.title = TUNE.son.actif ? 'Couper le son' : 'Activer le son'; b.setAttribute('aria-pressed', TUNE.son.actif ? 'false' : 'true'); } }
 syncSoundBtn();
+/** Va voir un animal : la voiture se pose à côté, face à lui (chaque appel passe à l'individu suivant de l'espèce). */
+const locateIdx = {};
+function locateAnimal(kind) {
+  const r0 = fauna.locate(kind, 0); if (!r0) return 'Aucun animal de cette espèce';
+  locateIdx[kind] = ((locateIdx[kind] ?? -1) + 1) % r0.n;
+  const r = fauna.locate(kind, locateIdx[kind]), T = r.pos.clone().normalize();
+  if (mode !== 'walk') setWalk(true);
+  if (PL.on) stopPlane();
+  // une place au sec, à 1,8 à 3,5 unités, d'où regarder l'animal (sinon sur l'eau, en aéroglisseur)
+  const t1 = new THREE.Vector3(0, 1, 0).projectOnPlane(T); if (t1.lengthSq() < 1e-6) t1.set(1, 0, 0).projectOnPlane(T); t1.normalize();
+  let spot = null, wet = false;
+  for (const dist of [1.8, 2.5, 3.5]) { for (let k = 0; k < 8 && !spot; k++) { const d = T.clone().addScaledVector(t1.clone().applyAxisAngle(T, k / 8 * Math.PI * 2), dist / SEA_R).normalize(); if (!planet.isWet(d)) spot = d; } if (spot) break; }
+  if (!spot) { spot = T.clone().addScaledVector(t1, 2 / SEA_R).normalize(); wet = true; }
+  P.dir.copy(spot); P.fwd.copy(T).sub(spot).projectOnPlane(spot).normalize(); P.mv.copy(P.fwd);
+  P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = wet ? 1 : 0; P.vr = 0; camF.copy(P.fwd);
+  return `📍 ${kind} ${locateIdx[kind] + 1} / ${r.n}`;
+}
 const tuneHooks = {
+  locate: locateAnimal,
   apply() {
     const W = planet.waterUniforms, T = TUNE;
     W.uShallow.value.set(T.eau.bord); W.uTeal.value.set(T.eau.milieu); W.uDeep.value.set(T.eau.large);
@@ -861,11 +908,13 @@ for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart']) addEventList
 addEventListener('pointermove', e => { if (e.buttons) lastInput = performance.now(); }, { passive: true });
 renderer.shadowMap.autoUpdate = false;
 const pace = { next: 0, ema: 1000 / 60, slow: 0, fast: 0, n: 0 };
+// téléphone : 30 images/s en action, 15 au calme (moins de chauffe, batterie ménagée)
+const FPS_ACTIVE = quality === 'low' ? 30 : 60, FPS_CALM = quality === 'low' ? 15 : 30;
 function targetFps(now) {
-  if (document.getElementById('intro') && !$('#intro').classList.contains('out')) return 30;
-  if (mode === 'walk' || PL.cam) return 60;   // (le biplan qui tourne seul autour de la planète se contente de 30)
-  if (panel.classList.contains('on')) return 30;
-  return camAnim || now - lastInput < 2500 ? 60 : 30;   // la caméra garde de l'élan un moment après le geste
+  if (document.getElementById('intro') && !$('#intro').classList.contains('out')) return FPS_CALM;
+  if (mode === 'walk' || PL.cam) return FPS_ACTIVE;   // (le biplan qui tourne seul autour de la planète se contente du rythme calme)
+  if (panel.classList.contains('on')) return FPS_CALM;
+  return camAnim || now - lastInput < 2500 ? FPS_ACTIVE : FPS_CALM;   // la caméra garde de l'élan un moment après le geste
 }
 /** true s'il faut dessiner cette image ; ajuste aussi la définition selon le rythme réellement tenu. */
 function paceFrame(now) {
@@ -911,6 +960,7 @@ function frame(now) {
   } else stepWalk(dt);
   updatePlane(dt);
   if (zones) zones.update(dt, t, mode === 'walk' ? carBody : null);
+  fauna.update(dt, t, mode === 'walk', avatar.position, Math.abs(P.speed), ambience.night);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   if (mode === 'walk') {
     // lumière rasante venue du haut à gauche de l'image : de longues ombres vers le bas à droite
@@ -928,7 +978,7 @@ function frame(now) {
     setShadowBox(40, 50, 175);
     planet.waterUniforms.uSun.value.copy(sun.position).normalize();
   }
-  groundLeaves.update(dt, avatar.position, P.speed, mode === 'walk' && P.ground && P.hover < 0.5);
+  groundLeaves.update(dt, avatar.position, P.speed, mode === 'walk' && P.ground && P.hover < 0.5, mode === 'walk' && P.hover > 0.5);   // l'aéroglisseur chasse les feuilles sur l'eau
   if (mode === 'walk' && (++mmTick & 1)) drawMinimap();
   spray.mesh.visible = mode === 'walk';
   trails.group.visible = mode === 'walk';
@@ -990,12 +1040,13 @@ introBtn.disabled = false; introBtn.textContent = 'Explorer la planète'; window
 introBtn.addEventListener('click', () => { audio.start(); document.body.classList.add('started'); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 // Supabase arrive en asynchrone : on l'attend au plus 10 s avant de lire les contenus
 const sbReady = new Promise(r => { const t0 = Date.now(); (function chk() { if (window.supabase || Date.now() - t0 > 10000) r(); else setTimeout(chk, 150); })(); });
-sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
-  .catch(() => { $('#loadTxt').textContent = ''; });
+const clearLoad = () => { const e = $('#loadTxt'); if (e) e.textContent = ''; };   // l'écran d'accueil a pu disparaître entre-temps
+sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(d => { DATA = d || DATA; clearLoad(); if (openId) openIsland(openId); })
+  .catch(clearLoad);
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { P, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane },
+  dbg: { P, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },
