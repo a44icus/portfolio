@@ -4,7 +4,7 @@
    (bouton « Copier les réglages ») pour être transmises telles quelles.
    ============================================================================ */
 export const DEFAULTS = {
-  ambiance: { heureFixe: false, heure: 12.5, vitesseJour: 1, meteo: 'auto', vent: 2.1, brume: 1 },
+  ambiance: { heureFixe: true, heure: 12.4, vitesseJour: 1, meteo: 'clear', vent: 2.1, brume: 1 },
   lumiere: {
     soleil: 1, ciel: 1, ambiante: 1, exposition: 1,
     teinteOmbres: '#9466d1', forceTeinteOmbres: 0,
@@ -12,14 +12,14 @@ export const DEFAULTS = {
   },
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
   eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
-  sable: { couleur: '#f59a46', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
+  sable: { couleur: '#fbc85b', forceCouleur: 1, paillettes: 0.06, eclatPaillettes: 0.9 },
   herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
     jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
   feuilles: { taille: 0.9, quantite: 0.69 },
   lupins: { densite: 1, taille: 1, hauteur: 1, vent: 1, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.31, duree: 1.7, couleurDebut: '#ffd159', couleurMilieu: '#ff6168', couleurFin: '#e629b8', milieu: 0.15, eclat: 1 },
-  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 4, saut: 4.8, raideur: 1 },
+  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 14, saut: 1.7, raideur: 0.9 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
 };
 const KEY = 'planete-reglages';
