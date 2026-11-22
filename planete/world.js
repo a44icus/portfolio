@@ -118,6 +118,13 @@ function faceDir(f, s, t, out) {
 }
 
 /* ---------- eau du jeu : profondeur, hauts-fonds, écume, reflets ---------- */
+const FNOISE_GLSL = `
+  float fh(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+  float fnoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(fh(i), fh(i + vec3(1, 0, 0)), f.x), mix(fh(i + vec3(0, 1, 0)), fh(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(fh(i + vec3(0, 0, 1)), fh(i + vec3(1, 0, 1)), f.x), mix(fh(i + vec3(0, 1, 1)), fh(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  }`;
 const GLITTER_GLSL = `
   float glitHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   /** 1 sur le pixel qui contient la paillette de cette case (point fixe du monde), 0 ailleurs. */
@@ -164,6 +171,7 @@ function waterMaterial(uniforms) {
       varying float vDepth; varying vec3 vWorld;
       ${WAVES_GLSL}
       ${GLITTER_GLSL}
+      ${FNOISE_GLSL}
       void main() {
         vec3 p = vWorld / uScale;
         vec3 N = normalize(vWorld);
@@ -190,12 +198,22 @@ function waterMaterial(uniforms) {
         vec3 Rf = reflect(-uSun, n);
         float sp = max(dot(Rf, V), 0.0);
         col += uSunColor * pow(sp, 220.0) * 0.5 * sunUp;
-        // écume : un liseré blanc contre la rive, puis des traits fins qui suivent la côte et s'éloignent
-        float edge = 1.0 - smoothstep(0.06, 0.16, d);
-        float brk = sin(dot(p, vec3(0.6, 0.45, 0.7)) + uTime * 0.3) * 0.5 + 0.5;
-        float ph2 = fract(d * 0.75 - uTime * 0.12);
-        float ring = smoothstep(0.0, 0.03, ph2) * (1.0 - smoothstep(0.05, 0.09, ph2)) * (1.0 - smoothstep(0.4, 2.6, d)) * (0.55 + 0.45 * brk);   // traits continus, plus ou moins marqués
-        float foam = max(edge, ring * 0.9);
+        // écume découpée : un liseré déchiqueté contre la rive, puis des traits fins de longueurs variables,
+        // effilés aux bouts, qui ondulent, se fragmentent et s'éloignent lentement du bord
+        float n1 = fnoise(p * 0.45), n2 = fnoise(p * 1.3 + 17.0);
+        float edgeW = 0.05 + 0.32 * n1 * n1 + 0.08 * n2;
+        float edge = 1.0 - smoothstep(edgeW, edgeW + 0.025, d);
+        float ring = 0.0;
+        for (int i = 0; i < 4; i++) {
+          float fi = float(i);
+          float ph = fract(d * 0.55 + n2 * 0.18 - uTime * 0.07 + fi * 0.25);
+          float seg = fnoise(p * (0.13 + fi * 0.05) + vec3(fi * 7.3, 3.1 - uTime * 0.04, fi * 2.9));
+          float on = smoothstep(0.56, 0.6, seg);
+          float w = 0.006 + 0.022 * smoothstep(0.55, 0.75, seg);
+          ring = max(ring, on * (1.0 - smoothstep(w, w + 0.008, abs(ph - 0.5))));
+        }
+        ring *= 1.0 - smoothstep(0.6, 3.2, d);
+        float foam = max(edge, ring);
         col = mix(col, vec3(1.0, 0.98, 0.95), clamp(foam * uFoam, 0.0, 1.0));
         // quelques paillettes d'un pixel qui scintillent à la surface, avec parcimonie
         {
