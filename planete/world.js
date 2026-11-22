@@ -175,9 +175,9 @@ function waterMaterial(uniforms) {
         col += uSunColor * pow(sp, 220.0) * 0.5 * sunUp;
         // écume : un liseré blanc contre la rive, puis des traits fins qui suivent la côte et s'éloignent
         float edge = 1.0 - smoothstep(0.06, 0.16, d);
-        float brk = sin(dot(p, vec3(2.3, 1.7, 2.9)) + uTime * 0.4) * 0.5 + 0.5;
+        float brk = sin(dot(p, vec3(0.6, 0.45, 0.7)) + uTime * 0.3) * 0.5 + 0.5;
         float ph2 = fract(d * 0.75 - uTime * 0.12);
-        float ring = smoothstep(0.0, 0.03, ph2) * (1.0 - smoothstep(0.05, 0.09, ph2)) * (1.0 - smoothstep(0.4, 2.6, d)) * step(0.35, brk);
+        float ring = smoothstep(0.0, 0.03, ph2) * (1.0 - smoothstep(0.05, 0.09, ph2)) * (1.0 - smoothstep(0.4, 2.6, d)) * (0.55 + 0.45 * brk);   // traits continus, plus ou moins marqués
         float foam = max(edge, ring * 0.9);
         col = mix(col, vec3(1.0, 0.98, 0.95), clamp(foam, 0.0, 1.0));
         float alpha = mix(0.62, 0.97, smoothstep(0.05, 1.6, d));
