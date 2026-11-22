@@ -411,7 +411,7 @@ export function buildPlanet(anchors, quality = 'high') {
     if (rng() > GRASS_KEEP) return;
     for (let k = 0, nt = 1 + (patch > 0.12 ? 1 : 0) + (patch > 0.32 ? 1 : 0); k < nt; k++) {
       gp.copy(dd).multiplyScalar(h * S - 0.02).addScaledVector(va, (rng() - 0.5) * 0.5).addScaledVector(vb, (rng() - 0.5) * 0.5);
-      const s = 0.2 + rng() * 0.1 + Math.max(0, patch) * 0.12;
+      const s = 0.26 + rng() * 0.12 + Math.max(0, patch) * 0.14;
       gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * (0.8 + rng() * 0.7), s));
       grassM.push([gm.clone(), new THREE.Color(1, 1, 1).multiplyScalar(0.82 + rng() * 0.32)]);
     }
@@ -545,30 +545,39 @@ export function buildPlanet(anchors, quality = 'high') {
   // herbe : touffes de quatre brins effilés, du vert sombre au vert tendre, qui ondulent au vent
   {
     const base = new THREE.Color(STYLE.grassBase).multiplyScalar(0.8), tip = new THREE.Color(STYLE.grassTip);
-    const pos = [], col = [], nrm = [];
-    for (let k = 0; k < 4; k++) {
-      const ang = k / 4 * Math.PI + 0.3 + (k % 2) * 0.2, cx2 = Math.cos(ang), cz = Math.sin(ang), r0 = 0.08 + (k % 3) * 0.05;
-      const ox = Math.cos(ang * 2.3 + k) * r0, oz = Math.sin(ang * 2.3 + k) * r0, lean = 0.16 + (k % 2) * 0.1, hgt = 0.8 + (k % 3) * 0.15;
-      pos.push(ox - cx2 * 0.075, 0, oz - cz * 0.075, ox + cx2 * 0.075, 0, oz + cz * 0.075, ox + lean * Math.cos(ang + 1.6), hgt, oz + lean * Math.sin(ang + 1.6));
-      col.push(base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b);
+    // touffe épaisse : des brins larges et pointus, disposés en étoile et penchés vers l'extérieur
+    const pos = [], col = [], nrm = [], NB = quality === 'low' ? 5 : 7, mid = base.clone().lerp(tip, 0.45);
+    for (let k = 0; k < NB; k++) {
+      const ang = k / NB * Math.PI * 2 + Math.sin(k * 7.3) * 0.4, rx = Math.cos(ang), rz = Math.sin(ang), r0 = 0.04 + (k % 3) * 0.045;
+      const ox = rx * r0, oz = rz * r0, w = 0.1 + (k % 2) * 0.03, lean = 0.14 + (k % 3) * 0.09, hgt = 0.85 + ((k * 5) % 7) * 0.08;
+      const px = -rz, pz = rx;   // largeur du brin : perpendiculaire au rayon
+      pos.push(ox - px * w, 0, oz - pz * w, ox + px * w, 0, oz + pz * w, ox + rx * lean, hgt, oz + rz * lean);
+      const c0 = k % 2 ? base : mid;
+      col.push(c0.r, c0.g, c0.b, base.r, base.g, base.b, tip.r, tip.g, tip.b);
       nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0);   // les brins prennent la lumière comme le sol
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
     const gmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide });
     gmat.onBeforeCompile = sh => {
-      sh.uniforms.uTime = waterUniforms.uTime;
-      sh.vertexShader = 'uniform float uTime;\nattribute float aCrush;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.uniforms.uTime = waterUniforms.uTime; sh.uniforms.uWind = WIND.uWind; sh.uniforms.uWindDir = WIND.uWindDir;
+      sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform vec3 uWindDir;\nattribute float aCrush;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         float crushAge = uTime - aCrush;
         float flat2 = aCrush > 0.0 ? smoothstep(0.0, 0.1, crushAge) * (1.0 - smoothstep(12.0, 20.0, crushAge)) : 0.0;
         transformed.y *= 1.0 - 0.86 * flat2;
         transformed.xz *= 1.0 + 0.7 * flat2;
         vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+        // vent : une direction commune, des rafales qui roulent sur la prairie, et un frémissement propre à chaque touffe
+        vec3 upW = normalize(ip), wW = uWindDir - upW * dot(upW, uWindDir);
+        vec3 wL = transpose(mat3(instanceMatrix)) * wW; wL = length(wL) > 1e-5 ? normalize(wL) * length(wW) : vec3(0.0);
         float ph = dot(ip, vec3(1.7, 2.3, 1.3));
         float bend = transformed.y * transformed.y * (1.0 - flat2);
-        float gust = 0.6 + 0.4 * sin(uTime * 0.7 + dot(ip, vec3(0.31, 0.27, 0.19)));
-        transformed.x += sin(uTime * 2.1 + ph) * 0.2 * bend * gust;
-        transformed.z += cos(uTime * 1.6 + ph * 1.3) * 0.14 * bend * gust;`);
+        float wave = sin(dot(ip, uWindDir) * 0.55 - uTime * 1.8) * 0.5 + 0.5;
+        float gust = 0.3 + 0.9 * wave * wave;
+        transformed.xz += wL.xz * bend * uWind * gust;
+        transformed.y -= bend * uWind * gust * 0.18;
+        transformed.x += sin(uTime * 5.3 + ph) * 0.03 * bend * (0.4 + uWind);
+        transformed.z += cos(uTime * 4.1 + ph * 1.3) * 0.025 * bend * (0.4 + uWind);`);
     };
     gmat.customProgramCacheKey = () => 'grass-wind';
     g.setAttribute('aCrush', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, grassM.length)), 1));
@@ -646,6 +655,9 @@ export function buildPlanet(anchors, quality = 'high') {
   return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs };
 }
 
+/** Vent commun à l'herbe (force et direction), réglé par la météo. */
+export const WIND = { uWind: { value: 0.32 }, uWindDir: { value: new THREE.Vector3(0.7, 0.2, 0.68).normalize() } };
+
 /* ---------- feuillage « peint » : des dizaines de petites feuilles découpées ---------- */
 const LEAF_TEX = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
@@ -682,7 +694,7 @@ export function fadeNearCamera(m) {
   const key = m.customProgramCacheKey.bind(m); m.customProgramCacheKey = () => key() + '|fade';
   return m;
 }
-export const LEAF_MAT = fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true }));
+export const LEAF_MAT = fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true }));
 /** Nuage de feuilles dans un ellipsoïde (normales sphériques : le houppier s'éclaire comme un volume). */
 export function leafCluster(count, radius, stretch, size) {
   const pos = [], nrm = [], uv = [], col = [], idx = [];

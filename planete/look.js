@@ -79,7 +79,9 @@ const Grade = {
     }`,
 };
 export function makePost(renderer, scene, camera, quality) {
-  const composer = new EffectComposer(renderer);
+  // anticrénelage : rendu multi-échantillonné (MSAA), que le post-traitement conserve
+  const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: quality === 'low' ? 2 : 4 });
+  const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.45, 1.05);
   composer.addPass(bloom);
@@ -103,6 +105,7 @@ export function makePost(renderer, scene, camera, quality) {
       tilts.forEach(p => { p.uniforms.uAmount.value = k; p.uniforms.uFocus.value = focus; p.enabled = k > 0.02; });
     },
     get tilt() { return amount; },
+    bloom,
     render() { composer.render(); },
   };
 }
@@ -150,7 +153,7 @@ const LEAF_SHAPE = (() => {
  */
 export function makeGroundLeaves(planet, count, spot) {
   const geo = new THREE.PlaneGeometry(0.17, 0.17).rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });
+  const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 });
   const mesh = new THREE.InstancedMesh(geo, mat, count); mesh.frustumCulled = false; mesh.receiveShadow = true;
   const palette = ['#e8893a', '#f2b33d', '#d9603a', '#c94a2e', '#e7c23a', '#b8a02a', '#ee6aa4'].map(c => new THREE.Color(c));
   const CELL = 1, cells = new Map(), L = [];

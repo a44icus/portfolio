@@ -55,7 +55,7 @@ export function makeCar() {
   // calandre à sept fentes, phares ronds cerclés
   box(0.56, 0.2, 0.04, black, 0, 0.5, 0.56, 0.02);
   for (let i = 0; i < 7; i++) box(0.026, 0.14, 0.02, bronze, -0.12 + i * 0.04, 0.5, 0.585, 0.008);
-  const lightMat = mat('#fff6c8', { emissive: '#fff2b0', emissiveIntensity: 2.2 });
+  const lightMat = mat('#fff6c8', { emissive: '#fff2b0', emissiveIntensity: 2.2 }); lightMat.userData.glow = 2.2;
   for (const x of [-0.215, 0.215]) {
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.03, 18).rotateX(Math.PI / 2), bronze); ring.position.set(x, 0.51, 0.585); body.add(ring);
     const l = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 18).rotateX(Math.PI / 2), lightMat); l.position.set(x, 0.51, 0.595); body.add(l);
@@ -317,6 +317,7 @@ export async function buildZones(planet, sections) {
   }
   function makeLamp(c) {
     const lamp = new THREE.Group(), lm = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 2.2, roughness: 0.3 });
+    lm.userData.glow = 2.2; lamp.userData.lamp = true;   // l'ambiance les avive la nuit
     lamp.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.75, 8).translate(0, 0.375, 0), woodD));
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.16), lm); head.position.y = 0.84; lamp.add(head);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.1, 4).rotateY(Math.PI / 4), woodD); cap.position.y = 0.99; lamp.add(cap);
@@ -465,9 +466,9 @@ export async function buildZones(planet, sections) {
       const c = new THREE.Mesh(crateGeo, crateM); group.add(c);
       bodies.add(c, at(z, cx, cy), Math.random() * 6, { r: 0.24, topple: false });
     }
-    const lampTop = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.8, roughness: 0.3 });
+    const lampTop = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.8, roughness: 0.3 }); lampTop.userData.glow = 1.8;
     for (const [lx, ly] of [[-1.25, 1.35], [1.25, 1.35]]) {
-      const lamp = new THREE.Group();
+      const lamp = new THREE.Group(); lamp.userData.lamp = true;
       lamp.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.75, 8).translate(0, 0.375, 0), woodD));
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.16), lampTop); head.position.y = 0.84; lamp.add(head);
       const cap = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.1, 4).rotateY(Math.PI / 4), woodD); cap.position.y = 0.99; lamp.add(cap);

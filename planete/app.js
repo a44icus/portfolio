@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, buildZones } from './props.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray } from './look.js';
+import { makeAmbience } from './ambience.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -45,8 +46,8 @@ const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1200);
 camera.position.set(0, 14, 100);
 
 // éclairage de la surface de Social World (ciel du biome océan)
-scene.add(new THREE.HemisphereLight('#ffc89a', '#6a3f8a', 1.0));
-scene.add(new THREE.AmbientLight('#ffe2cc', 0.16));
+const hemi = new THREE.HemisphereLight('#ffc89a', '#6a3f8a', 1.0); scene.add(hemi);
+const ambL = new THREE.AmbientLight('#ffe2cc', 0.16); scene.add(ambL);
 const sun = new THREE.DirectionalLight('#ffcf94', 2.8); sun.position.set(40, 30, 35); scene.add(sun, sun.target);
 sun.castShadow = true;
 sun.shadow.mapSize.set(quality === 'low' ? 1024 : 2048, quality === 'low' ? 1024 : 2048);
@@ -268,7 +269,8 @@ const avatar = makeCar();
 avatar.visible = false; scene.add(avatar);
 let zones = null;
 stylizeTree(avatar, { cast: true, receive: true });
-buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); });
+const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
+buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
@@ -541,7 +543,7 @@ function frame() {
   // à pied : ciel bleu autour de la caméra, étoiles effacées
   skyU.uMix.value = THREE.MathUtils.lerp(skyU.uMix.value, mode === 'walk' ? 1 : 0, 1 - Math.exp(-dt * 2.5));
   sky.position.copy(camera.position); skyU.uUp.value.copy(camera.position).normalize(); sky.visible = skyU.uMix.value > 0.01;
-  starMat.opacity = 1 - skyU.uMix.value;
+  starMat.opacity = Math.max(1 - skyU.uMix.value, ambience.night * 0.9 * (1 - ambience.state.W.cloud * 0.85));
   // à pied, les nuages montent au-dessus de la caméra
   planet.clouds.scale.setScalar(THREE.MathUtils.lerp(planet.clouds.scale.x, mode === 'walk' ? 1.3 : 1, 1 - Math.exp(-dt * 3)));
   if (mode === 'orbit') {
@@ -574,6 +576,7 @@ function frame() {
   groundLeaves.update(dt, avatar.position, P.speed, mode === 'walk' && P.ground && P.hover < 0.5);
   if (mode === 'walk' && (++mmTick & 1)) drawMinimap();
   spray.mesh.visible = mode === 'walk';
+  ambience.update(dt, t, mode, avatar.position, camera);
   FADE.uFadeOn.value = mode === 'walk' ? 1 : 0; FADE.uFadeTarget.value.copy(avatar.position).addScaledVector(avatar.position.clone().normalize(), 0.35);
   // en voiture : focale longue et flou de maquette ; en orbite : vue normale
   const wantFov = mode === 'walk' ? 30 + 7 * P.boost : 42;
@@ -596,7 +599,7 @@ introBtn.addEventListener('click', () => { $('#intro').classList.add('out'); set
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { P, planet, driveR, keys },
+  dbg: { P, planet, driveR, keys, ambience },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },
