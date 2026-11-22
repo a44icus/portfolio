@@ -302,13 +302,13 @@ export function buildPlanet(anchors, quality = 'high') {
 
   // ponts : chaque passage sur l'eau, prolongé d'un peu de terre de chaque côté
   const bridges = [];
-  const LIFT = (R - 0.3) * S + 0.42;
+  const LIFT = (R - 0.3) * S + 1.25;   // assez haut pour que l'aéroglisseur passe dessous
   for (const e of edges) for (const r of e.runs) {
-    const t0 = Math.max(0, r.i0 / e.M * e.len - 1.4 / SEA_R), t1 = Math.min(e.len, r.i1 / e.M * e.len + 1.4 / SEA_R);
-    const hA = e.groundAt(t0), hB = e.groundAt(t1), L = (t1 - t0) * SEA_R, arch = Math.min(0.5, L * 0.03);
+    const t0 = Math.max(0, r.i0 / e.M * e.len - 2.6 / SEA_R), t1 = Math.min(e.len, r.i1 / e.M * e.len + 2.6 / SEA_R);
+    const hA = e.groundAt(t0), hB = e.groundAt(t1), L = (t1 - t0) * SEA_R, arch = Math.min(0.3, L * 0.02);
     const deck = th => {
       const s2 = (th - t0) / (t1 - t0), base = hA + (hB - hA) * s2;
-      return base + Math.max(0, LIFT - base) * smoothstep(0, 0.22, s2) * smoothstep(1, 0.78, s2) + arch * Math.sin(Math.PI * s2);
+      return base + Math.max(0, LIFT - base) * smoothstep(0, 0.34, s2) * smoothstep(1, 0.66, s2) + arch * Math.sin(Math.PI * s2);
     };
     bridges.push({ e, t0, t1, deck, len: L });
   }
@@ -351,17 +351,26 @@ export function buildPlanet(anchors, quality = 'high') {
   }
   const pathDir = d => pathAt(d.x, d.y, d.z);
   const roadNear = (d, extraU) => { const r = roadAt(d.x, d.y, d.z); return !!r.e && r.d < ROAD_W + extraU / SEA_R; };
-  /** Dessus du tablier d'un pont sous cette direction (0 s'il n'y en a pas). */
-  function bridgeR(dir) {
-    let top = 0;
+  /** Pont sous cette direction : abscisse, écart latéral (unités) et dessus du tablier ; null s'il n'y en a pas à moins de 2 unités. */
+  const BI = { b: null, th: 0, lat: 0, top: 0 };
+  function bridgeAt(dir) {
+    BI.b = null; let best = 2 / SEA_R;
     for (const b of bridges) {
       const e = b.e, dn = dir.dot(e.n);
-      if (Math.abs(dn) > ROAD_W * 2) continue;
+      if (Math.abs(dn) > best + 0.6 / SEA_R) continue;
       const th = Math.atan2(dir.dot(e.u), dir.dot(e.a));
-      if (th < b.t0 || th > b.t1 || Math.abs(dn - sample(e.off, e, th)) > 0.78 / SEA_R) continue;
-      top = Math.max(top, b.deck(th) + 0.07);
+      if (th < b.t0 || th > b.t1) continue;
+      const lat = dn - sample(e.off, e, th);
+      if (Math.abs(lat) < best) { best = Math.abs(lat); BI.b = b; BI.th = th; BI.lat = lat * SEA_R; BI.top = b.deck(th) + 0.07; }
     }
-    return top;
+    return BI.b ? BI : null;
+  }
+  /** Dessus du tablier sous cette direction (0 sinon). Avec r : seulement si l'on est déjà à hauteur du tablier (on peut passer dessous). */
+  function bridgeR(dir, r) {
+    const bi = bridgeAt(dir);
+    if (!bi || Math.abs(bi.lat) > 0.8) return 0;
+    if (r !== undefined && r < bi.top - 0.45) return 0;
+    return bi.top;
   }
 
 
@@ -377,6 +386,16 @@ export function buildPlanet(anchors, quality = 'high') {
   const wMat = waterMaterial(waterUniforms), water = new THREE.Group();
   const d = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), nn = new THREE.Vector3(), q = new THREE.Vector3();
   const WR = (R - 0.3) * S;
+  const MAP = { w: 768, h: 384 }; MAP.data = new Uint8ClampedArray(MAP.w * MAP.h * 4);
+  const mapC = new THREE.Color(), mapShallow = new THREE.Color('#3fc6b4'), mapDeep = new THREE.Color('#0d3f5a');
+  function mapSplat(dd, depth, col) {
+    if (depth > 0.25) mapC.copy(mapShallow).lerp(mapDeep, Math.min(1, depth / 9)); else mapC.copy(col).convertLinearToSRGB();
+    const px = Math.floor((Math.atan2(dd.z, dd.x) / (Math.PI * 2) + 0.5) * MAP.w), py = Math.floor((0.5 - Math.asin(Math.max(-1, Math.min(1, dd.y))) / Math.PI) * MAP.h);
+    for (let oy = 0; oy < 2; oy++) for (let ox = 0; ox < 2; ox++) {
+      const k = ((Math.min(MAP.h - 1, py + oy)) * MAP.w + ((px + ox) % MAP.w)) * 4;
+      MAP.data[k] = mapC.r * 255; MAP.data[k + 1] = mapC.g * 255; MAP.data[k + 2] = mapC.b * 255; MAP.data[k + 3] = 255;
+    }
+  }
   const rng = (() => { let s = 0x9e3779b9; return () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0; return s / 4294967296; }; })();
   const onPlaza = (dd, extra = 0) => sites.some(s => dd.dot(s.dir) > Math.cos(A0 + extra));
   const grassM = [], flowers = [], GRASS_KEEP = quality === 'low' ? 0.62 : 1;
@@ -390,7 +409,7 @@ export function buildPlanet(anchors, quality = 'high') {
     if (patch < -0.28) return;
     gq.setFromUnitVectors(Y, dd);
     if (rng() > GRASS_KEEP) return;
-    {
+    for (let k = 0, nt = 1 + (patch > 0.12 ? 1 : 0) + (patch > 0.32 ? 1 : 0); k < nt; k++) {
       gp.copy(dd).multiplyScalar(h * S - 0.02).addScaledVector(va, (rng() - 0.5) * 0.5).addScaledVector(vb, (rng() - 0.5) * 0.5);
       const s = 0.2 + rng() * 0.1 + Math.max(0, patch) * 0.12;
       gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * (0.8 + rng() * 0.7), s));
@@ -427,6 +446,7 @@ export function buildPlanet(anchors, quality = 'high') {
       vc[v] = tmpC.r; vc[v + 1] = tmpC.g; vc[v + 2] = tmpC.b;
       wp[v] = d.x * WR; wp[v + 1] = d.y * WR; wp[v + 2] = d.z * WR;
       wd[v / 3] = R - hb[g];
+      mapSplat(d, R - hb[g], tmpC);
     }
     const index = new Uint32Array(n * n * 6), wIndex = []; let w = 0;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
@@ -470,13 +490,14 @@ export function buildPlanet(anchors, quality = 'high') {
   };
 
   // arbres : houppiers en petites feuilles (rendu « peint »), quelques cyprès et pins, en forêts
-  const trunks = [], rounds = [], cypress = [], pines = [], bushes = [];
+  const trunks = [], rounds = [], cypress = [], pines = [], bushes = [], treeDirs = [];
   for (let tries = 0; tries < 60000 && trunks.length < (quality === 'low' ? 1100 : 1600); tries++) {
     randDir(d);
     if (noise.fbm(d.x * 7 + 1.3, d.y * 7, d.z * 7 - 2.1, 3) < 0.05) continue;          // forêts
     const h = heightB(d.x, d.y, d.z), above = h - R;
     if (above < 2.5 || above > 26 || onPlaza(d, 0.9 / SEA_R) || roadNear(d, 1.5) || slopeAt(d) > 0.6) continue;
-    const s = 0.7 + rng() * 0.5, r = rng(), hs = h * S - 0.03;
+    const s = 1.0 + rng() * 0.75, r = rng(), hs = h * S - 0.03;
+    treeDirs.push(d.clone());
     if (r < 0.72) { trunks.push(place(d, hs, s)); rounds.push([place(d, hs + 0.55 * s, s * (0.9 + rng() * 0.3), s * (0.85 + rng() * 0.3)), leafCol()]); }
     else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol().multiplyScalar(0.85)]); }
     else { trunks.push(place(d, hs, s, s * 1.1)); pines.push([place(d, hs + 0.42 * s, s, s * 1.1), new THREE.Color('#6a6a22').multiplyScalar(0.9 + rng() * 0.2)]); }
@@ -501,6 +522,26 @@ export function buildPlanet(anchors, quality = 'high') {
     inst(mergeGeos([g1, g2, g3]), new THREE.MeshStandardMaterial({ roughness: 0.85 }), pines);
   }
 
+  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null;
+  const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
+  /** Écrase l'herbe autour des points donnés (positions du monde), à l'instant t. */
+  function crushGrass(points, radius, t) {
+    if (!gattr) return;
+    let lo = Infinity, hi = -1; const r2 = radius * radius, arr = gattr.array;
+    for (const p of points) {
+      const cx = Math.floor(p.x / GC), cy = Math.floor(p.y / GC), cz = Math.floor(p.z / GC);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+        const cell = gcells.get(((cx + a + 512) * 1024 + (cy + b + 512)) * 1024 + (cz + c + 512)); if (!cell) continue;
+        for (const i of cell) {
+          const q = gpos[i], dx = q[0] - p.x, dy = q[1] - p.y, dz = q[2] - p.z;
+          if (dx * dx + dy * dy + dz * dz > r2) continue;
+          if (t - arr[i] < 1 && arr[i] > 0) continue;   // déjà écrasée à l'instant
+          arr[i] = t; if (i < lo) lo = i; if (i > hi) hi = i;
+        }
+      }
+    }
+    if (hi >= 0) { gattr.clearUpdateRanges(); gattr.addUpdateRange(lo, hi - lo + 1); gattr.needsUpdate = true; }
+  }
   // herbe : touffes de quatre brins effilés, du vert sombre au vert tendre, qui ondulent au vent
   {
     const base = new THREE.Color(STYLE.grassBase).multiplyScalar(0.8), tip = new THREE.Color(STYLE.grassTip);
@@ -517,16 +558,28 @@ export function buildPlanet(anchors, quality = 'high') {
     const gmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide });
     gmat.onBeforeCompile = sh => {
       sh.uniforms.uTime = waterUniforms.uTime;
-      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.vertexShader = 'uniform float uTime;\nattribute float aCrush;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        float crushAge = uTime - aCrush;
+        float flat2 = aCrush > 0.0 ? smoothstep(0.0, 0.1, crushAge) * (1.0 - smoothstep(12.0, 20.0, crushAge)) : 0.0;
+        transformed.y *= 1.0 - 0.86 * flat2;
+        transformed.xz *= 1.0 + 0.7 * flat2;
         vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
         float ph = dot(ip, vec3(1.7, 2.3, 1.3));
-        float bend = transformed.y * transformed.y;
+        float bend = transformed.y * transformed.y * (1.0 - flat2);
         float gust = 0.6 + 0.4 * sin(uTime * 0.7 + dot(ip, vec3(0.31, 0.27, 0.19)));
         transformed.x += sin(uTime * 2.1 + ph) * 0.2 * bend * gust;
         transformed.z += cos(uTime * 1.6 + ph * 1.3) * 0.14 * bend * gust;`);
     };
     gmat.customProgramCacheKey = () => 'grass-wind';
+    g.setAttribute('aCrush', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, grassM.length)), 1));
     inst(g, gmat, grassM, { cast: false });
+    // grille spatiale des touffes, pour trouver vite celles qui sont sous les roues
+    grassM.forEach((it, i) => {
+      const e = it[0].elements, key = gkey(e[12], e[13], e[14]);
+      let c = gcells.get(key); if (!c) gcells.set(key, c = []); c.push(i);
+    });
+    gpos = grassM.map(it => [it[0].elements[12], it[0].elements[13], it[0].elements[14]]);
+    gattr = g.attributes.aCrush;
   }
   inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: '#222', emissiveIntensity: 0.25 }), flowers, { cast: false });
 
@@ -541,6 +594,28 @@ export function buildPlanet(anchors, quality = 'high') {
     rocks.push([place(d, h * S, s, s * (0.6 + rng() * 0.4)), new THREE.Color(STYLE.rockColor).multiplyScalar(0.85 + rng() * 0.25)]);
   }
   inst(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), rocks);
+
+  {
+    const pads = [], blooms = [], padCols = ['#7fae3a', '#5f9a34', '#9ab83a', '#6e9e2e'], bloomCols = ['#ff7ab8', '#ffffff', '#c58cff'];
+    const WR2 = (R - 0.3) * S + 0.012;
+    for (let tries = 0; tries < 30000 && pads.length < (quality === 'low' ? 90 : 150); tries++) {
+      randDir(d);
+      const depth = R - heightB(d.x, d.y, d.z);
+      if (depth < 0.8 || depth > 4.5 || noise.noise(d.x * 26 + 7, d.y * 26, d.z * 26) < 0.42 || bridgeAt(d)) continue;
+      const [t1, t2] = tangents(d);
+      for (let k = 0, nk = 2 + Math.floor(rng() * 4); k < nk; k++) {
+        q.copy(d).addScaledVector(t1, (rng() - 0.5) * 1.2 / SEA_R).addScaledVector(t2, (rng() - 0.5) * 1.2 / SEA_R).normalize();
+        if (R - heightB(q.x, q.y, q.z) < 0.6) continue;
+        const sz = 0.7 + rng() * 0.6;
+        pads.push([place(q, WR2, sz, 1), new THREE.Color(padCols[Math.floor(rng() * padCols.length)])]);
+        if (rng() < 0.3) blooms.push([place(q, WR2 + 0.03, sz * 0.9, sz * 0.7), new THREE.Color(bloomCols[Math.floor(rng() * bloomCols.length)])]);
+      }
+    }
+    const padGeo = new THREE.CircleGeometry(0.17, 16, 0.35, Math.PI * 2 - 0.5).rotateX(-Math.PI / 2);
+    inst(padGeo, new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide }), pads, { cast: false });
+    const petal = new THREE.ConeGeometry(0.05, 0.09, 6, 1, true).translate(0, 0.045, 0);
+    inst(petal, new THREE.MeshStandardMaterial({ roughness: 0.5, side: THREE.DoubleSide, emissive: '#552244', emissiveIntensity: 0.3 }), blooms, { cast: false });
+  }
 
   /* ---------- zones : esplanade, repère local (les décors sont posés par props.js) ---------- */
   const pavilions = anchors.map((an, k) => {
@@ -568,7 +643,7 @@ export function buildPlanet(anchors, quality = 'high') {
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, pathDir, onPlaza };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs };
 }
 
 /* ---------- feuillage « peint » : des dizaines de petites feuilles découpées ---------- */

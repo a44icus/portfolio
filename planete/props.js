@@ -83,6 +83,20 @@ export function makeCar() {
   const tyreGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.17, 22).rotateZ(Math.PI / 2), lugGeo = new THREE.BoxGeometry(0.18, 0.035, 0.05);
   const spare = new THREE.Group(); spare.position.set(0, 0.55, -0.67); body.add(spare);
   { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 20).rotateX(Math.PI / 2), black); spare.add(t); const h = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.13, 10).rotateX(Math.PI / 2), bronze); spare.add(h); }
+  // deux échappements sous le pare-chocs arrière ; flammes du turbo
+  const flames = [];
+  {
+    const pipeM = mat('#5a5464', { roughness: 0.35, metalness: 0.6 });
+    const outer = mat('#ff7a1a', { emissive: '#ff5a10', emissiveIntensity: 3, transparent: true, opacity: 0.9, depthWrite: false });
+    const inner = mat('#fff0a0', { emissive: '#ffe680', emissiveIntensity: 4 });
+    for (const x of [-0.22, 0.22]) {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.14, 10).rotateX(Math.PI / 2), pipeM); pipe.position.set(x, 0.27, -0.62); body.add(pipe);
+      const fl = new THREE.Group(); fl.position.set(x, 0.27, -0.69); body.add(fl);
+      fl.add(new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.34, 10).translate(0, 0.17, 0).rotateX(-Math.PI / 2), outer));
+      fl.add(new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.2, 8).translate(0, 0.1, 0).rotateX(-Math.PI / 2), inner));
+      fl.visible = false; flames.push(fl);
+    }
+  }
   // grosses roues à crampons, jantes bronze
   const wheels = [];
   const hubGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.18, 12).rotateZ(Math.PI / 2), capGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.19, 8).rotateZ(Math.PI / 2), holeGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.185, 8).rotateZ(Math.PI / 2);
@@ -122,12 +136,16 @@ export function makeCar() {
    * k : 0 = Jeep, 1 = aéroglisseur (les roues se replient, la jupe se gonfle, le ventilateur sort) ;
    * spin : pales ; wy : débattement de chaque roue ; bodyY, pitch, roll : la caisse sur ses ressorts.
    */
-  function pose(k, spin = 0, wy = null, bodyY = 0, pitch = 0, roll = 0) {
+  function pose(k, spin = 0, wy = null, bodyY = 0, pitch = 0, roll = 0, flame = 0, t = 0) {
     const e = k * k * (3 - 2 * k), pop = Math.max(0, Math.min(1, (k - 0.35) / 0.65)), over = pop < 1 ? pop + Math.sin(pop * Math.PI) * 0.25 : 1;
     skirt.visible = k > 0.01; skirt.scale.set(0.8 + 0.2 * e, Math.max(0.02, e), 0.8 + 0.2 * e);
     fan.visible = pop > 0.01; fan.scale.setScalar(Math.max(0.01, over));
     spare.visible = e < 0.6; spare.scale.setScalar(Math.max(0.01, 1 - e * 1.6));
     blades.rotation.z = spin;
+    flames.forEach((fl, i) => {
+      const kf = flame * (1 - e), flick = 0.75 + 0.2 * Math.sin(t * 47 + i * 2.1) + 0.12 * Math.sin(t * 91 + i * 5.3);
+      fl.visible = kf > 0.02; fl.scale.set(kf * (0.85 + 0.15 * flick), kf * (0.85 + 0.15 * flick), Math.max(0.01, kf * flick * 1.3));
+    });
     body.position.y = 0.04 * e + bodyY * (1 - e);
     body.rotation.set(pitch, 0, roll);
     wheels.forEach((w, i) => {
@@ -144,14 +162,15 @@ export function makeCar() {
 
 /* ---------- objets renversables ---------- */
 class Bodies {
-  constructor(planet) { this.planet = planet; this.list = []; this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._a = new THREE.Vector3(); }
+  constructor(planet) { this.planet = planet; this.list = []; this.time = 0; this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._a = new THREE.Vector3(); }
   /**
    * @param mesh   origine à la base de l'objet
    * @param opts   r : rayon de collision, lie : décalage quand il est couché, topple : peut basculer
    */
   add(mesh, dir, yaw, opts) {
     const b = { mesh, dir: dir.clone().normalize(), vel: new THREE.Vector3(), local: new THREE.Quaternion().setFromAxisAngle(Y, yaw), fall: null, down: false,
-      r: opts.r, lie: opts.lie || 0, topple: opts.topple !== false, hop: 0, vh: 0, awake: false };
+      r: opts.r, lie: opts.lie || 0, topple: opts.topple !== false, hop: 0, vh: 0, awake: false, moved: false, lastHit: 0, ret: null, retOff: 0 };
+    b.home = { dir: b.dir.clone(), local: b.local.clone() };
     this.list.push(b); this.place(b); return b;
   }
   frame(dir) { return this._q.setFromUnitVectors(Y, dir); }
@@ -163,12 +182,13 @@ class Bodies {
       rot = this._tmpQ = (this._tmpQ || new THREE.Quaternion()).setFromAxisAngle(b.fall.axis, e * Math.PI / 2).multiply(b.local);
       off = b.lie * Math.sin(e * Math.PI / 2);
     } else if (b.down) off = b.lie;
-    b.mesh.position.copy(b.dir).multiplyScalar(g + off + b.hop);
+    b.mesh.position.copy(b.dir).multiplyScalar(g + off + b.hop + (b.ret ? b.retOff : 0));
     b.mesh.quaternion.copy(this.frame(b.dir)).multiply(rot);
   }
   /** Pousse un objet (vitesse tangente) ; s'il est debout et que le choc est fort, il bascule dans le sens du choc. */
   hit(b, push, strength) {
-    b.vel.add(push); b.awake = true;
+    b.vel.add(push); b.awake = true; b.moved = true; b.lastHit = this.time;
+    if (b.ret) { b.ret = null; b.retOff = 0; }
     if (b.topple && !b.down && !b.fall && strength > 1.6) {
       // axe de bascule dans le repère local de la zone de l'objet
       const n = this._v.copy(push).normalize();
@@ -179,6 +199,7 @@ class Bodies {
   }
   step(dt, car) {
     const P = this.planet, tmp = new THREE.Vector3(), axis = new THREE.Vector3(), d = new THREE.Vector3();
+    this.time += dt;
     // collisions avec la voiture
     if (car) for (const b of this.list) {
       d.copy(b.mesh.position).sub(car.pos);
@@ -222,6 +243,20 @@ class Bodies {
       if (b.hop > 0 || b.vh > 0) { b.vh -= 18 * dt; b.hop = Math.max(0, b.hop + b.vh * dt); if (b.hop === 0 && b.vh < 0) b.vh = b.vh < -2 ? -b.vh * 0.3 : 0; }
       this.place(b);
       if (sp < 0.03 && !b.fall && b.hop === 0 && b.vh === 0) b.awake = false;
+    }
+    // retour au bercail : l'objet se relève et glisse jusqu'à sa place, en sautillant
+    for (const b of L) {
+      if (b.moved && !b.awake && !b.ret && !b.fall && this.time - b.lastHit > 30) {
+        b.ret = { t: 0, dir0: b.dir.clone(), q0: b.local.clone(), off0: b.down ? b.lie : 0 }; b.down = false;
+      }
+      if (!b.ret) continue;
+      b.ret.t += dt / 1.6;
+      const k = Math.min(1, b.ret.t), e = k * k * (3 - 2 * k);
+      b.dir.copy(b.ret.dir0).lerp(b.home.dir, e).normalize();
+      b.local.copy(b.ret.q0).slerp(b.home.local, e);
+      b.retOff = b.ret.off0 * (1 - e) + Math.sin(Math.PI * k) * 0.35;
+      if (k >= 1) { b.ret = null; b.moved = false; b.retOff = 0; b.vel.set(0, 0, 0); b.hop = 0; b.vh = 0; b.dir.copy(b.home.dir); b.local.copy(b.home.local); }
+      this.place(b);
     }
   }
 }
@@ -548,6 +583,11 @@ export async function buildZones(planet, sections) {
       // planches
       for (let th = b.t0; th <= b.t1; th += 0.24 / SEA_R) {
         const d = frame(e, th, 0), top = b.deck(th) + 0.07, w = 1.65 + Math.random() * 0.2;
+        {   // incline la planche selon la pente
+          const pa = e.point(th - 0.05 / SEA_R).multiplyScalar(b.deck(th - 0.05 / SEA_R)), pb = e.point(th + 0.05 / SEA_R).multiplyScalar(b.deck(th + 0.05 / SEA_R));
+          fwd.copy(pb).sub(pa).normalize(); right.crossVectors(d, fwd).normalize(); up.crossVectors(fwd, right).normalize();
+          q.setFromRotationMatrix(basis.makeBasis(right, up, fwd));
+        }
         planks.push([m4.compose(p.copy(d).multiplyScalar(top - 0.035), q, sc.set(w, 1, 1)).clone(), new THREE.Color(WOOD).multiplyScalar(0.85 + Math.random() * 0.25)]);
       }
       // garde-corps : poteaux tous les mètres, deux lisses entre eux

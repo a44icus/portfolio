@@ -133,37 +133,73 @@ export function makeSpray(count) {
   };
 }
 
-/* ---------- feuilles qui volent ---------- */
-export function makeLeaves(planet, count) {
-  const geo = new THREE.PlaneGeometry(0.09, 0.06);
-  const mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.8 });
-  const mesh = new THREE.InstancedMesh(geo, mat, count); mesh.frustumCulled = false;
-  const palette = ['#e8893a', '#f2b33d', '#d9603a', '#9fc24a', '#7fb03a'].map(c => new THREE.Color(c));
-  const L = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1);
-  const tmp = new THREE.Vector3(), t1 = new THREE.Vector3(), t2 = new THREE.Vector3();
-  for (let i = 0; i < count; i++) { L.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), rot: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6), spin: new THREE.Vector3(Math.random() * 3, Math.random() * 3, Math.random() * 3), live: false }); mesh.setColorAt(i, palette[i % palette.length]); }
-  mesh.instanceColor.needsUpdate = true;
-  function spawn(l, center, up, top) {
-    t1.set(1, 0, 0); if (Math.abs(up.x) > 0.9) t1.set(0, 1, 0); t1.addScaledVector(up, -t1.dot(up)).normalize(); t2.crossVectors(up, t1);
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 7;
-    l.p.copy(center).addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r).addScaledVector(up, top ? 1.2 + Math.random() * 0.8 : 0.2 + Math.random() * 1.8);
-    l.v.copy(t1).multiplyScalar(0.5 + Math.random() * 0.4).addScaledVector(t2, 0.25).addScaledVector(up, -(0.35 + Math.random() * 0.3));
-    l.live = true;
+
+/* ---------- feuilles mortes au sol : elles s'envolent au passage de la voiture ---------- */
+const LEAF_SHAPE = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.translate(32, 32); g.rotate(0.5);
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, -29); g.quadraticCurveTo(24, -6, 0, 26); g.quadraticCurveTo(-24, -6, 0, -29); g.fill();
+  g.fillRect(-1.5, 24, 3, 7);                                         // pétiole
+  g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -24); g.lineTo(0, 26);
+  for (let k = -16; k < 18; k += 8) { g.moveTo(0, k); g.lineTo(9, k - 7); g.moveTo(0, k); g.lineTo(-9, k - 7); }
+  g.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+/**
+ * @param spot  fonction qui renvoie une direction où poser une feuille
+ */
+export function makeGroundLeaves(planet, count, spot) {
+  const geo = new THREE.PlaneGeometry(0.17, 0.17).rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });
+  const mesh = new THREE.InstancedMesh(geo, mat, count); mesh.frustumCulled = false; mesh.receiveShadow = true;
+  const palette = ['#e8893a', '#f2b33d', '#d9603a', '#c94a2e', '#e7c23a', '#b8a02a', '#ee6aa4'].map(c => new THREE.Color(c));
+  const CELL = 1, cells = new Map(), L = [];
+  const key = p => ((Math.floor(p.x / CELL) + 512) * 1024 + (Math.floor(p.y / CELL) + 512)) * 1024 + (Math.floor(p.z / CELL) + 512);
+  const Y = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4(), dq = new THREE.Quaternion(), sc = new THREE.Vector3(), tmp = new THREE.Vector3(), ax = new THREE.Vector3();
+  const rest = dir => Math.max(planet.heightDir(dir), planet.waterR) + (planet.onPlaza(dir, 0) ? 0.05 : 0.016);
+  const lay = (l, dir) => {   // pose à plat, orientation au hasard
+    l.p.copy(dir).multiplyScalar(rest(dir));
+    l.q.setFromUnitVectors(Y, dir).multiply(dq.setFromAxisAngle(Y, Math.random() * Math.PI * 2));
+    l.key = key(l.p); let c = cells.get(l.key); if (!c) cells.set(l.key, c = []); c.push(l.i);
+  };
+  for (let i = 0; i < count; i++) {
+    const l = { i, p: new THREE.Vector3(), q: new THREE.Quaternion(), v: new THREE.Vector3(), w: new THREE.Vector3(), s: 0.7 + Math.random() * 0.7, fly: false, key: 0 };
+    L.push(l); lay(l, spot());
+    mesh.setMatrixAt(i, m4.compose(l.p, l.q, sc.setScalar(l.s))); mesh.setColorAt(i, palette[i % palette.length].clone().multiplyScalar(0.85 + Math.random() * 0.3));
   }
+  mesh.instanceColor.needsUpdate = true;
+  const active = new Set();
   return {
     mesh,
-    update(dt, t, center, on) {
-      mesh.visible = on; if (!on) { L.forEach(l => { l.live = false; }); return; }
-      const up = tmp.copy(center).normalize().clone();
-      L.forEach((l, i) => {
-        if (!l.live) spawn(l, center, up, false);
-        l.p.addScaledVector(l.v, dt); l.p.addScaledVector(up, Math.sin(t * 2 + i) * 0.15 * dt);
-        l.rot.addScaledVector(l.spin, dt);
-        const g = planet.groundRadius(tmp.copy(l.p).normalize());
-        if (l.p.length() < g + 0.03 || l.p.distanceTo(center) > 9) spawn(l, center, up, true);
-        q.setFromEuler(e.set(l.rot.x, l.rot.y, l.rot.z)); mesh.setMatrixAt(i, m4.compose(l.p, q, one));
-      });
-      mesh.instanceMatrix.needsUpdate = true;
+    /** car : position de la voiture ; speed : vitesse ; on : la voiture roule au sol */
+    update(dt, car, speed, on) {
+      let dirty = false;
+      if (on && Math.abs(speed) > 0.8) {
+        const reach = 0.5 + Math.abs(speed) * 0.07, cx = Math.floor(car.x / CELL), cy = Math.floor(car.y / CELL), cz = Math.floor(car.z / CELL);
+        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+          const k = ((cx + a + 512) * 1024 + (cy + b + 512)) * 1024 + (cz + c + 512), cell = cells.get(k); if (!cell) continue;
+          for (let j = cell.length - 1; j >= 0; j--) {
+            const l = L[cell[j]]; if (l.p.distanceTo(car) > reach) continue;
+            const up = tmp.copy(l.p).normalize();
+            ax.copy(l.p).sub(car).addScaledVector(up, -ax.copy(l.p).sub(car).dot(up));
+            const away = ax.lengthSq() > 1e-6 ? ax.normalize() : ax.set(1, 0, 0);
+            l.v.copy(away).multiplyScalar(0.5 + Math.abs(speed) * (0.12 + Math.random() * 0.15)).addScaledVector(up, 0.9 + Math.abs(speed) * (0.1 + Math.random() * 0.14));
+            l.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(5 + Math.random() * 9);
+            l.fly = true; active.add(l); cell.splice(j, 1);
+          }
+        }
+      }
+      for (const l of active) {
+        const up = tmp.copy(l.p).normalize();
+        l.v.addScaledVector(up, -3.2 * dt); l.v.multiplyScalar(Math.exp(-dt * 1.7));
+        l.p.addScaledVector(l.v, dt);
+        const sp = l.w.length(); if (sp > 0) l.q.premultiply(dq.setFromAxisAngle(ax.copy(l.w).divideScalar(sp), sp * dt));
+        l.w.multiplyScalar(Math.exp(-dt * 0.8));
+        const dir = up, g = rest(dir);
+        if (l.p.length() <= g && l.v.dot(up) < 0) { l.fly = false; active.delete(l); lay(l, dir.clone()); }
+        mesh.setMatrixAt(l.i, m4.compose(l.p, l.q, sc.setScalar(l.s))); dirty = true;
+      }
+      if (dirty) mesh.instanceMatrix.needsUpdate = true;
     },
   };
 }
