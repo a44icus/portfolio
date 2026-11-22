@@ -24,11 +24,35 @@ function canvasTex(draw, w, h) {
 }
 
 /* ---------- la Jeep (et son mode aéroglisseur) ---------- */
+/* ---------- peinture pailletée (façon flocons holographiques) : de minuscules éclats colorés qui scintillent selon l'angle ---------- */
+export const PAINT = { uFlakeI: { value: 3 }, uFlakeD: { value: 0.55 } };
+export function flakePaint(m) {
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, PAINT);
+    sh.vertexShader = 'varying vec3 vFlP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFlP = position;');
+    sh.fragmentShader = `uniform float uFlakeI, uFlakeD; varying vec3 vFlP;
+      float flH(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      ` + sh.fragmentShader.replace('#include <opaque_fragment>', `{
+        vec3 q = vFlP * 170.0, c = floor(q), f = fract(q) - 0.5;
+        float h = flH(c), h2 = flH(c + 17.3);
+        vec3 nf = normalize(normal + (vec3(flH(c + 3.1), flH(c + 7.7), flH(c + 11.3)) - 0.5) * 1.5);   // chaque paillette penche à sa façon
+        vec3 V = normalize(vViewPosition), H = normalize(normalize(vec3(0.35, 0.85, 0.4)) + V);
+        float sp = pow(max(dot(nf, H), 0.0), 28.0) * step(1.0 - uFlakeD, h) * smoothstep(0.5, 0.2, length(f));
+        sp *= 1.0 - smoothstep(1.4, 3.0, length(fwidth(q)));                                              // de loin, on n'en fait pas de la neige
+        vec3 hol = mix(0.55 + 0.45 * cos(6.2832 * (h2 + vec3(0.0, 0.33, 0.67))), vec3(1.0), 0.3);        // reflets arc-en-ciel
+        vec3 fl = hol * sp * uFlakeI; outgoingLight += fl; totalEmissiveRadiance += fl;   // en émission : le rendu « illustration » les garde
+      }
+      #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'flake';
+  return m;
+}
+
 /** Biplan aux couleurs de la jeep (nez vers +z, dessus vers +y). userData.prop : l'hélice à faire tourner. */
 export function makeBiplane() {
   const plane = new THREE.Group(), body = new THREE.Group(); plane.add(body);
   const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, ...o });
-  const paint = mat('#6b3fe0', { roughness: 0.32 }), black = mat('#1d1b26', { roughness: 0.75 }), cream = mat('#fff1dc', { roughness: 0.5 });
+  const paint = flakePaint(mat('#6b3fe0', { roughness: 0.32 })), black = mat('#1d1b26', { roughness: 0.75 }), cream = mat('#fff1dc', { roughness: 0.5 });
   const bronze = mat('#d08f4e', { roughness: 0.35, metalness: 0.35 }), pink = mat('#ff4f86', { roughness: 0.45 }), glass = mat('#a8dcff', { roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.6 });
   const box = (w, h, d, m, x, y, z, r = 0.04, parent = body) => {
     const g = new THREE.BoxGeometry(w, h, d, 2, 2, 2), p = g.attributes.position, v = new THREE.Vector3(), hw = w / 2 - r, hh = h / 2 - r, hd = d / 2 - r;
@@ -89,7 +113,7 @@ export function makeBiplane() {
 export function makeCar() {
   const car = new THREE.Group(), body = new THREE.Group(); car.add(body);
   const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, ...o });
-  const paint = mat('#6b3fe0', { roughness: 0.32 }), black = mat('#1d1b26', { roughness: 0.75 }), glass = mat('#a8dcff', { roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 });
+  const paint = flakePaint(mat('#6b3fe0', { roughness: 0.32 })), black = mat('#1d1b26', { roughness: 0.75 }), glass = mat('#a8dcff', { roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 });
   const bronze = mat('#d08f4e', { roughness: 0.35, metalness: 0.35 }), interior = mat('#2a2436', { roughness: 0.9 }), seatM = mat('#ff4f86', { roughness: 0.7 });
   const box = (w, h, d, m, x, y, z, r = 0.06, parent = body) => {
     const g = new THREE.BoxGeometry(w, h, d, 2, 2, 2);

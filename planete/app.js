@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, SEA_R, FADE } from './world.js';
-import { makeCar, makeBiplane, buildZones } from './props.js';
+import { makeCar, makeBiplane, buildZones, PAINT } from './props.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, makeTireTracks, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
 import { makeAudio } from './audio.js';
@@ -809,7 +809,7 @@ const tuneHooks = {
     TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons;
     planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * T.arbres.densite); });
     GLEAF.uLeafS.value = T.feuilles.taille; groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
-    avatar.scale.setScalar(T.voiture.taille);
+    avatar.scale.setScalar(T.voiture.taille); PAINT.uFlakeD.value = T.voiture.paillettes; PAINT.uFlakeI.value = T.voiture.eclatPaillettes;
     trails.cfg.width = T.turbo.largeur; trails.cfg.life = T.turbo.duree;
     const TU = trails.uniforms; TU.uC1.value.set(T.turbo.couleurDebut); TU.uC2.value.set(T.turbo.couleurMilieu); TU.uC3.value.set(T.turbo.couleurFin); TU.uMid.value = T.turbo.milieu; TU.uI.value = T.turbo.eclat;
     audio.applyVolumes(); syncSoundBtn();

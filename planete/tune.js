@@ -19,7 +19,7 @@ export const DEFAULTS = {
   feuilles: { taille: 0.9, quantite: 0.69 },
   lupins: { densite: 1, taille: 0.95, hauteur: 0.9, vent: 0.7, fleurs: 0.88, tailleFleurs: 1.05, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.12, duree: 1.4, couleurDebut: '#ff6666', couleurMilieu: '#0008ff', couleurFin: '#5b28e6', milieu: 0.4, eclat: 0.55 },
-  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 30.5, saut: 1.7, raideur: 0.9 },
+  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 30.5, saut: 1.7, raideur: 0.9, paillettes: 0.55, eclatPaillettes: 3 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
   son: { actif: true, general: 0.51, musique: 0.45, ambiance: 0.7, vehicules: 0.17, effets: 0.8 },
 };
@@ -130,6 +130,8 @@ export async function toggleTunePanel(hooks) {
 
   const fV = gui.addFolder('Voiture');
   ch(fV.add(TUNE.voiture, 'taille', 0.4, 3, 0.05).name('Taille'));
+  ch(fV.add(TUNE.voiture, 'paillettes', 0, 1, 0.01).name('Paillettes (densité)'));
+  ch(fV.add(TUNE.voiture, 'eclatPaillettes', 0, 8, 0.1).name('Paillettes (éclat)'));
   ch(fV.add(TUNE.voiture, 'vitesse', 2, 15, 0.1).name('Vitesse max'));
   ch(fV.add(TUNE.voiture, 'acceleration', 2, 30, 0.5).name('Accélération'));
   ch(fV.add(TUNE.voiture, 'turbo', 0, 2, 0.05).name('Bonus du turbo'));
