@@ -24,6 +24,68 @@ function canvasTex(draw, w, h) {
 }
 
 /* ---------- la Jeep (et son mode aéroglisseur) ---------- */
+/** Biplan aux couleurs de la jeep (nez vers +z, dessus vers +y). userData.prop : l'hélice à faire tourner. */
+export function makeBiplane() {
+  const plane = new THREE.Group(), body = new THREE.Group(); plane.add(body);
+  const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, ...o });
+  const paint = mat('#6b3fe0', { roughness: 0.32 }), black = mat('#1d1b26', { roughness: 0.75 }), cream = mat('#fff1dc', { roughness: 0.5 });
+  const bronze = mat('#d08f4e', { roughness: 0.35, metalness: 0.35 }), pink = mat('#ff4f86', { roughness: 0.45 }), glass = mat('#a8dcff', { roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.6 });
+  const box = (w, h, d, m, x, y, z, r = 0.04, parent = body) => {
+    const g = new THREE.BoxGeometry(w, h, d, 2, 2, 2), p = g.attributes.position, v = new THREE.Vector3(), hw = w / 2 - r, hh = h / 2 - r, hd = d / 2 - r;
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const c = new THREE.Vector3(Math.max(-hw, Math.min(hw, v.x)), Math.max(-hh, Math.min(hh, v.y)), Math.max(-hd, Math.min(hd, v.z)));
+      v.sub(c).normalize().multiplyScalar(r).add(c); p.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals();
+    const m2 = new THREE.Mesh(g, m); m2.position.set(x, y, z); parent.add(m2); return m2;
+  };
+  const bar = (a, b, r = 0.018, m = black) => {
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), L = A.distanceTo(B);
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 6), m);
+    t.position.copy(A).add(B).multiplyScalar(0.5); t.quaternion.setFromUnitVectors(Y, B.clone().sub(A).normalize()); body.add(t);
+  };
+  // fuselage effilé vers la queue, capot moteur rond
+  box(0.36, 0.36, 1.1, paint, 0, 0, 0.2, 0.08);
+  box(0.28, 0.28, 0.55, paint, 0, 0.02, -0.55, 0.07);
+  box(0.18, 0.2, 0.4, paint, 0, 0.05, -0.98, 0.05);
+  const cowl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.22, 14), bronze); cowl.rotation.x = Math.PI / 2; cowl.position.set(0, 0, 0.82); body.add(cowl);
+  const hub = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.14, 10), black); hub.rotation.x = Math.PI / 2; hub.position.set(0, 0, 1.0); body.add(hub);
+  // bandes rétro sur le flanc
+  [['#ff4f86', 0.07], ['#ffb03a', 0], ['#38d2ff', -0.07]].forEach(([c, y]) => { box(0.37, 0.035, 0.5, mat(c), 0, y, 0.2, 0.01); });
+  // poste de pilotage : trou sombre, pare-brise, pilote à lunettes et écharpe
+  box(0.24, 0.04, 0.3, black, 0, 0.18, -0.12, 0.015);
+  box(0.24, 0.13, 0.02, glass, 0, 0.26, 0.06, 0.01);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 8), mat('#f2c39b')); head.position.set(0, 0.3, -0.14); body.add(head);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat('#5a3a22')); cap.position.copy(head.position); body.add(cap);
+  box(0.15, 0.035, 0.03, glass, 0, 0.31, -0.07, 0.01);
+  const scarf = box(0.04, 0.025, 0.22, pink, 0.04, 0.22, -0.32, 0.01); scarf.rotation.y = 0.25;
+  // deux ailes, la supérieure plus large et un peu avancée ; extrémités roses
+  box(2.1, 0.05, 0.42, cream, 0, -0.14, 0.25, 0.02);
+  box(2.35, 0.05, 0.44, cream, 0, 0.5, 0.32, 0.02);
+  [-1, 1].forEach(sd => { box(0.22, 0.055, 0.43, pink, sd * 1.07, 0.5, 0.32, 0.02); box(0.2, 0.055, 0.41, pink, sd * 0.96, -0.14, 0.25, 0.02); });
+  // haubans entre les ailes, mâts de cabane
+  [-0.8, 0.8].forEach(x => { bar([x, -0.12, 0.14], [x, 0.48, 0.2]); bar([x, -0.12, 0.38], [x, 0.48, 0.44]); bar([x, -0.12, 0.14], [x, 0.48, 0.44], 0.008); });
+  [-0.16, 0.16].forEach(x => { bar([x, 0.16, 0.2], [x * 1.3, 0.48, 0.3]); bar([x, 0.16, 0.42], [x * 1.3, 0.48, 0.38]); });
+  // empennage
+  box(0.85, 0.04, 0.26, cream, 0, 0.06, -1.12, 0.015);
+  box(0.04, 0.34, 0.3, pink, 0, 0.24, -1.12, 0.015);
+  // train d'atterrissage
+  [-1, 1].forEach(sd => {
+    bar([sd * 0.12, -0.15, 0.45], [sd * 0.28, -0.46, 0.42]); bar([sd * 0.12, -0.15, 0.25], [sd * 0.28, -0.46, 0.42]);
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.07, 14), black); w.rotation.z = Math.PI / 2; w.position.set(sd * 0.31, -0.46, 0.42); body.add(w);
+  });
+  bar([0, -0.1, -0.95], [0, -0.2, -1.05], 0.012);
+  // hélice : deux pales et un disque flou quand elle tourne vite
+  const prop = new THREE.Group(); prop.position.set(0, 0, 0.95); body.add(prop);
+  box(0.07, 0.95, 0.025, mat('#6a4428', { roughness: 0.6 }), 0, 0, 0, 0.01, prop);
+  const blur = new THREE.Mesh(new THREE.CircleGeometry(0.5, 24), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide })); prop.add(blur);
+  plane.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  blur.castShadow = false;
+  plane.userData = { prop, body };
+  return plane;
+}
+
 export function makeCar() {
   const car = new THREE.Group(), body = new THREE.Group(); car.add(body);
   const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, ...o });

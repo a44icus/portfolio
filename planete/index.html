@@ -151,6 +151,25 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
 }
 @media (prefers-reduced-motion:reduce){ .panel,.intro,.isl{ transition:none; } }
 </style>
+<script>
+/* si la planète ne démarre pas (téléphone trop ancien, WebGL 2 absent, erreur), on le dit au lieu de rester sur « Chargement… » */
+(function () {
+  var shown = false;
+  window.__planetFail = function (msg, soft) {
+    if (shown) return; if (!soft) shown = true;
+    var go = function () { var t = document.getElementById('loadTxt'), b = document.getElementById('introBtn');
+      if (b && !soft) { b.textContent = 'Version classique du portfolio'; b.disabled = false; b.onclick = function () { location.href = '../index.html'; }; }
+      if (t) { t.style.color = '#ffb4a8'; t.textContent = msg; } };
+    document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', go) : go();
+  };
+  try { var c = document.createElement('canvas'); if (!c.getContext('webgl2')) window.__planetFail('Ton navigateur ne gère pas WebGL 2 : la planète ne peut pas s’afficher. Mets à jour le navigateur ou essaie la version classique.'); } catch (e) { /* rien */ }
+  var early = function (m) { if (!window.__planetReady) window.__planetFail('Erreur au chargement : ' + m); };
+  window.addEventListener('error', function (e) { if (!/planete|three/.test(e.filename || '')) return; early((e.message || 'script') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '')); });
+  window.addEventListener('unhandledrejection', function (e) { early(String(e.reason && e.reason.message || e.reason)); });
+  setTimeout(function () { if (!window.__planetReady) window.__planetFail('La planète met trop de temps à se générer sur cet appareil. Patiente encore un peu…', true); }, 45000);
+})();
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.1/dist/es-module-shims.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",

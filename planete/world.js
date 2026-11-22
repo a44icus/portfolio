@@ -575,6 +575,8 @@ export function buildPlanet(anchors, quality = 'high') {
   // arbres : houppiers en petites feuilles (rendu « peint »), quelques cyprès et pins, en forêts
   const NV = 6, variants = Array.from({ length: NV }, (_, v) => treeVariant(v, quality)), vWood = variants.map(() => []), vLeaf = variants.map(() => []);
   const trunks = [], cypress = [], pines = [], bushes = [], treeDirs = [];
+  // troncs pour les collisions : direction, rayon du pied, échelle, et (maillage, rang) pour suivre la densité réglée
+  const trunkSpots = [], pineN = [0, 0];
   let recolorGrass = () => {};
   for (let tries = 0; tries < 60000 && treeDirs.length < (quality === 'low' ? 850 : 1350); tries++) {
     randDir(d);
@@ -583,10 +585,11 @@ export function buildPlanet(anchors, quality = 'high') {
     if (above < 2.5 || above > 26 || onPlaza(d, 0.9 / SEA_R) || roadNear(d, 1.5) || slopeAt(d) > 0.6) continue;
     const s = 0.85 + rng() * 0.55, r = rng(), hs = h * S - 0.03;
     treeDirs.push(d.clone());
-    if (r < 0.78) { const k = Math.floor(rng() * NV), m = place(d, hs, s, s * (0.9 + rng() * 0.25)); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
-    else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol(0.85)]); }
-    else if (r < 0.95) { const k = Math.floor(rng() * 2), m = place(d, hs, s, s * (1 + rng() * 0.25)); pines.push([k, m, pineCol()]); }
-    else { const k = Math.floor(rng() * NV), m = place(d, hs, s * 1.15, s * 1.25); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
+    const spot = (m, i, sc, hgt) => trunkSpots.push({ d: d.clone(), base: hs, s: sc, h: hgt, m, i });
+    if (r < 0.78) { const k = Math.floor(rng() * NV), m = place(d, hs, s, s * (0.9 + rng() * 0.25)); spot(1 + k, vWood[k].length, s, 2 * s); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
+    else if (r < 0.9) { spot(0, trunks.length, s * 1.3, 1.5 * s); trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol(0.85)]); }
+    else if (r < 0.95) { const k = Math.floor(rng() * 2), m = place(d, hs, s, s * (1 + rng() * 0.25)); spot(1 + NV + k, pineN[k]++, s * 1.2, 2.5 * s); pines.push([k, m, pineCol()]); }
+    else { const k = Math.floor(rng() * NV), m = place(d, hs, s * 1.15, s * 1.25); spot(1 + k, vWood[k].length, s * 1.15, 2.4 * s); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
   }
   // buissons : lisières des forêts, bords des chemins et des esplanades
   for (let tries = 0; tries < 70000 && bushes.length < (quality === 'low' ? 1700 : 3000); tries++) {
@@ -833,9 +836,11 @@ export function buildPlanet(anchors, quality = 'high') {
   const SWIM = (R - 1.4) * S;
   function groundRadius(dir) { return Math.max(heightDir(dir), SWIM); }   // on marche, ou on nage
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
+  /** Part de sable sous ce point (0 : herbe, terre, route ou eau ; 1 : plage). */
+  function sandAt(dir) { const above = heightB(dir.x, dir.y, dir.z) - R; if (above < -0.25 || pathDir(dir) > 0.2) return 0; return 1 - smoothstep(0.8, 2.2, above); }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, treeMeshes, bushMesh, updatePads,
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, sandAt, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, trunkSpots, barkM, treeMeshes, bushMesh, updatePads,
     /** Lupins : densité (0 à 1), tige et épi suivent. */
     setLupinDensity(k) { if (lupinSpikes) lupinSpikes.count = lupinStems.count = Math.floor(lupinSpikes.instanceMatrix.count * k); },
     /** Lupins : une couleur par famille, chaque fleur garde sa nuance. */

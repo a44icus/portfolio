@@ -80,7 +80,9 @@ const Grade = {
 };
 export function makePost(renderer, scene, camera, quality) {
   // anticrénelage : rendu multi-échantillonné (MSAA), que le post-traitement conserve
-  const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: quality === 'low' ? 2 : 4 });
+  // les téléphones sans rendu en flottant passent en 8 bits (sinon écran noir)
+  const ext = renderer.extensions, flt = ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float');
+  const rt = new THREE.WebGLRenderTarget(4, 4, { type: flt ? THREE.HalfFloatType : THREE.UnsignedByteType, samples: quality === 'low' ? 2 : 4 });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.45, 1.05);
@@ -212,6 +214,52 @@ export function makeGroundLeaves(planet, count, spot) {
 }
 
 /* ---------- traînées lumineuses du turbo : deux rubans au sol, jaune-blanc puis rose, qui s'effacent ---------- */
+/* ---------- traces de pneus dans le sable : petits rubans sombres qui s'effacent ---------- */
+export function makeTireTracks(N = 1400, life = 28) {
+  const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5);
+  const born = new Float32Array(N).fill(-1e4), str = new Float32Array(N), len = new Float32Array(N);
+  geo.setAttribute('aBorn', new THREE.InstancedBufferAttribute(born, 1));
+  geo.setAttribute('aStr', new THREE.InstancedBufferAttribute(str, 1));
+  geo.setAttribute('aLen', new THREE.InstancedBufferAttribute(len, 1));
+  const U = { uTime: { value: 0 }, uLife: { value: life } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: U, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    // multiplication : le sable s'assombrit là où la roue est passée, quelle que soit sa couleur
+    blending: THREE.CustomBlending, blendSrc: THREE.DstColorFactor, blendDst: THREE.ZeroFactor,
+    vertexShader: `
+      attribute float aBorn, aStr, aLen; uniform float uTime, uLife; varying vec2 vUv; varying float vA, vL;
+      void main() {
+        vUv = uv; vL = aLen;
+        float age = uTime - aBorn; vA = aStr * (1.0 - smoothstep(uLife * 0.6, uLife, age)) * step(0.0, age);
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec2 vUv; varying float vA, vL;
+      void main() {
+        float edge = smoothstep(0.0, 0.22, vUv.x) * smoothstep(1.0, 0.78, vUv.x);
+        float tread = 0.7 + 0.3 * step(0.5, fract(vUv.y * vL / 0.075 + step(0.5, vUv.x) * 0.5));   // crampons décalés
+        float k = vA * edge * tread * 0.42;
+        gl_FragColor = vec4(vec3(1.0 - k), 1.0);
+      }`,
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, N); mesh.frustumCulled = false; mesh.renderOrder = 1;
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < N; i++) mesh.setMatrixAt(i, zero);
+  const m4 = new THREE.Matrix4(), seg = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3();
+  let next = 0;
+  return {
+    mesh, uniforms: U,
+    /** Un tronçon de trace de a à b (positions du monde, déjà posées sur le sol), d'intensité k. */
+    add(a, b, width, k, t) {
+      seg.subVectors(b, a); const L = seg.length(); if (L < 1e-3) return;
+      up.copy(a).normalize(); side.crossVectors(up, seg).normalize().multiplyScalar(width);
+      m4.makeBasis(side, up, seg).setPosition(a);
+      mesh.setMatrixAt(next, m4); born[next] = t; str[next] = k; len[next] = L;
+      next = (next + 1) % N;
+      mesh.instanceMatrix.needsUpdate = true; ['aBorn', 'aStr', 'aLen'].forEach(n => { geo.attributes[n].needsUpdate = true; });
+    },
+  };
+}
+
 export function makeTrails(N = 90, life0 = 1.7, width0 = 0.09) {
   const cfg = { life: life0, width: width0 };
   const U = { uC1: { value: new THREE.Color('#ffd159') }, uC2: { value: new THREE.Color('#ff6168') }, uC3: { value: new THREE.Color('#e629b8') }, uI: { value: 1 }, uMid: { value: 0.15 } };

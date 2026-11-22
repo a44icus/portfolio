@@ -6,8 +6,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, SEA_R, FADE } from './world.js';
-import { makeCar, buildZones } from './props.js';
-import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, GLEAF } from './look.js';
+import { makeCar, makeBiplane, buildZones } from './props.js';
+import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, makeTireTracks, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
@@ -36,7 +36,9 @@ const SECTIONS = [
 
 /* ---------- scène ---------- */
 const canvas = $('#scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// l'anticrénelage est fait par le post-traitement (MSAA) : inutile de le payer deux fois
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); window.__planetFail && window.__planetFail('Le processeur graphique a lâché (mémoire). Recharge la page.'); });
 const PR = Math.min(devicePixelRatio, quality === 'low' ? 1.3 : 1.6);
 renderer.setPixelRatio(PR);
 renderer.shadowMap.enabled = true;
@@ -95,7 +97,12 @@ scene.add(world);
 stylizeTree(planet.groundMesh, { cast: true, receive: true });
 stylizeTree(planet.decor);
 stylizeTree(planet.clouds);
-const post = makePost(renderer, scene, camera, quality);
+let post;
+try { post = makePost(renderer, scene, camera, quality); post.render(); }
+catch (e) {   // sans post-traitement : rendu direct
+  console.warn('post-traitement indisponible', e);
+  post = { setSize() {}, setTilt() {}, tilt: 0, bloom: {}, grade: { uniforms: { uSat: {} } }, setBand() {}, render() { renderer.render(scene, camera); } };
+}
 // feuilles mortes : sous les arbres et le long des routes
 const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 7000 : 16000, () => {
   const v = new THREE.Vector3();
@@ -113,6 +120,8 @@ const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 7000 : 16000, 
 });
 scene.add(groundLeaves.mesh); stylizeTree(groundLeaves.mesh);
 const trails = makeTrails(); scene.add(trails.group);
+const tracks = makeTireTracks(quality === 'low' ? 700 : 1400); scene.add(tracks.mesh);
+const trackLast = [new THREE.Vector3(), new THREE.Vector3()], trackOn = [false, false], trackPt = new THREE.Vector3(), trackDir = new THREE.Vector3();
 const trailHeads = [new THREE.Vector3(), new THREE.Vector3()], trailSide = new THREE.Vector3();
 const spray = makeSpray(quality === 'low' ? 70 : 140); scene.add(spray.mesh);
 // la caméra part face au pavillon « Profil »
@@ -128,6 +137,7 @@ controls.addEventListener('start', () => { controls.autoRotate = false; camAnim 
 let mode = 'orbit';
 let camAnim = null;
 function flyTo(dir, dist = SEA_R + 34, dur = 1100) {
+  if (PL.cam) endPlaneCam();
   const from = camera.position.clone(), fromLen = from.length(), toLen = dist;
   const qa = new THREE.Quaternion(), qb = new THREE.Quaternion().setFromUnitVectors(from.clone().normalize(), dir.clone().normalize());
   camAnim = { t0: performance.now(), dur: reduce ? 1 : dur, from, fromLen, toLen, qa, qb };
@@ -325,13 +335,14 @@ function setWalk(on) {
     P.fwd.copy(s.dir).sub(P.dir.clone().multiplyScalar(P.dir.dot(s.dir))).normalize();
     P.r = planet.groundRadius(P.dir) + 2; P.vr = 0; P.ground = false; P.speed = 0;
     camF.copy(P.fwd); P.mv.copy(P.fwd);
+    stopPlane();
     mode = 'walk'; controls.enabled = false; controls.autoRotate = false; camAnim = null; avatar.visible = true;
     hasLanded = true; document.body.classList.remove('nudge');
     walkBtn.textContent = 'Décoller'; document.body.classList.add('walking'); closePanel();
   } else {
-    mode = 'orbit'; avatar.visible = false; controls.enabled = true;
-    camera.up.set(0, 1, 0);
-    const d = P.dir.clone(); camera.position.copy(d.multiplyScalar(SEA_R + 50)); controls.update();
+    mode = 'orbit';
+    startPlane();   // la voiture devient biplan et s'envole ; la caméra la suit puis prend du recul
+    if (reduce) { endPlaneCam(); camera.position.copy(P.dir).multiplyScalar(SEA_R + 50); controls.update(); }
     walkBtn.textContent = 'Atterrir'; document.body.classList.remove('walking'); promptEl.classList.remove('on'); near = null;
   }
   setHint();
@@ -420,6 +431,7 @@ function stepWalk(dt) {
       if (P.ground && gNext > P.r) P.r = gNext;
     } else P.speed *= -0.25;
   }
+  hitTrunks(dt);
   const g = driveR(P.dir);
   if (P.ground) {
     // au sol : on suit le relief tant qu'il ne se dérobe pas plus vite que la gravité ; sinon la voiture décolle (bosses, crêtes, rampes)
@@ -494,6 +506,24 @@ function stepWalk(dt) {
     avatar.userData.wheels.forEach((w, i) => avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)));
     planet.crushGrass(crushPts, 0.2, planet.waterUniforms.uTime.value + 0.001);
   }
+  // traces de pneus dans le sable (roues arrière), qui s'effacent doucement
+  const tNow = planet.waterUniforms.uTime.value; tracks.uniforms.uTime.value = tNow;
+  {
+    const onBridge = (() => { const bi = planet.bridgeAt(P.dir); return !!(bi && P.r > bi.top - 0.3); })();
+    const rear = avatar.userData.wheels.filter(w => w.along < 0);
+    rear.forEach((w, i) => {
+      if (i > 1) return;
+      avatar.localToWorld(trackPt.set(w.side * 0.37, 0, w.along));
+      trackDir.copy(trackPt).normalize();
+      const sand = P.ground && hv < 0.5 && !onBridge && Math.abs(P.ax) < 0.4 && Math.abs(P.az) < 0.4 ? planet.sandAt(trackDir) : 0;
+      if (sand < 0.25) { trackOn[i] = false; return; }
+      trackPt.copy(trackDir).multiplyScalar(Math.max(planet.heightDir(trackDir), WATER_R) + 0.025);
+      if (!trackOn[i]) { trackLast[i].copy(trackPt); trackOn[i] = true; return; }
+      const d = trackPt.distanceTo(trackLast[i]);
+      if (d > 0.6) { trackLast[i].copy(trackPt); return; }   // téléportation, saut
+      if (d > 0.14) { tracks.add(trackLast[i], trackPt, 0.15, Math.min(1, sand * 1.4), tNow); trackLast[i].copy(trackPt); }
+    });
+  }
   // embruns : autour de la jupe, surtout à l'arrière et en vitesse
   if (!reduce) spray.update(dt, bob > 0.5 ? 14 + Math.abs(P.speed) * 9 + Math.abs(throttle) * 12 : 0, (p, v) => {
     const a = Math.random() * Math.PI * 2, back = Math.random() < 0.6;
@@ -527,6 +557,91 @@ const flipQ = new THREE.Quaternion(), flipE = new THREE.Euler(), flipV = new THR
 const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
 const clampW = v => Math.max(-7, Math.min(7, v));
 /** Au décollage, la voiture garde son inclinaison et la vitesse de rotation du relief (atténuée), rien de plus. */
+/* troncs d'arbres : des poteaux solides, la voiture rebondit ou glisse le long */
+const TC = 2 / SEA_R, tcells = new Map(), tkey = (x, y, z) => ((Math.floor(x / TC) + 256) * 512 + Math.floor(y / TC) + 256) * 512 + Math.floor(z / TC) + 256;
+planet.trunkSpots.forEach(t => { const k = tkey(t.d.x, t.d.y, t.d.z); if (!tcells.has(k)) tcells.set(k, []); tcells.get(k).push(t); });
+let trunkCd = 0;
+const tOff = new THREE.Vector3(), tVel = new THREE.Vector3();
+function hitTrunks(dt) {
+  trunkCd -= dt;
+  const ts = TREE.uTreeS.value, cx = Math.floor(P.dir.x / TC), cy = Math.floor(P.dir.y / TC), cz = Math.floor(P.dir.z / TC);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+    const cell = tcells.get(((cx + a + 256) * 512 + cy + b + 256) * 512 + cz + c + 256); if (!cell) continue;
+    for (const t of cell) {
+      if (t.i >= planet.treeMeshes[t.m][0].count) continue;     // arbre retiré par le réglage de densité
+      if (P.r - t.base > t.h * ts) continue;                    // on passe par-dessus
+      tOff.copy(P.dir).sub(t.d).multiplyScalar(P.r); tOff.addScaledVector(P.dir, -tOff.dot(P.dir));
+      const dist = tOff.length(), min = 0.07 * t.s * ts + 0.4;
+      if (dist >= min || dist < 1e-5) continue;
+      const n = tOff.divideScalar(dist);
+      P.dir.addScaledVector(n, (min - dist) / P.r).normalize();   // on ressort la voiture du tronc
+      P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.addScaledVector(P.dir, -P.mv.dot(P.dir)).normalize();
+      tVel.copy(P.mv).multiplyScalar(P.speed);
+      const vn = tVel.dot(n);
+      if (vn < 0) {                                              // on fonçait dessus : rebond amorti, on garde la part qui glisse
+        tVel.addScaledVector(n, -1.35 * vn);
+        P.speed = tVel.dot(P.fwd);
+        if (-vn > 1.2 && trunkCd <= 0) {
+          trunkCd = 0.3; audio.impact(-vn * 0.9, 0, 'bois');
+          if (-vn > 4 && P.ground) { P.vr = Math.min(4, -vn * 0.35); P.ground = false; takeoff(); P.wx += (Math.random() - 0.5) * -vn * 0.4; P.wz += (Math.random() - 0.5) * -vn * 0.4; }   // gros choc : la voiture se soulève
+        }
+      }
+    }
+  }
+}
+/* ---------- biplan : au décollage la voiture se transforme, monte dans le ciel puis fait le tour de la planète ---------- */
+const plane = makeBiplane(); plane.visible = false; scene.add(plane);
+const PL = { on: false, t: 0, dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, r0: 0, speed: 0, bank: 0, pitch: 0, cam: 0, roll: 0 };
+const PL_ALT = SEA_R + 9, PL_CAM_T = 4.6, AX = new THREE.Vector3(1, 0, 0), AZ = new THREE.Vector3(0, 0, 1), WY = new THREE.Vector3(0, 1, 0);
+const plM = new THREE.Matrix4(), plX = new THREE.Vector3(), plQ = new THREE.Quaternion(), plA = new THREE.Vector3(), plB = new THREE.Vector3(), plFrom = new THREE.Vector3(), plUp = new THREE.Vector3();
+const smooth01 = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+function startPlane() {
+  PL.on = true; PL.t = 0; PL.dir.copy(P.dir); PL.fwd.copy(P.fwd); PL.r = PL.r0 = P.r + 0.35; PL.speed = Math.max(2.5, Math.abs(P.speed)); PL.bank = PL.pitch = PL.roll = 0;
+  PL.cam = 1; controls.enabled = false; controls.autoRotate = false; camAnim = null;
+  plFrom.copy(camera.position); plUp.copy(camera.up);
+  plane.visible = true; plane.scale.setScalar(0.01);
+  audio.impact(2.2, 0, 'sol');
+}
+function stopPlane() { PL.on = false; PL.cam = 0; plane.visible = false; avatar.scale.setScalar(TUNE.voiture.taille); }
+function endPlaneCam() { PL.cam = 0; controls.enabled = true; camera.up.set(0, 1, 0); controls.update(); }
+function updatePlane(dt) {
+  if (!PL.on) return;
+  const T = (PL.t += dt);
+  // altitude : quelques mètres de roulage, montée jusqu'à l'orbite, puis de lentes ondulations
+  const rise = smooth01((T - 0.5) / 3.6);
+  const target = PL.r0 + (PL_ALT - PL.r0) * rise + Math.sin(T * 0.55) * 1.1 * smooth01((T - 4.5) / 3);
+  const vr = (target - PL.r) / Math.max(dt, 1e-3); PL.r = target;
+  PL.speed += ((T < 4 ? 9 : 7) - PL.speed) * (1 - Math.exp(-dt * 1.1));
+  // cap : de larges virages qui changent sans cesse
+  const turn = (Math.sin(T * 0.17) * 0.24 + Math.sin(T * 0.41 + 1) * 0.12) * smooth01((T - 3) / 2);
+  PL.fwd.applyAxisAngle(PL.dir, turn * dt);
+  const axis = plA.crossVectors(PL.dir, PL.fwd).normalize(), ang = PL.speed * dt / PL.r;
+  PL.dir.applyAxisAngle(axis, ang).normalize(); PL.fwd.applyAxisAngle(axis, ang); PL.fwd.addScaledVector(PL.dir, -PL.fwd.dot(PL.dir)).normalize();
+  PL.bank += (-turn * 2.4 - PL.bank) * (1 - Math.exp(-dt * 2));
+  PL.pitch += (Math.atan2(vr, PL.speed) - PL.pitch) * (1 - Math.exp(-dt * 4));
+  // un tonneau de joie une fois en haut
+  PL.roll = T > 5 && T < 6.6 ? smooth01((T - 5) / 1.6) * Math.PI * 2 : 0;
+  plX.crossVectors(PL.dir, PL.fwd).normalize();
+  plM.makeBasis(plX, PL.dir, PL.fwd); plane.quaternion.setFromRotationMatrix(plM);
+  plane.quaternion.multiply(plQ.setFromAxisAngle(AX, -PL.pitch)).multiply(plQ.setFromAxisAngle(AZ, PL.bank + PL.roll));
+  plane.position.copy(PL.dir).multiplyScalar(PL.r).addScaledVector(PL.dir, Math.sin(T * 2.3) * 0.05 * rise);
+  // transformation : la voiture rapetisse en tournant, l'avion grandit (et grossit un peu en altitude, pour rester lisible de loin)
+  const k = smooth01(T / 0.5);
+  avatar.visible = k < 1; avatar.scale.setScalar(Math.max(0.001, 1 - k) * TUNE.voiture.taille); avatar.rotateY(dt * 9 * (1 - k));
+  plane.scale.setScalar(Math.max(0.01, k) * (1 + 1.1 * rise));
+  plane.userData.prop.rotation.z += dt * (20 + 30 * k);
+}
+/** Caméra du décollage : de la poursuite derrière l'avion jusqu'à la vue de la planète entière. */
+function planeCamera() {
+  const T = PL.t, a = smooth01(T / 1.1), b = smooth01((T - 1.4) / (PL_CAM_T - 1.4));
+  const chase = plA.copy(plane.position).addScaledVector(PL.fwd, -6).addScaledVector(PL.dir, 2.6);
+  chase.lerpVectors(plFrom, chase, a);
+  const far = plB.copy(PL.dir).multiplyScalar(SEA_R + 50);
+  camera.position.lerpVectors(chase, far, b);
+  camera.up.copy(plUp).lerp(PL.dir, a).lerp(WY, b); if (camera.up.lengthSq() < 1e-4) camera.up.copy(WY); camera.up.normalize();
+  camera.lookAt(plA.copy(plane.position).multiplyScalar(1 - b));
+  if (T >= PL_CAM_T) endPlaneCam();
+}
 function takeoff() {
   P.ax = wrapA(P.ax - Math.atan(P.sf)); P.az = wrapA(P.az + Math.atan(P.sr));
   P.wx = clampW(P.wx - P.sfRate * 0.6); P.wz = clampW(P.wz + P.srRate * 0.6);
@@ -713,8 +828,9 @@ function frame() {
       camera.position.copy(camAnim.from).normalize().applyQuaternion(q).multiplyScalar(camAnim.fromLen + (camAnim.toLen - camAnim.fromLen) * e);
       if (k >= 1) camAnim = null;
     }
-    controls.update();
+    if (PL.cam) planeCamera(); else controls.update();
   } else stepWalk(dt);
+  updatePlane(dt);
   if (zones) zones.update(dt, t, mode === 'walk' ? carBody : null);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   if (mode === 'walk') {
@@ -766,14 +882,14 @@ requestAnimationFrame(frame);
 
 /* ---------- démarrage ---------- */
 const introBtn = $('#introBtn');
-introBtn.disabled = false; introBtn.textContent = 'Explorer la planète';
+introBtn.disabled = false; introBtn.textContent = 'Explorer la planète'; window.__planetReady = true;
 introBtn.addEventListener('click', () => { audio.start(); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 (window.loadPortfolio ? window.loadPortfolio() : Promise.resolve(DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
   .catch(() => { $('#loadTxt').textContent = ''; });
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { P, planet, driveR, keys, ambience },
+  dbg: { P, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },
