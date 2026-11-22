@@ -116,7 +116,8 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
   addEventListener('click', e => { if (!menu.contains(e.target)) { menu.classList.remove('on'); btn.setAttribute('aria-expanded', false); } });
   menu.addEventListener('click', e => {
     const b = e.target.closest('button[data-k]'); if (!b) return;
-    if (b.dataset.k === 'time') { S.timeMode = b.dataset.v; S.target = b.dataset.v === 'auto' ? null : TIMES[b.dataset.v]; }
+    // un choix d'heure dans le menu libère l'« heure figée » des réglages (sinon le bouton n'aurait aucun effet)
+    if (b.dataset.k === 'time') { TUNE.ambiance.heureFixe = false; S.timeMode = b.dataset.v; S.target = b.dataset.v === 'auto' ? null : TIMES[b.dataset.v]; }
     else { S.weatherMode = b.dataset.v; if (b.dataset.v !== 'auto') S.weather = b.dataset.v; else S.nextWeather = 40 + Math.random() * 60; }
     syncMenu();
   });

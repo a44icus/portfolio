@@ -164,11 +164,23 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
       if (t) { t.style.color = '#ffb4a8'; t.textContent = msg; } };
     document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', go) : go();
   };
-  try { var c = document.createElement('canvas'); if (!c.getContext('webgl2')) window.__planetFail('Ton navigateur ne gère pas WebGL 2 : la planète ne peut pas s’afficher. Mets à jour le navigateur ou essaie la version classique.'); } catch (e) { /* rien */ }
-  var early = function (m) { if (!window.__planetReady) window.__planetFail('Erreur au chargement : ' + m); };
-  window.addEventListener('error', function (e) { if (!/planete|three/.test(e.filename || '')) return; early((e.message || 'script') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '')); });
+  var gpu = '';
+  try { var c = document.createElement('canvas'), gl = c.getContext('webgl2');
+    if (!gl) window.__planetFail('Ton navigateur ne gère pas WebGL 2 : la planète ne peut pas s’afficher. Mets à jour le navigateur ou essaie la version classique.');
+    else { var di = gl.getExtension('WEBGL_debug_renderer_info'); gpu = String(di ? gl.getParameter(di.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 60); var lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
+  } catch (e) { /* rien */ }
+  /* diagnostic : étape en cours et temps écoulé, affichés pendant le chargement (pour savoir où un téléphone bloque) */
+  var T0 = Date.now(), step = { name: 'Téléchargement des scripts', t: T0 }, log = [];
+  var sec = function (ms) { return Math.round(ms / 100) / 10 + ' s'; };
+  window.__planetStep = function (name) { var now = Date.now(); log.push(step.name + ' ' + sec(now - step.t)); step = { name: name, t: now }; paint(); };
+  var paint = function () { if (window.__planetReady || shown) return; var t = document.getElementById('loadTxt'); if (t && !t.dataset.err) t.textContent = step.name + '… (' + Math.round((Date.now() - T0) / 1000) + ' s)'; };
+  setInterval(paint, 1000);
+  var report = function () { return ' — étape : « ' + step.name + ' » depuis ' + sec(Date.now() - step.t) + ' | ' + log.join(' · ') + ' | GPU : ' + (gpu || '?') + ' | ' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90); };
+  var early = function (m, soft) { if (window.__planetReady) return; var t = document.getElementById('loadTxt'); if (t) t.dataset.err = 1; window.__planetFail('Erreur au chargement : ' + m + report(), soft); };
+  // les erreurs des scripts d'un autre domaine arrivent sans nom de fichier (« Script error. ») : on les affiche quand même, sans abandonner
+  window.addEventListener('error', function (e) { if (e.filename && !/planete|three|jsdelivr|es-module-shims/.test(e.filename)) return; early((e.message || 'script') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''), !e.filename); });
   window.addEventListener('unhandledrejection', function (e) { early(String(e.reason && e.reason.message || e.reason)); });
-  setTimeout(function () { if (!window.__planetReady) window.__planetFail('La planète met trop de temps à se générer sur cet appareil. Patiente encore un peu…', true); }, 45000);
+  setTimeout(function () { if (!window.__planetReady) { var t = document.getElementById('loadTxt'); if (t) t.dataset.err = 1; window.__planetFail('La planète met trop de temps à se générer sur cet appareil. Patiente encore un peu…' + report(), true); } }, 45000);
 })();
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.1/dist/es-module-shims.js"></script>

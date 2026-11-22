@@ -88,9 +88,13 @@ const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAt
   void atmo;
 }
 
+// étapes affichées sur l'écran de chargement ; la pause laisse le navigateur afficher le texte avant le calcul suivant
+const step = async name => { if (window.__planetStep) window.__planetStep(name); await new Promise(r => { requestAnimationFrame(() => setTimeout(r, 0)); setTimeout(r, 120); }); };   // (rAF ne vient pas si l'onglet est caché)
+await step('Génération du relief, des routes et de la végétation');
 performance.mark('planet-start');
 const planet = buildPlanet(SECTIONS, quality);
 performance.measure('planet-build', 'planet-start');
+await step('Mise en place de la scène');
 const world = new THREE.Group();
 world.add(planet.groundMesh, planet.waterMesh, planet.decor, planet.clouds);
 scene.add(world);
@@ -926,11 +930,10 @@ setHint();
 /* ---------- démarrage ---------- */
 const loadTxt = $('#loadTxt'), wait = ms => new Promise(r => setTimeout(r, ms));
 // les zones (texte 3D, police téléchargée) : on les attend un peu pour compiler leurs shaders avec le reste
-loadTxt.textContent = 'Construction des zones…';
+await step('Construction des zones');
 await Promise.race([zonesReady.catch(() => {}), wait(8000)]);
 // shaders compilés en parallèle (KHR_parallel_shader_compile) avant la première image, sans figer la page
-loadTxt.textContent = 'Préparation des couleurs et des lumières…';
-await wait(0);
+await step('Préparation des shaders (' + (renderer.extensions.has('KHR_parallel_shader_compile') ? 'parallèle' : 'séquentiel') + ')');
 try {
   if (renderer.compileAsync) {
     // même destination que le vrai rendu (sinon three compile la variante « écran » : sRGB + tone mapping, inutile)
@@ -940,8 +943,8 @@ try {
     await Promise.race([done, wait(30000)]);
   }
 } catch (e) { renderer.setRenderTarget(null); console.warn('précompilation des shaders', e); }
+await step('Première image');
 requestAnimationFrame(frame);
-loadTxt.textContent = 'Chargement des contenus…';
 // puis, en tâche de fond pendant l'intro : les objets encore cachés (voiture, biplan, pluie…), pour ne pas figer l'atterrissage
 setTimeout(() => {
   if (!renderer.compileAsync) return;
