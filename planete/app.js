@@ -5,7 +5,8 @@
    ============================================================================ */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildPlanet, SEA_R, PAV_R } from './world.js';
+import { buildPlanet, SEA_R } from './world.js';
+import { makeCar, buildZones } from './props.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -154,7 +155,7 @@ function openIsland(id) {
   const s = SECTIONS.find(x => x.id === id); if (!s) return;
   if (mode === 'orbit') flyTo(s.dir);
   openId = id;
-  pTag.textContent = 'Île ' + String(SECTIONS.indexOf(s) + 1).padStart(2, '0') + ' · ' + s.label;
+  pTag.textContent = 'Zone ' + String(SECTIONS.indexOf(s) + 1).padStart(2, '0') + ' · ' + s.label;
   pTag.style.color = s.color;
   pTitle.textContent = s.title;
   pBody.innerHTML = RENDER[id](DATA);
@@ -235,39 +236,32 @@ function wireGallery() {
 $('#lb').addEventListener('click', () => $('#lb').classList.remove('on'));
 
 /* ---------- mode à pied ---------- */
-const avatar = new THREE.Group();
-{
-  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 });
-  const part = (geo, c, y, x = 0, z = 0) => { const m = new THREE.Mesh(geo, mat(c)); m.position.set(x, y, z); avatar.add(m); return m; };
-  const leg = () => new THREE.CapsuleGeometry(0.075, 0.2, 4, 10).translate(0, -0.13, 0);
-  avatar.userData.legL = part(leg(), '#2b2b40', 0.3, -0.09);
-  avatar.userData.legR = part(leg(), '#2b2b40', 0.3, 0.09);
-  part(new THREE.CapsuleGeometry(0.19, 0.24, 6, 16), '#ff5a3c', 0.56);
-  part(new THREE.SphereGeometry(0.19, 24, 16), '#f2c9a0', 0.98);
-  const hair = part(new THREE.SphereGeometry(0.2, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), '#3a2a22', 1.0); hair.scale.y = 0.75;
-  part(new THREE.SphereGeometry(0.028, 10, 8), '#1a1a1a', 1.0, -0.07, 0.17);
-  part(new THREE.SphereGeometry(0.028, 10, 8), '#1a1a1a', 1.0, 0.07, 0.17);
-  avatar.scale.setScalar(0.72); avatar.visible = false; scene.add(avatar);
-}
-const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, vr: 0, ground: true, walkT: 0 };
+const avatar = makeCar();
+avatar.visible = false; scene.add(avatar);
+let zones = null;
+buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); });
+const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0 };
+// la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
+const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; } };
 const keys = new Set();
 const joy = { x: 0, y: 0 };
 let near = null;
 const hintEl = $('#hint'), walkBtn = $('#walkBtn'), promptEl = $('#prompt');
 function setHint() {
   hintEl.textContent = mode === 'orbit'
-    ? (touch ? 'Glisse pour tourner · pince pour zoomer · touche une île' : 'Glisser pour tourner · molette pour zoomer · clic sur une île')
-    : (touch ? 'Joystick pour marcher · bouton Saut · approche-toi d’un pavillon' : 'ZQSD / WASD ou flèches · Espace : sauter · E : ouvrir le pavillon');
+    ? (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
+    : (touch ? 'Joystick pour conduire · bouton Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches pour conduire · Espace : sauter · E : ouvrir la zone');
 }
 function setWalk(on) {
   if (on) {
-    // atterrit sur l'île la plus proche du regard, à quelques pas de son pavillon
+    // atterrit devant la zone la plus proche du regard
     camDir.copy(camera.position).normalize();
     let s = SECTIONS[0], bd = -2; SECTIONS.forEach(x => { const k = x.dir.dot(camDir); if (k > bd) { bd = k; s = x; } });
-    const side = new THREE.Vector3().crossVectors(s.dir, new THREE.Vector3(0, 1, 0)); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
-    P.dir.copy(s.dir).applyAxisAngle(side, -0.2).normalize();
+    // on se pose devant la zone, face aux grandes lettres
+    const z = planet.pavilions.find(p => p.id === s.id);
+    P.dir.copy(s.dir).addScaledVector(z.t2, 5.2 / SEA_R).normalize();
     P.fwd.copy(s.dir).sub(P.dir.clone().multiplyScalar(P.dir.dot(s.dir))).normalize();
-    P.r = planet.groundRadius(P.dir) + 2; P.vr = 0; P.ground = false;
+    P.r = planet.groundRadius(P.dir) + 2; P.vr = 0; P.ground = false; P.speed = 0;
     mode = 'walk'; controls.enabled = false; controls.autoRotate = false; camAnim = null; avatar.visible = true;
     walkBtn.textContent = 'Décoller'; document.body.classList.add('walking'); closePanel();
   } else {
@@ -302,52 +296,61 @@ addEventListener('blur', () => keys.clear());
 }
 
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vector3(), basis = new THREE.Matrix4();
-const PAV_COS = Math.cos((PAV_R + 0.25) / SEA_R);   // emprise d'un pavillon vue depuis le centre
+const nUp = new THREE.Vector3(), tiltQ = new THREE.Quaternion(), ZONE_COS = Math.cos(1.15 / SEA_R);
+function groundAt(dir, along, side) { return planet.groundRadius(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
   const k = c => keys.has(c);
   const busy = panel.classList.contains('on');
-  const fwdIn = busy ? 0 : (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y;
-  const turnIn = busy ? 0 : (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x;
-  if (!busy && k('Space') && P.ground) { P.vr = 7.5; P.ground = false; }
+  const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
+  const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
+  if (!busy && k('Space') && P.ground) { P.vr = 6.5; P.ground = false; }
 
+  // moteur, frein, frottement ; plus lent dans l'eau
+  const inWater = planet.isWet(P.dir), vmax = inWater ? 2.4 : 6.5;
+  if (throttle) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 : 9) * dt;
+  else P.speed *= Math.exp(-dt * 2.2);
+  P.speed = Math.max(-vmax * 0.5, Math.min(vmax, P.speed));
+  P.steer += (steerIn - P.steer) * (1 - Math.exp(-dt * 10));
   up.copy(P.dir);
-  if (turnIn) P.fwd.applyAxisAngle(up, -turnIn * 2.4 * dt);
-  const inWater = planet.isWet(P.dir);
-  const speed = (inWater ? 2.2 : 4.2) * Math.max(-1, Math.min(1, fwdIn));
-  if (speed) {
+  if (Math.abs(P.speed) > 0.05) P.fwd.applyAxisAngle(up, -P.steer * 2.3 * dt * Math.min(1, Math.abs(P.speed) / 2) * Math.sign(P.speed));
+  right.crossVectors(up, P.fwd).normalize();
+  if (P.speed) {
     const axis = tmpA.crossVectors(P.dir, P.fwd).normalize();
-    const next = tmpB.copy(P.dir).applyAxisAngle(axis, speed * dt / P.r).normalize();
+    const next = tmpB.copy(P.dir).applyAxisAngle(axis, P.speed * dt / P.r).normalize();
     const gNext = planet.groundRadius(next);
-    const inPavilion = SECTIONS.some(s => next.dot(s.dir) > PAV_COS);   // les pavillons sont solides
-    if (!inPavilion && gNext - P.r <= 0.42) {   // les pentes douces passent, une falaise non
+    if (gNext - P.r <= 0.42) {   // les pentes passent, une falaise non
       P.dir.copy(next);
       P.fwd.sub(tmpA.copy(P.dir).multiplyScalar(P.fwd.dot(P.dir))).normalize();
       if (P.ground && gNext > P.r) P.r = gNext;
-    }
-    P.walkT += dt * 9;
-  } else P.walkT = 0;
+    } else P.speed *= -0.25;
+  }
   const g = planet.groundRadius(P.dir);
-  if (!P.ground || P.r > g + 0.001) { P.vr -= 24 * dt; P.r += P.vr * dt; P.ground = false; }
+  if (!P.ground || P.r > g + 0.02) { P.vr -= 22 * dt; P.r += P.vr * dt; P.ground = false; }
   if (P.r <= g) { P.r = g; P.vr = 0; P.ground = true; }
 
-  // personnage
+  // la voiture épouse le relief (tangage et roulis)
   up.copy(P.dir); right.crossVectors(up, P.fwd).normalize();
+  const hf = groundAt(P.dir, 0.45, 0), hb = groundAt(P.dir, -0.45, 0), hr = groundAt(P.dir, 0, 0.32), hl = groundAt(P.dir, 0, -0.32);
+  nUp.copy(up).addScaledVector(P.fwd, -(hf - hb) / 0.9).addScaledVector(right, -(hr - hl) / 0.64).normalize();
   basis.makeBasis(right, up, P.fwd); avatar.quaternion.setFromRotationMatrix(basis);
+  tiltQ.setFromUnitVectors(up, P.ground ? nUp : up); avatar.quaternion.premultiply(tiltQ);
   avatar.position.copy(P.dir).multiplyScalar(P.r);
-  const sw = Math.sin(P.walkT) * 0.6; avatar.userData.legL.rotation.x = sw; avatar.userData.legR.rotation.x = -sw;
+  P.spin += P.speed * dt / 0.15;
+  avatar.userData.wheels.forEach(w => { w.w.rotation.x = P.spin; if (w.front) w.pivot.rotation.y = -P.steer * 0.45; });
+  avatar.userData.body.rotation.z = -P.steer * Math.min(1, Math.abs(P.speed) / 5) * 0.06;   // la caisse penche dans les virages
+  carBody.pos.copy(avatar.position).addScaledVector(up, 0.25); carBody.vel.copy(P.fwd).multiplyScalar(P.speed);
 
-  // caméra à la troisième personne
-  const target = tmpA.copy(avatar.position).addScaledVector(P.fwd, -3.7).addScaledVector(up, 3.9);
-  SECTIONS.forEach(s => { if (target.clone().normalize().dot(s.dir) > Math.cos((PAV_R + 1.2) / SEA_R)) { const l = target.length(), m = planet.heightDir(s.dir) + 4.4; if (l < m) target.setLength(m); } });
-  const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;   // la caméra reste au-dessus du relief
+  // caméra à la troisième personne, un peu en hauteur
+  const target = tmpA.copy(avatar.position).addScaledVector(P.fwd, -4.2).addScaledVector(up, 3.4);
+  const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
   if (target.length() < clear) target.setLength(clear);
-  camera.position.lerp(target, 1 - Math.exp(-dt * 6));
+  camera.position.lerp(target, 1 - Math.exp(-dt * 5));
   camera.up.copy(up);
-  camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.65).addScaledVector(P.fwd, 1.8));
+  camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.5).addScaledVector(P.fwd, 1.6));
 
-  // pavillon à proximité
+  // dans un cercle de zone ?
   let best = null, bd = -1; SECTIONS.forEach(s => { const d = s.dir.dot(P.dir); if (d > bd) { bd = d; best = s; } });
-  const close = bd > Math.cos((PAV_R + 1.6) / SEA_R) ? best : null;
+  const close = bd > ZONE_COS ? best : null;
   if (close !== near) {
     near = close;
     promptEl.classList.toggle('on', !!near);
@@ -379,6 +382,7 @@ function frame() {
     }
     controls.update();
   } else stepWalk(dt);
+  if (zones) zones.update(dt, t, mode === 'walk' ? carBody : null);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   sun.position.copy(camera.position).add(sunOff.set(22, 26, 4).applyQuaternion(camera.quaternion));
   planet.waterUniforms.uSun.value.copy(sun.position).normalize();
@@ -396,4 +400,6 @@ introBtn.disabled = false; introBtn.textContent = 'Explorer la planète';
 introBtn.addEventListener('click', () => { $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 (window.loadPortfolio ? window.loadPortfolio() : Promise.resolve(DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
   .catch(() => { $('#loadTxt').textContent = ''; });
-window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray() }) };
+window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray() }),
+  // simulation hors temps réel (tests) : conduit `sec` secondes avec les touches données
+  sim(sec, codes = []) { codes.forEach(c => keys.add(c)); for (let i = 0; i < sec * 60; i++) { stepWalk(1 / 60); if (zones) zones.update(1 / 60, i / 60, carBody); } codes.forEach(c => keys.delete(c)); return zones ? zones.bodies.list.filter(b => b.down || b.fall).length : -1; } };

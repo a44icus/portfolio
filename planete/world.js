@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 
 export const SEA_R = 16;      // rayon de la mer dans la scène
-export const PAV_R = 1.45;    // rayon du socle des pavillons (scène)
+export const PAV_R = 2.6;     // rayon de l'esplanade d'une zone (scène)
 const R = 120;                // rayon de la mer en blocs (Terre de Social World)
 const S = SEA_R / R;          // blocs -> unités de la scène
 const MAX_H = 34;             // relief maximal (blocs)
@@ -181,33 +181,42 @@ function tangents(d) {
   return [t1, new THREE.Vector3().crossVectors(d, t1)];
 }
 function findSites(count) {
-  const ring = (PAV_R + 1.4) / SEA_R, cands = [], d = new THREE.Vector3(), q = new THREE.Vector3();
-  const N = 6000, golden = Math.PI * (3 - Math.sqrt(5));
+  const ring = (PAV_R + 1.4) / SEA_R, d = new THREE.Vector3(), q = new THREE.Vector3();
+  const N = 5000, golden = Math.PI * (3 - Math.sqrt(5)), pts = [];
   for (let i = 0; i < N; i++) {
     const y = 1 - 2 * (i + 0.5) / N, r = Math.sqrt(1 - y * y), p = i * golden;
     d.set(Math.cos(p) * r, y * 0.9, Math.sin(p) * r).normalize();    // pas trop près des pôles
-    const h = rawHeight(d.x, d.y, d.z), above = h - R;
-    if (above < 3 || above > 15) continue;
+    const h = rawHeight(d.x, d.y, d.z);
+    if (h - R < 2) continue;
     const [t1, t2] = tangents(d);
-    let ok = true, lo = Infinity, hi = -Infinity;
-    for (let k = 0; k < 10 && ok; k++) {
+    let lo = Infinity, hi = -Infinity, dry = Infinity;
+    for (let k = 0; k < 10; k++) {
       const a = k / 10 * Math.PI * 2;
-      for (const rr of [ring * 0.5, ring, ring * 1.8]) {
+      for (const rr of [ring * 0.5, ring]) {
         q.copy(d).addScaledVector(t1, Math.cos(a) * rr).addScaledVector(t2, Math.sin(a) * rr).normalize();
-        const hq = rawHeight(q.x, q.y, q.z);
-        if (hq < R + 1.5) { ok = false; break; }
-        if (rr <= ring) { lo = Math.min(lo, hq); hi = Math.max(hi, hq); }
+        const hq = rawHeight(q.x, q.y, q.z); lo = Math.min(lo, hq); hi = Math.max(hi, hq); dry = Math.min(dry, hq - R);
       }
     }
-    if (ok && hi - lo < 7) cands.push({ dir: d.clone(), h, rough: hi - lo });
+    if (dry > 1.2) pts.push({ dir: d.clone(), h, rough: hi - lo, above: h - R });
   }
-  cands.sort((a, b) => a.rough - b.rough);
+  // du plus exigeant au plus tolérant : esplanade plane, en hauteur raisonnable, et zones bien espacées
+  const levels = [{ rough: 6, sep: 0.62 }, { rough: 9, sep: 0.52 }, { rough: 14, sep: 0.42 }, { rough: 99, sep: 0.3 }, { rough: 99, sep: 0 }];
   const sites = [];
-  if (cands.length) sites.push(cands[0]);
-  while (sites.length < count && cands.length > sites.length) {
-    let best = null, bd = -1;
-    for (const c of cands) { const m = Math.min(...sites.map(s => Math.acos(Math.min(1, c.dir.dot(s.dir))))) - c.rough * 0.01; if (m > bd) { bd = m; best = c; } }
-    sites.push(best);
+  for (const L of levels) {
+    const cands = pts.filter(c => c.rough < L.rough && c.above < 18 && !sites.includes(c)).sort((x, y) => x.rough - y.rough);
+    while (sites.length < count) {
+      let best = null, bd = -1;
+      for (const c of cands) {
+        if (sites.includes(c)) continue;
+        const m = sites.length ? Math.min(...sites.map(s => Math.acos(Math.min(1, c.dir.dot(s.dir))))) : 9;
+        if (m < L.sep) continue;
+        const score = Math.min(m, 1.2) - c.rough * 0.02;
+        if (score > bd) { bd = score; best = c; }
+      }
+      if (!best) break;
+      sites.push(best);
+    }
+    if (sites.length >= count) break;
   }
   return sites;
 }
@@ -218,7 +227,7 @@ function findSites(count) {
  */
 export function buildPlanet(anchors) {
   const sites = findSites(anchors.length);
-  const A0 = (PAV_R + 0.6) / SEA_R, A1 = A0 + 2.4 / SEA_R;      // esplanade plate, puis raccord en douceur
+  const A0 = (PAV_R + 0.6) / SEA_R, A1 = A0 + 2.2 / SEA_R;      // esplanade plate, puis raccord en douceur
   sites.forEach(s => { s.flat = s.h + 0.6; });
   anchors.forEach((an, k) => { an.dir = sites[k].dir.clone(); });
 
@@ -378,28 +387,10 @@ export function buildPlanet(anchors) {
   }
   inst(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), rocks);
 
-  /* ---------- pavillons ---------- */
-  const white = new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.55 });
-  const beacons = [];
+  /* ---------- zones : esplanade, repère local (les décors sont posés par props.js) ---------- */
   const pavilions = anchors.map((an, k) => {
-    const dir = an.dir, h = sites[k].flat * S, g = new THREE.Group();
-    const color = new THREE.Color(an.color), mColor = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05 });
-    const glow = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.6, roughness: 0.3 });
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(PAV_R, PAV_R * 1.08, 0.5, 48), white); base.position.y = -0.08; g.add(base);
-    const step = new THREE.Mesh(new THREE.CylinderGeometry(PAV_R * 0.78, PAV_R * 0.82, 0.12, 48), white); step.position.y = 0.22; g.add(step);
-    for (let p = 0; p < 6; p++) {
-      const ang = p / 6 * Math.PI * 2, col = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 1.25, 14), white);
-      col.position.set(Math.cos(ang) * PAV_R * 0.66, 0.88, Math.sin(ang) * PAV_R * 0.66); g.add(col);
-    }
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(PAV_R * 0.82, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), mColor); dome.position.y = 1.5; dome.scale.y = 0.78; g.add(dome);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(PAV_R * 0.8, 0.07, 10, 48), white); rim.rotation.x = Math.PI / 2; rim.position.y = 1.5; g.add(rim);
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.26, 24, 16), glow); orb.position.y = 0.85; g.add(orb);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.045, 10, 48), glow); ring.position.y = 3.05; g.add(ring);
-    const spire = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.7, 16), mColor); spire.position.y = 2.45; g.add(spire);
-    beacons.push(ring);
-    g.position.copy(dir).multiplyScalar(h); g.quaternion.copy(orient(dir));
-    decor.add(g);
-    return { id: an.id, dir: dir.clone(), top: dir.clone().multiplyScalar(h + 3.6) };
+    const dir = an.dir.clone(), h = sites[k].flat * S, [t1, t2] = tangents(dir);
+    return { id: an.id, color: an.color, dir, t1, t2, h, top: dir.clone().multiplyScalar(h + 2.2) };
   });
 
   /* ---------- nuages arrondis ---------- */
@@ -420,9 +411,9 @@ export function buildPlanet(anchors) {
   const SWIM = (R - 1.4) * S;
   function groundRadius(dir) { return Math.max(heightDir(dir), SWIM); }   // on marche, ou on nage
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
-  function animate(t) { beacons.forEach((r, i) => { r.rotation.x = Math.PI / 2 + Math.sin(t * 0.9 + i) * 0.25; r.rotation.z = t * 0.6 + i; }); }
+  function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, maxRelief: MAX_H * S };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, maxRelief: MAX_H * S };
 }
 
 /** Fusionne des géométries indexées simples (positions + normales). */
