@@ -665,7 +665,21 @@ const tuneHooks = {
 };
 tuneHooks.apply();
 tuneHooks.recolorGrass(); tuneHooks.recolorTrees(); tuneHooks.recolorLupins();
-$('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });   // page en cache sans le bouton : on s'en passe
+$('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });
+// réglages cachés : taper « stephane » les fait apparaître (et les ouvre) ; le retaper les cache
+{
+  const SECRET = 'stephane'; let typed = '';
+  const setAdmin = on => { document.body.classList.toggle('tune-on', on); try { if (on) localStorage.setItem('planete-admin', '1'); else localStorage.removeItem('planete-admin'); } catch (e) { /* rien */ } };
+  try { if (localStorage.getItem('planete-admin') === '1') document.body.classList.add('tune-on'); } catch (e) { /* rien */ }
+  addEventListener('keydown', e => {
+    if (e.key.length !== 1 || (e.target.closest && e.target.closest('input, textarea'))) return;
+    typed = (typed + e.key.toLowerCase()).slice(-SECRET.length);
+    if (typed !== SECRET) return;
+    typed = '';
+    const on = !document.body.classList.contains('tune-on'); setAdmin(on);
+    if (on || document.querySelector('.lil-gui')) toggleTunePanel(tuneHooks);
+  });
+}   // page en cache sans le bouton : on s'en passe
 
 /* ---------- boucle ---------- */
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); post.setSize(w, h, PR); camera.aspect = w / h; camera.updateProjectionMatrix(); }
