@@ -86,6 +86,9 @@ function rawHeight(x, y, z) {
 /* ---------- palette du sol ---------- */
 const COL = Object.fromEntries(Object.entries(STYLE.ground).map(([k, v]) => [k, new THREE.Color(v)]));
 const tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
+const EARTH = new THREE.Color('#e8913f');
+/** Couverture d'herbe : des plaques franches, de la terre nue entre elles. */
+const grassPatch = d => noise.fbm(d.x * 14 + 4, d.y * 14, d.z * 14, 3);
 const PATH_COL = new THREE.Color('#f39a4c'), PATH_EDGE = new THREE.Color('#d4703a'), RUT = new THREE.Color('#c25f30');
 function colorAt(d, h, steep, out, path = 0, rut = 0) {
   const above = h - R;
@@ -93,6 +96,7 @@ function colorAt(d, h, steep, out, path = 0, rut = 0) {
   const dry = smoothstep(0.55, 0.8, noise.noise(d.x * 3 - 4, d.y * 3, d.z * 3) * 0.5 + 0.5);
   out.copy(COL.low).lerp(COL.high, Math.min(1, Math.max(0, above / 22 + (tone - 0.5) * 0.6)));
   out.lerp(COL.dry, dry * 0.6);
+  out.lerp(EARTH, (1 - smoothstep(-0.04, 0.06, grassPatch(d))) * 0.82 * smoothstep(1.6, 2.6, above) * (1 - smoothstep(0.85, 1.1, steep)));   // terre nue hors des plaques d'herbe
   out.lerp(COL.shore, 1 - smoothstep(0.8, 2.2, above));                                     // plages
   if (above < 0) out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.7), Math.min(1, -above / 6)); // fond marin
   out.lerp(COL.rock, smoothstep(0.95, 1.25, steep));                                        // roche des falaises
@@ -405,17 +409,19 @@ export function buildPlanet(anchors, quality = 'high') {
     const above = h - R;
     if (above < 2 || above > 25 || steep > 0.85 || pk > 0.35) return;
     if (onPlaza(dd, 0.05 / SEA_R) || pk > 0.5) return;
-    const patch = noise.fbm(dd.x * 18 + 4, dd.y * 18, dd.z * 18, 2);
-    if (patch < -0.28) return;
+    const patch = grassPatch(dd);
+    if (patch < 0.02) return;
+    // hauteur : courte au bord des plaques, haute au cœur, avec des variations
+    const tall = (0.45 + 1.1 * smoothstep(0.02, 0.4, patch)) * (0.7 + 0.6 * (noise.noise(dd.x * 40, dd.y * 40, dd.z * 40) * 0.5 + 0.5));
     gq.setFromUnitVectors(Y, dd);
     if (rng() > GRASS_KEEP) return;
-    for (let k = 0, nt = 1 + (patch > 0.12 ? 1 : 0) + (patch > 0.32 ? 1 : 0); k < nt; k++) {
+    for (let k = 0, nt = 1 + (patch > 0.2 ? 1 : 0) + (patch > 0.38 ? 1 : 0); k < nt; k++) {
       gp.copy(dd).multiplyScalar(h * S - 0.02).addScaledVector(va, (rng() - 0.5) * 0.5).addScaledVector(vb, (rng() - 0.5) * 0.5);
-      const s = 0.26 + rng() * 0.12 + Math.max(0, patch) * 0.14;
-      gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * (0.8 + rng() * 0.7), s));
+      const s = 0.26 + rng() * 0.12 + Math.max(0, patch) * 0.12;
+      gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * tall * (0.85 + rng() * 0.35), s));
       grassM.push([gm.clone(), new THREE.Color(1, 1, 1).multiplyScalar(0.82 + rng() * 0.32)]);
     }
-    if (patch > 0.22 && rng() < 0.28) {
+    if (patch > 0.25 && rng() < 0.22) {
       const fc = new THREE.Color(STYLE.flowers[Math.floor((noise.noise(dd.x * 14, dd.y * 14, dd.z * 14) * 0.5 + 0.5) * STYLE.flowers.length) % STYLE.flowers.length]);
       gm.compose(gp.copy(dd).multiplyScalar(h * S + 0.16 + rng() * 0.08), gq, gs.setScalar(0.04 + rng() * 0.02));
       flowers.push([gm.clone(), fc]);
@@ -490,17 +496,19 @@ export function buildPlanet(anchors, quality = 'high') {
   };
 
   // arbres : houppiers en petites feuilles (rendu « peint »), quelques cyprès et pins, en forêts
-  const trunks = [], rounds = [], cypress = [], pines = [], bushes = [], treeDirs = [];
-  for (let tries = 0; tries < 60000 && trunks.length < (quality === 'low' ? 1100 : 1600); tries++) {
+  const NV = 6, variants = Array.from({ length: NV }, (_, v) => treeVariant(v, quality)), vWood = variants.map(() => []), vLeaf = variants.map(() => []);
+  const trunks = [], cypress = [], pines = [], bushes = [], treeDirs = [];
+  for (let tries = 0; tries < 60000 && treeDirs.length < (quality === 'low' ? 1100 : 1600); tries++) {
     randDir(d);
     if (noise.fbm(d.x * 7 + 1.3, d.y * 7, d.z * 7 - 2.1, 3) < 0.05) continue;          // forêts
     const h = heightB(d.x, d.y, d.z), above = h - R;
     if (above < 2.5 || above > 26 || onPlaza(d, 0.9 / SEA_R) || roadNear(d, 1.5) || slopeAt(d) > 0.6) continue;
-    const s = 1.0 + rng() * 0.75, r = rng(), hs = h * S - 0.03;
+    const s = 0.85 + rng() * 0.55, r = rng(), hs = h * S - 0.03;
     treeDirs.push(d.clone());
-    if (r < 0.72) { trunks.push(place(d, hs, s)); rounds.push([place(d, hs + 0.55 * s, s * (0.9 + rng() * 0.3), s * (0.85 + rng() * 0.3)), leafCol()]); }
+    if (r < 0.78) { const k = Math.floor(rng() * NV), m = place(d, hs, s, s * (0.9 + rng() * 0.25)); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
     else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol().multiplyScalar(0.85)]); }
-    else { trunks.push(place(d, hs, s, s * 1.1)); pines.push([place(d, hs + 0.42 * s, s, s * 1.1), new THREE.Color('#6a6a22').multiplyScalar(0.9 + rng() * 0.2)]); }
+    else if (r < 0.95) { trunks.push(place(d, hs, s, s * 1.1)); pines.push([place(d, hs + 0.42 * s, s, s * 1.1), new THREE.Color('#6a6a22').multiplyScalar(0.9 + rng() * 0.2)]); }
+    else { const k = Math.floor(rng() * NV), m = place(d, hs, s * 1.15, s * 1.25); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
   }
   // buissons : lisières des forêts, bords des chemins et des esplanades
   for (let tries = 0; tries < 70000 && bushes.length < (quality === 'low' ? 1700 : 3000); tries++) {
@@ -513,8 +521,9 @@ export function buildPlanet(anchors, quality = 'high') {
     const s = 0.45 + rng() * 0.5;
     bushes.push([place(d, h * S + 0.12 * s, s, s * (0.7 + rng() * 0.25)), leafCol().multiplyScalar(0.95 + rng() * 0.15)]);
   }
-  inst(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), new THREE.MeshStandardMaterial({ color: '#8a64c8', roughness: 0.9 }), trunks, { color: false });
-  inst(leafCluster(80, 0.44, 1, 0.2), LEAF_MAT, rounds);
+  const barkM = new THREE.MeshStandardMaterial({ color: '#b590e8', roughness: 0.9 });
+  inst(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), barkM, trunks, { color: false });
+  variants.forEach((v, k) => { inst(v.wood, barkM, vWood[k], { color: false }); inst(v.leaves, LEAF_MAT, vLeaf[k]); });
   inst(leafCluster(60, 0.24, 2.4, 0.15), LEAF_MAT, cypress);
   inst(leafCluster(34, 0.3, 0.75, 0.17), LEAF_MAT, bushes);
   {
@@ -716,6 +725,44 @@ export function leafCluster(count, radius, stretch, size) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  return g;
+}
+
+/** Un modèle d'arbre : tronc élancé un peu penché, deux à quatre branches, un bouquet de feuilles au bout de chacune. */
+function treeVariant(seed, quality) {
+  let s0 = 977 + seed * 7919; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  const wood = [], leaves = [], Yv = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion();
+  const limb = (from, dir, len, r0, r1) => {
+    const g = new THREE.CylinderGeometry(r1, r0, len, 6).translate(0, len / 2, 0);
+    g.applyQuaternion(q.setFromUnitVectors(Yv, dir)); g.translate(from.x, from.y, from.z); wood.push(g);
+    return from.clone().addScaledVector(dir, len);
+  };
+  const H = 1.15 + r() * 0.45, lean = new THREE.Vector3((r() - 0.5) * 0.16, 1, (r() - 0.5) * 0.16).normalize();
+  const tips = [limb(new THREE.Vector3(), lean, H, 0.075, 0.035)];
+  const nb = 2 + Math.floor(r() * 3);
+  for (let b = 0; b < nb; b++) {
+    const a = b / nb * Math.PI * 2 + r() * 0.8, tilt = 0.55 + r() * 0.45, y0 = H * (0.42 + r() * 0.42);
+    const dir = new THREE.Vector3(Math.sin(tilt) * Math.cos(a), Math.cos(tilt), Math.sin(tilt) * Math.sin(a));
+    tips.push(limb(lean.clone().multiplyScalar(y0), dir, 0.38 + r() * 0.32, 0.036, 0.018));
+  }
+  const per = quality === 'low' ? 26 : 36;
+  tips.forEach((t, i) => {
+    const rad = (i === 0 ? 0.36 : 0.27) + r() * 0.1, g = leafCluster(per + (i === 0 ? 10 : 0), rad, 0.8, 0.165);
+    g.translate(t.x, t.y + rad * 0.35, t.z); leaves.push(g);
+  });
+  return { wood: mergeGeos(wood), leaves: mergeLeaves(leaves) };
+}
+/** Fusionne des grappes de feuilles (positions, normales, uv, couleurs). */
+function mergeLeaves(geos) {
+  const A = { position: [], normal: [], uv: [], color: [] }, idx = []; let off = 0;
+  for (const g of geos) {
+    for (const k in A) A[k].push(...g.attributes[k].array);
+    for (const i of g.index.array) idx.push(i + off);
+    off += g.attributes.position.count;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(A.position, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(A.normal, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(A.uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(A.color, 3)); g.setIndex(idx);
   return g;
 }
 

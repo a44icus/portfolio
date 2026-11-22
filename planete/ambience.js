@@ -13,17 +13,18 @@ import { WIND } from './world.js';
 
 const C = h => new THREE.Color(h), V = (x, y, z) => new THREE.Vector3(x, y, z);
 const NIGHT = { sun: C('#8c96ff'), sunI: 0.45, sky: C('#5a5aa8'), gnd: C('#2a1a4a'), hemiI: 0.5, amb: 0.1, zen: C('#100a2c'), hor: C('#30245a'), sh: V(0.3, 0.26, 0.85), lit: V(0.8, 0.84, 1.2), lamp: 1, exp: 1.0, bloom: 0.8, water: C('#9fb0ff') };
-const DAWN = { sun: C('#ff9a7a'), sunI: 1.5, sky: C('#ffa8a0'), gnd: C('#5a3a7a'), hemiI: 0.85, amb: 0.14, zen: C('#7a62b4'), hor: C('#ffb49a'), sh: V(0.5, 0.32, 0.85), lit: V(1.12, 0.9, 0.92), lamp: 0.35, exp: 1.02, bloom: 0.5, water: C('#ffb090') };
+// heure dorée : terre orange vif, feuillages rouges et jaunes, ombres pourpres
+const DAWN = { sun: C('#ffa070'), sunI: 2.0, sky: C('#ffa08a'), gnd: C('#6a2a6a'), hemiI: 0.9, amb: 0.14, zen: C('#a66ab4'), hor: C('#ffb898'), sh: V(0.6, 0.24, 0.62), lit: V(1.2, 0.9, 0.78), lamp: 0.3, exp: 1.04, bloom: 0.5, water: C('#ffb090') };
 const DAY = { sun: C('#ffcf94'), sunI: 2.8, sky: C('#ffc89a'), gnd: C('#6a3f8a'), hemiI: 1.0, amb: 0.16, zen: C('#ee9b7b'), hor: C('#ffe0b8'), sh: V(0.58, 0.3, 0.82), lit: V(1.12, 0.98, 0.82), lamp: 0, exp: 1.05, bloom: 0.4, water: C('#fff2d8') };
-const DUSK = { sun: C('#ff7444'), sunI: 2.2, sky: C('#ff9a6a'), gnd: C('#5a2f7a'), hemiI: 0.9, amb: 0.14, zen: C('#b4507a'), hor: C('#ffa860'), sh: V(0.55, 0.24, 0.8), lit: V(1.22, 0.84, 0.68), lamp: 0.55, exp: 1.03, bloom: 0.55, water: C('#ff9050') };
-const KEYS = [[0, NIGHT], [5.2, NIGHT], [6.6, DAWN], [9, DAY], [16.5, DAY], [18.6, DUSK], [20.2, NIGHT], [24, NIGHT]];
+const DUSK = { sun: C('#ff8a4a'), sunI: 2.5, sky: C('#ff8a5a'), gnd: C('#7a2a5a'), hemiI: 0.95, amb: 0.14, zen: C('#d0607a'), hor: C('#ffb070'), sh: V(0.64, 0.2, 0.5), lit: V(1.26, 0.88, 0.6), lamp: 0.45, exp: 1.05, bloom: 0.5, water: C('#ff9050') };
+const KEYS = [[0, NIGHT], [5.2, NIGHT], [6.4, DAWN], [7.6, DAWN], [9.4, DAY], [16, DAY], [17.6, DUSK], [19.4, DUSK], [20.6, NIGHT], [24, NIGHT]];
 const WEATHER = {
   clear: { cloud: 0, rain: 0, dark: 0, wind: 0.32, fog: 0, storm: 0 },
   cloudy: { cloud: 1, rain: 0, dark: 0.32, wind: 0.5, fog: 0.15, storm: 0 },
   rain: { cloud: 1, rain: 1, dark: 0.5, wind: 0.62, fog: 0.42, storm: 0 },
   storm: { cloud: 1, rain: 1.5, dark: 0.66, wind: 0.95, fog: 0.55, storm: 1 },
 };
-const TIMES = { dawn: 6.8, day: 12.5, dusk: 18.7, night: 23 };
+const TIMES = { dawn: 7, day: 12.5, dusk: 18.5, night: 23 };
 const LABEL_W = { clear: 'Beau temps', cloudy: 'Nuageux', rain: 'Pluie', storm: 'Orage' };
 
 const walk2 = m => m === 'walk';

@@ -271,7 +271,7 @@ let zones = null;
 stylizeTree(avatar, { cast: true, receive: true });
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
 buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); ambience.collect(z.group); });
-const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
+const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
 function spring(xo, xk, vo, vk, target, k, c, dt) { for (let n = Math.ceil(dt * 120), h = dt / n; n > 0; n--) { vo[vk] += ((target - xo[xk]) * k - vo[vk] * c) * h; xo[xk] += vo[vk] * h; } }
@@ -284,13 +284,23 @@ const crushPts = [0, 1, 2, 3].map(() => new THREE.Vector3());
 // la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
 const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; } };
 const keys = new Set();
+let camZoom = 1;
+const setZoom = z => { camZoom = Math.max(0.55, Math.min(2.6, z)); };
+addEventListener('wheel', e => { if (mode === 'walk') setZoom(camZoom * Math.exp(Math.sign(e.deltaY) * 0.12)); }, { passive: true });
+{ // pincer à deux doigts sur l'écran
+  let d0 = 0, z0 = 1;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  canvas.addEventListener('touchstart', e => { if (mode === 'walk' && e.touches.length === 2) { d0 = dist(e.touches); z0 = camZoom; } }, { passive: true });
+  canvas.addEventListener('touchmove', e => { if (mode === 'walk' && e.touches.length === 2 && d0) setZoom(z0 * d0 / dist(e.touches)); }, { passive: true });
+  canvas.addEventListener('touchend', () => { d0 = 0; }, { passive: true });
+}
 const joy = { x: 0, y: 0 };
 let near = null;
 const hintEl = $('#hint'), walkBtn = $('#walkBtn'), promptEl = $('#prompt');
 function setHint() {
   hintEl.textContent = mode === 'orbit'
     ? (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
-    : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches pour conduire · Maj : turbo · Espace : sauter · E : ouvrir la zone');
+    : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches · Maj : turbo · Espace : sauter · molette : recul · E : ouvrir la zone');
 }
 function setWalk(on) {
   if (on) {
@@ -347,7 +357,7 @@ function stepWalk(dt) {
   const busy = panel.classList.contains('on');
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
-  if (!busy && k('Space') && P.ground) { P.vr = JUMP; P.ground = false; }
+  if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + JUMP; P.ground = false; }
   const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch) && throttle > 0;
 
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
@@ -369,6 +379,7 @@ function stepWalk(dt) {
   right.crossVectors(up, P.fwd).normalize();
   // direction du mouvement : collée au capot sur terre, en retard sur l'eau (dérive)
   P.mv.lerp(P.fwd, 1 - Math.exp(-dt * (30 - 28.6 * hv))); P.mv.addScaledVector(up, -P.mv.dot(up)).normalize();
+  const rPrev = P.r;
   if (P.speed) {
     const axis = tmpA.crossVectors(P.dir, P.mv).normalize();
     const next = tmpB.copy(P.dir).applyAxisAngle(axis, P.speed * dt / P.r).normalize();
@@ -395,10 +406,14 @@ function stepWalk(dt) {
     } else P.speed *= -0.25;
   }
   const g = driveR(P.dir);
-  // au sol, la voiture suit les descentes (pas de micro-sauts) ; elle ne décolle que sur une vraie bosse
-  if (P.ground && P.vr <= 0 && P.r - g < 0.05 + Math.abs(P.speed) * dt * 1.3) P.r = g;
-  else { P.vr -= GRAV * dt; P.r += P.vr * dt; P.ground = false; }
-  if (P.r <= g) { if (!P.ground && P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
+  if (P.ground) {
+    // au sol : on suit le relief tant qu'il ne se dérobe pas plus vite que la gravité ; sinon la voiture décolle (bosses, crêtes, rampes)
+    const free = rPrev + P.vr * dt - 0.5 * GRAV * dt * dt;
+    if (g >= free - 0.012) { const v = (g - rPrev) / Math.max(dt, 1e-3); P.vr += (Math.max(-12, Math.min(12, v)) - P.vr) * 0.6; P.r = g; }
+    else { P.ground = false; P.r = free; P.vr -= GRAV * dt; }
+  } else { P.vr -= GRAV * dt; P.r += P.vr * dt; }
+  P.airT = P.ground ? 0 : P.airT + dt;
+  if (!P.ground && P.r <= g) { if (P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
 
   // la voiture épouse le relief (tangage et roulis)
   up.copy(P.dir); right.crossVectors(up, P.fwd).normalize();
@@ -418,14 +433,14 @@ function stepWalk(dt) {
   const rough = P.ground ? Math.min(1, Math.abs(P.speed) / 3) * (planet.pathDir(P.dir) > 0.5 ? 0.45 : 1) : 0;
   avatar.userData.wheels.forEach((w, i) => {
     const gw = groundAt(P.dir, w.along, w.side * 0.37), plane = P.rv + slopeF * w.along + slopeR * w.side * 0.37;
-    let tgt = P.ground ? Math.max(-0.1, Math.min(0.1, gw - plane)) : -0.08;   // en l'air, les roues pendent
+    let tgt = P.ground || P.airT < 0.12 ? Math.max(-0.1, Math.min(0.1, gw - plane)) : -0.08;   // en l'air, les roues pendent
     tgt += rough * 0.02 * Math.sin(P.odo * 9 + i * 1.7) * Math.sin(P.odo * 3.1 + i * 2.3);   // cahots
     spring(S2.wy, i, S2.wv, i, tgt, 900, 42, dt);
   });
   P.acc += ((P.speed - P.lastSpeed) / Math.max(dt, 1e-3) - P.acc) * (1 - Math.exp(-dt * 8)); P.lastSpeed = P.speed;
   {
     const wy = S2.wy, front = (wy[0] + wy[1]) / 2, rear = (wy[2] + wy[3]) / 2, left = (wy[0] + wy[2]) / 2, rgt = (wy[1] + wy[3]) / 2, spd = Math.min(1, Math.abs(P.speed) / 5);
-    spring(S2, 'y', S2, 'vy', (front + rear) / 2 * 0.7 - (P.ground ? 0 : 0.03), 170, 9, dt);
+    spring(S2, 'y', S2, 'vy', (front + rear) / 2 * 0.7 - (P.ground || P.airT < 0.12 ? 0 : 0.03), 170, 9, dt);
     spring(S2, 'pitch', S2, 'vp', -(front - rear) / 0.76 * 0.6 - Math.max(-0.12, Math.min(0.12, P.acc * 0.011)), 150, 8, dt);   // le nez se cabre à l'accélération, plonge au freinage
     spring(S2, 'roll', S2, 'vr', (rgt - left) / 0.74 * 0.6 - P.steer * spd * 0.09, 150, 8, dt);                              // la caisse penche dans les virages
   }
@@ -453,7 +468,7 @@ function stepWalk(dt) {
 
   // caméra à la troisième personne, un peu en hauteur
   camF.addScaledVector(camF, 0).lerp(P.fwd, 1 - Math.exp(-dt * 1.8)); camF.addScaledVector(up, -camF.dot(up)).normalize();
-  const target = tmpA.copy(avatar.position).addScaledVector(camF, -8.4 - 1.4 * P.boost).addScaledVector(up, 5.9);
+  const target = tmpA.copy(avatar.position).addScaledVector(camF, -8.4 * camZoom - 1.4 * P.boost).addScaledVector(up, 5.9 * camZoom);
   const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
   if (target.length() < clear) target.setLength(clear);
   camera.position.lerp(target, 1 - Math.exp(-dt * 5));
