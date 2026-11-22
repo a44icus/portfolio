@@ -94,15 +94,19 @@ stylizeTree(planet.decor);
 stylizeTree(planet.clouds);
 const post = makePost(renderer, scene, camera, quality);
 // feuilles mortes : sous les arbres et le long des routes
-const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 2200 : 4500, () => {
+const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 7000 : 16000, () => {
   const v = new THREE.Vector3();
-  if (Math.random() < 0.65 && planet.treeDirs.length) {
+  const roll = Math.random();
+  if (roll < 0.5 && planet.treeDirs.length) {
     const t = planet.treeDirs[Math.floor(Math.random() * planet.treeDirs.length)];
     v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar((0.3 + Math.random() * 1.7) / SEA_R);
     return v.add(t).normalize();
   }
   const e = planet.edges[Math.floor(Math.random() * planet.edges.length)];
-  return e.point(Math.random() * e.len, (Math.random() - 0.5) * 2.6);
+  if (roll < 0.8) return e.point(Math.random() * e.len, (Math.random() - 0.5) * 2.6);
+  // le reste : semé un peu partout sur la terre ferme
+  for (let k = 0; k < 30; k++) { v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(); if (!planet.isWet(v)) return v; }
+  return e.point(Math.random() * e.len, 0);
 });
 scene.add(groundLeaves.mesh); stylizeTree(groundLeaves.mesh);
 const trails = makeTrails(); scene.add(trails.group);

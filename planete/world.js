@@ -397,13 +397,14 @@ export function buildPlanet(anchors, quality = 'high') {
     sh.fragmentShader = 'uniform float uTime;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       {
         float sand = smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r);
-        vec3 cell = floor(vWPos * 24.0);
+        // une paillette = un pixel de l'écran ; le motif est accroché au sol (cases de 15 cm) et scintille quand la vue bouge
+        vec3 cell = floor(vWPos * 6.5);
         float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-        vec3 V = normalize(cameraPosition - vWPos);
-        float h2 = fract(sin(dot(cell + floor(V * 7.0), vec3(39.3, 11.1, 73.7))) * 24634.63);
-        float tw = 0.55 + 0.45 * sin(uTime * 3.0 + h * 40.0);
+        vec2 px = floor(gl_FragCoord.xy);
+        float h2 = fract(sin(dot(vec3(px, h * 917.0), vec3(39.3, 11.1, 73.7))) * 24634.63);
+        float tw = 0.55 + 0.45 * sin(uTime * 3.0 + h2 * 60.0);
         float far = 1.0 - smoothstep(8.0, 24.0, length(cameraPosition - vWPos));
-        float sp = step(0.984, h2) * step(0.4, h) * tw * sand * far;
+        float sp = step(0.9975, h2) * step(0.3, h) * tw * sand * far;
         totalEmissiveRadiance += vec3(1.0, 0.94, 0.82) * sp * 2.2;
       }`);
   };
@@ -718,8 +719,8 @@ const LEAF_TEX = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
   g.fillStyle = '#fff';
-  for (let i = 0; i < 7; i++) { const x = 9 + r() * 46, y = 9 + r() * 46, w = 8 + r() * 6; g.save(); g.translate(x, y); g.rotate(r() * 1.6); g.fillRect(-w / 2, -w / 2, w, w * (0.75 + r() * 0.4)); g.restore(); }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  for (let i = 0; i < 22; i++) { const x = 7 + r() * 50, y = 7 + r() * 50, w = 6 + r() * 5; g.save(); g.translate(x, y); g.rotate(r() * 1.6); g.fillRect(-w / 2, -w / 2, w, w * (0.75 + r() * 0.4)); g.restore(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
 })();
 /** Le feuillage s'efface (tramage) quand il passe tout près de la caméra : il ne cache jamais la voiture. */
 export const FADE = { uFadeTarget: { value: new THREE.Vector3() }, uFadeOn: { value: 0 } };
@@ -757,7 +758,7 @@ export function leafCluster(count, radius, stretch, size) {
   const c = new THREE.Vector3(), n = new THREE.Vector3(), u = new THREE.Vector3(), v = new THREE.Vector3(), nn = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
     n.set(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); if (n.lengthSq() < 0.01) n.set(0, 1, 0); n.normalize();
-    const k = 0.6 + 0.4 * Math.cbrt(r());
+    const k = 0.45 + 0.55 * Math.cbrt(r());   // feuilles aussi à l'intérieur : houppier plus touffu
     c.copy(n).multiplyScalar(radius * k); c.y *= stretch;
     u.set(r() - 0.5, r() - 0.5, r() - 0.5).cross(n).normalize(); v.crossVectors(n, u);
     const sz = size * (0.75 + r() * 0.5), shade = 0.5 + 0.62 * (n.y * 0.5 + 0.5) + r() * 0.1, b = pos.length / 3;   // dessous sombre, dessus lumineux
@@ -786,7 +787,7 @@ function treeVariant(seed, quality) {
   // tronc élancé, à peine penché ; la couronne commence vers le milieu et monte au-dessus
   const H = 1.7 + r() * 0.6, lean = new THREE.Vector3((r() - 0.5) * 0.18, 1, (r() - 0.5) * 0.18).normalize();
   const top = limb(new THREE.Vector3(), lean, H, 0.05, 0.02);
-  const nc = 3 + Math.floor(r() * 3), per = quality === 'low' ? 34 : 50;
+  const nc = 3 + Math.floor(r() * 3), per = quality === 'low' ? 46 : 70;
   for (let c = 0; c < nc; c++) {
     const last = c === nc - 1, y0 = H * (0.4 + 0.6 * c / (nc - 1));
     let tip = top;
@@ -795,7 +796,7 @@ function treeVariant(seed, quality) {
       tip = limb(lean.clone().multiplyScalar(y0), dir, 0.18 + r() * 0.26, 0.022, 0.012);   // courte branche
     }
     const rad = (last ? 0.45 : 0.38 + r() * 0.15) * (1 - 0.12 * c / nc);
-    const g = leafCluster(per + (last ? 12 : 0), rad, 1.05, 0.19);
+    const g = leafCluster(per + (last ? 16 : 0), rad * 1.08, 1.05, 0.17);
     g.translate(tip.x, tip.y + rad * 0.25, tip.z); leaves.push(g);
   }
   return { wood: mergeGeos(wood), leaves: mergeLeaves(leaves) };

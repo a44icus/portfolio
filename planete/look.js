@@ -146,16 +146,16 @@ const LEAF_SHAPE = (() => {
   g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -24); g.lineTo(0, 26);
   for (let k = -16; k < 18; k += 8) { g.moveTo(0, k); g.lineTo(9, k - 7); g.moveTo(0, k); g.lineTo(-9, k - 7); }
   g.stroke();
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
 })();
 /**
  * @param spot  fonction qui renvoie une direction où poser une feuille
  */
 export function makeGroundLeaves(planet, count, spot) {
-  const geo = new THREE.PlaneGeometry(0.17, 0.17).rotateX(-Math.PI / 2);
+  const geo = new THREE.PlaneGeometry(0.26, 0.26).rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 });
   const mesh = new THREE.InstancedMesh(geo, mat, count); mesh.frustumCulled = false; mesh.receiveShadow = true;
-  const palette = ['#e8893a', '#f2b33d', '#d9603a', '#c94a2e', '#e7c23a', '#b8a02a', '#ee6aa4'].map(c => new THREE.Color(c));
+  const palette = ['#f07a32', '#e8502e', '#d93a2a', '#f2a23a', '#c94a2e', '#ee6aa4', '#e2b83a'].map(c => new THREE.Color(c));
   const CELL = 1, cells = new Map(), L = [];
   const key = p => ((Math.floor(p.x / CELL) + 512) * 1024 + (Math.floor(p.y / CELL) + 512)) * 1024 + (Math.floor(p.z / CELL) + 512);
   const Y = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4(), dq = new THREE.Quaternion(), sc = new THREE.Vector3(), tmp = new THREE.Vector3(), ax = new THREE.Vector3();
