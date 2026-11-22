@@ -364,7 +364,7 @@ const camF = new THREE.Vector3(), nUp = new THREE.Vector3(), tiltQ = new THREE.Q
 function groundAt(dir, along, side) { return driveR(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
   const k = c => keys.has(c);
-  const busy = panel.classList.contains('on') || P.tumble || P.flipped || !!P.recover;   // sur le toit : on ne conduit plus
+  const busy = panel.classList.contains('on') || (P.tumble && P.ground) || P.flipped || !!P.recover;   // en l'air on garde la main ; couchée au sol, non   // sur le toit : on ne conduit plus
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
   P.throttle = throttle;
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
@@ -378,15 +378,15 @@ function stepWalk(dt) {
   const hv = P.hover;
   P.boost += ((boostOn ? 1 : 0) - P.boost) * (1 - Math.exp(-dt * 6));   // turbo : plus vite, plus nerveux
   const vmax = (CAR.vitesse - 0.7 * hv) * (1 + CAR.turbo * P.boost);
-  if (throttle && !(throttle > 0 && P.speed >= vmax)) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 - 9 * hv : (CAR.acceleration - 2 * hv) * (1 + 0.9 * P.boost)) * dt;
-  else if (!throttle) P.speed *= Math.exp(-dt * (2.2 - 1.6 * hv));
+  if (throttle && !(throttle > 0 && P.speed >= vmax)) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 - 9 * hv : (CAR.acceleration - 2 * hv) * (1 + 0.9 * P.boost)) * dt * (P.ground ? 1 : 0.5);
+  else if (!throttle) P.speed *= Math.exp(-dt * (P.ground ? 2.2 - 1.6 * hv : 0.15));   // en l'air, l'élan se conserve
   if (P.speed > vmax) P.speed -= (P.speed - vmax) * (1 - Math.exp(-dt * 3));   // le turbo relâché : on ralentit en douceur
   P.speed = Math.max(-vmax * 0.5, P.speed);
   P.steer += (steerIn - P.steer) * (1 - Math.exp(-dt * 10));
   up.copy(P.dir);
   const grip = Math.min(1, Math.abs(P.speed) / 2) * Math.sign(P.speed || 1);
-  const turn = hv > 0.5 ? (Math.abs(P.speed) > 0.3 ? grip : 0.7) * 1.15 : grip;   // l'aéroglisseur pivote même à l'arrêt
-  if (Math.abs(P.speed) > 0.05 || hv > 0.5) P.fwd.applyAxisAngle(up, -P.steer * CAR.braquage * dt * turn * (1 - 0.3 * P.boost));
+  const turn = !P.ground ? 1 : hv > 0.5 ? (Math.abs(P.speed) > 0.3 ? grip : 0.7) * 1.15 : grip;   // en l'air, on braque librement   // l'aéroglisseur pivote même à l'arrêt
+  if (Math.abs(P.speed) > 0.05 || hv > 0.5 || !P.ground) P.fwd.applyAxisAngle(up, -P.steer * CAR.braquage * dt * turn * (1 - 0.3 * P.boost));
   right.crossVectors(up, P.fwd).normalize();
   // direction du mouvement : collée au capot sur terre, en retard sur l'eau (dérive)
   P.mv.lerp(P.fwd, 1 - Math.exp(-dt * (30 - 28.6 * hv))); P.mv.addScaledVector(up, -P.mv.dot(up)).normalize();
@@ -428,7 +428,7 @@ function stepWalk(dt) {
   if (!P.ground && !P.recover) {
     const kk = c => keys.has(c);
     const ap = (kk('KeyW') || kk('ArrowUp') ? 1 : 0) - (kk('KeyS') || kk('ArrowDown') ? 1 : 0) + joy.y, ar = (kk('KeyD') || kk('ArrowRight') ? 1 : 0) - (kk('KeyA') || kk('ArrowLeft') ? 1 : 0) + joy.x;
-    P.wx += ap * 4.5 * dt; P.wz -= ar * 4.5 * dt;
+    P.wx += ap * 3.5 * dt; P.wz -= ar * 0.8 * dt;   // avant/arrière : piquer ou cabrer ; gauche/droite : on tourne (et un soupçon de roulis)
     P.ax += P.wx * dt; P.az += P.wz * dt;
   }
   if (!P.ground && P.r <= g) { land(hv); if (P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
