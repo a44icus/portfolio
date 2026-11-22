@@ -314,11 +314,14 @@ addEventListener('wheel', e => { if (mode === 'walk') setZoom(camZoom * Math.exp
   canvas.addEventListener('touchend', () => { d0 = 0; }, { passive: true });
 }
 const joy = { x: 0, y: 0 };
+// manette (API Gamepad) : stick gauche ou gâchettes pour conduire, A sauter, B/RB turbo, Y redresser, X ouvrir la zone, Start atterrir/décoller
+const gpad = { x: 0, y: 0, boost: false, jump: false, on: false, prev: [] };
 let near = null;
 const hintEl = $('#hint'), walkBtn = $('#walkBtn'), promptEl = $('#prompt');
 function setHint() {
   hintEl.textContent = mode === 'orbit'
-    ? (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
+    ? gpad.on ? 'Stick gauche : tourner la planète · stick droit : zoomer · A : ouvrir la zone visée · Start : atterrir' : (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
+    : gpad.on ? 'Stick ou gâchettes : conduire · A : sauter · B / RB : turbo · Y : redresser · X : ouvrir la zone · Start : décoller'
     : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches · Maj : turbo · Espace : sauter · R : redresser · molette : recul · E : ouvrir la zone');
 }
 let hasLanded = false;
@@ -380,11 +383,11 @@ function groundAt(dir, along, side) { return driveR(tmpB.copy(dir).addScaledVect
 function stepWalk(dt) {
   const k = c => keys.has(c);
   const busy = panel.classList.contains('on') || (P.tumble && P.ground) || P.flipped || !!P.recover;   // en l'air on garde la main ; couchée au sol, non   // sur le toit : on ne conduit plus
-  const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
+  const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y + gpad.y));
   P.throttle = throttle;
-  const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
-  if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + CAR.saut; P.ground = false; takeoff(); }
-  const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch) && throttle > 0;
+  const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x + gpad.x));
+  if (!busy && (k('Space') || gpad.jump) && P.ground) { P.vr = Math.max(P.vr, 0) + CAR.saut; P.ground = false; takeoff(); }
+  const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch || gpad.boost) && throttle > 0;
 
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
   const onWater = planet.heightDir(P.dir) < WATER_R - 0.03 && P.r < WATER_R + 0.2;
@@ -443,7 +446,7 @@ function stepWalk(dt) {
   // en l'air : la voiture garde sa rotation de décollage ; on peut la corriger (avant/arrière, gauche/droite)
   if (!P.ground && !P.recover) {
     const kk = c => keys.has(c);
-    const ap = (kk('KeyW') || kk('ArrowUp') ? 1 : 0) - (kk('KeyS') || kk('ArrowDown') ? 1 : 0) + joy.y, ar = (kk('KeyD') || kk('ArrowRight') ? 1 : 0) - (kk('KeyA') || kk('ArrowLeft') ? 1 : 0) + joy.x;
+    const ap = (kk('KeyW') || kk('ArrowUp') ? 1 : 0) - (kk('KeyS') || kk('ArrowDown') ? 1 : 0) + joy.y + gpad.y, ar = (kk('KeyD') || kk('ArrowRight') ? 1 : 0) - (kk('KeyA') || kk('ArrowLeft') ? 1 : 0) + joy.x + gpad.x;
     P.wx += ap * 5.5 * dt; P.wz -= ar * 5.5 * dt;   // en l'air : avant/arrière = tangage, gauche/droite = roulis   // avant/arrière : piquer ou cabrer ; gauche/droite : on tourne (et un soupçon de roulis)
     P.ax += P.wx * dt; P.az += P.wz * dt;
   }
@@ -685,6 +688,43 @@ function updateFlip(dt) {
   flipBtn?.classList.toggle('on', P.flipped);
 }
 /** Touche R (ou bouton) : remet la voiture sur ses roues. */
+function pollGamepad(dt) {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let g = null; for (const p of pads) if (p && p.connected) { g = p; break; }
+  if (!g) { if (gpad.on) { gpad.on = false; gpad.x = gpad.y = 0; gpad.boost = gpad.jump = false; setHint(); } return; }
+  if (!gpad.on) { gpad.on = true; setHint(); }
+  const dz = v => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85;
+  const b = i => !!(g.buttons[i] && g.buttons[i].pressed), bv = i => (g.buttons[i] ? g.buttons[i].value : 0);
+  const press = i => b(i) && !gpad.prev[i];
+  const lx = dz(g.axes[0] || 0), ly = dz(g.axes[1] || 0), ry = dz(g.axes[3] || 0);
+  const dpx = (b(15) ? 1 : 0) - (b(14) ? 1 : 0), dpy = (b(12) ? 1 : 0) - (b(13) ? 1 : 0);
+  const intro = $('#intro');
+  if (intro && !intro.classList.contains('out')) { if (press(0) || press(9)) introBtn.click(); }
+  else if (panel.classList.contains('on')) { if (press(1) || press(0)) closePanel(); gpad.x = gpad.y = 0; }
+  else if (mode === 'walk') {
+    gpad.x = Math.max(-1, Math.min(1, lx + dpx));
+    gpad.y = Math.max(-1, Math.min(1, -ly + dpy + bv(7) - bv(6)));   // stick, croix, ou gâchettes RT / LT
+    gpad.boost = b(1) || b(5); gpad.jump = b(0);
+    if (press(3)) recoverCar();
+    if (press(2) && near) openIsland(near.id);
+    if (ry) setZoom(camZoom * Math.exp(ry * dt * 1.6));
+    if (press(9)) setWalk(false);
+  } else {
+    gpad.x = gpad.y = 0; gpad.boost = gpad.jump = false;
+    // vue planète : le stick gauche fait tourner la caméra autour de la planète, le droit zoome
+    if ((lx || ly) && !PL.cam) {
+      controls.autoRotate = false; camAnim = null;
+      const right = tmpA.crossVectors(camera.up, camera.position).normalize();
+      camera.position.applyAxisAngle(camera.up, lx * dt * 1.6);
+      const pol = camera.position.clone().normalize().dot(camera.up);
+      if (!((pol > 0.95 && ly < 0) || (pol < -0.95 && ly > 0))) camera.position.applyAxisAngle(right, -ly * dt * 1.4);
+    }
+    if (ry && !PL.cam) camera.position.setLength(Math.max(controls.minDistance, Math.min(controls.maxDistance, camera.position.length() * Math.exp(ry * dt * 1.4))));
+    if (press(0)) { camDir.copy(camera.position).normalize(); let s = null, bd = 0.6; SECTIONS.forEach(x => { const k = x.dir.dot(camDir); if (k > bd) { bd = k; s = x; } }); if (s) openIsland(s.id); }
+    if (press(9)) setWalk(true);
+  }
+  gpad.prev = g.buttons.map(x => x.pressed);
+}
 function recoverCar() {
   if (mode !== 'walk' || P.recover) return;
   if (!P.flipped && !P.tumble && Math.abs(wrapA(P.ax)) < 0.3 && Math.abs(wrapA(P.az)) < 0.3) return;
@@ -873,6 +913,7 @@ function frame() {
   if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
   post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou : 0, 1 - Math.exp(-dt * 3)), 0.5);
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
+  pollGamepad(dt);
   updateLabels();
   post.render();
   requestAnimationFrame(frame);
