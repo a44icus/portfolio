@@ -217,13 +217,29 @@ export function makeTrails(N = 90, life0 = 1.7, width0 = 0.09) {
   const U = { uC1: { value: new THREE.Color('#ffd159') }, uC2: { value: new THREE.Color('#ff6168') }, uC3: { value: new THREE.Color('#e629b8') }, uI: { value: 1 }, uMid: { value: 0.15 } };
   const group = new THREE.Group();
   const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: U,
+    // mélange normal (pas additif) et valeurs bornées : les couleurs restent pures, sans virer au blanc
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, uniforms: U,
     vertexShader: 'attribute float aT; attribute float aA; varying float vT; varying float vA; void main(){ vT = aT; vA = aA; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform vec3 uC1; uniform vec3 uC2; uniform vec3 uC3; uniform float uI; uniform float uMid; varying float vT; varying float vA;
+      vec3 rgb2hsv(vec3 c) {
+        vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+        vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+        vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+        float d = q.x - min(q.w, q.y);
+        return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)), d / (q.x + 1e-10), q.x);
+      }
+      vec3 hsv2rgb(vec3 c) { vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0); return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y); }
+      // dégradé qui tourne sur la roue des couleurs (jaune → orange → rouge → magenta → violet), sans passer par le gris ou le blanc
+      vec3 hmix(vec3 a, vec3 b, float t) {
+        vec3 A = rgb2hsv(pow(a, vec3(1.0 / 2.2))), B = rgb2hsv(pow(b, vec3(1.0 / 2.2)));
+        if (A.y < 0.05) A.x = B.x; if (B.y < 0.05) B.x = A.x;
+        float dh = B.x - A.x; if (dh > 0.5) dh -= 1.0; if (dh < -0.5) dh += 1.0;
+        return pow(hsv2rgb(vec3(fract(A.x + dh * t), mix(A.y, B.y, t), mix(A.z, B.z, t))), vec3(2.2));
+      }
       void main(){
-        vec3 hot = uC1 * 1.25 * uI, mid = uC2 * 0.95 * uI, cool = uC3 * 0.8 * uI;
-        vec3 c = vT < uMid ? mix(hot, mid, vT / max(uMid, 1e-3)) : mix(mid, cool, min(1.0, (vT - uMid) / max(1.0 - uMid, 1e-3) * 1.4));
-        gl_FragColor = vec4(c * vA * (1.0 - 0.35 * smoothstep(0.0, 0.08, vT)), vA);
+        vec3 c = vT < uMid ? hmix(uC1, uC2, vT / max(uMid, 1e-3)) : hmix(uC2, uC3, min(1.0, (vT - uMid) / max(1.0 - uMid, 1e-3) * 1.4));
+        c *= 0.6 + 0.22 * min(uI, 2.0);                       // éclat : un peu de lumière en plus, sans saturer
+        gl_FragColor = vec4(c, vA * clamp(0.35 + 0.4 * uI, 0.0, 1.0));
       }`,
   });
   const trails = [0, 1].map(() => {
