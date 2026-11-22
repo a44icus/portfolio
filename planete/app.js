@@ -7,10 +7,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, buildZones } from './props.js';
-import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails } from './look.js';
+import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
 import { TUNE, toggleTunePanel } from './tune.js';
-import { SAND } from './world.js';
+import { SAND, GRASS, TREE, BUSH } from './world.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -562,6 +562,14 @@ const tuneHooks = {
     W.uFoam.value = T.eau.ecume; W.uGlitW.value = T.eau.paillettes; W.uGlitWI.value = T.eau.eclatPaillettes;
     SAND.uGlitS.value = T.sable.paillettes; SAND.uGlitSI.value = T.sable.eclatPaillettes; SAND.uSand.value.set(T.sable.couleur); SAND.uSandMix.value = T.sable.forceCouleur;
     post.grade.uniforms.uSat.value = T.post.saturation; post.bloom.radius = T.post.bloomRayon; post.bloom.threshold = T.post.bloomSeuil; post.setBand(T.post.zoneNette);
+    W.uFoamEdge.value = T.eau.largeurLisere; W.uFoamLine.value = T.eau.epaisseurTraits; W.uFoamGap.value = T.eau.espacementTraits; W.uFoamLen.value = T.eau.longueurTraits;
+    GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur;
+    if (planet.grassMesh) planet.grassMesh.count = Math.floor(planet.grassMesh.instanceMatrix.count * T.herbe.densite);
+    TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons;
+    planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * T.arbres.densite); });
+    GLEAF.uLeafS.value = T.feuilles.taille; groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
+    avatar.scale.setScalar(T.voiture.taille);
+    trails.cfg.width = T.turbo.largeur; trails.cfg.life = T.turbo.duree;
     planet.barkM.color.set(T.arbres.tronc); leafMats.forEach(m => m.color.set(T.arbres.feuillage));
     const S = ambience.state;
     if (T.ambiance.meteo === 'auto') { if (S.weatherMode !== 'auto') { S.weatherMode = 'auto'; S.nextWeather = 30; } }

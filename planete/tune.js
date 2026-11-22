@@ -11,11 +11,13 @@ export const DEFAULTS = {
     teinteLumiere: '#ffe0c4', forceTeinteLumiere: 0,
   },
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
-  eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, paillettes: 0.05, eclatPaillettes: 1.6 },
+  eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 1.6 },
   sable: { couleur: '#f59a46', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 2.2 },
-  herbe: { base: '#45381a', pointe: '#d6bd38' },
-  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff' },
-  voiture: { vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 2.3, gravite: 17, saut: 5.6, raideur: 1 },
+  herbe: { base: '#45381a', pointe: '#d6bd38', hauteur: 1, largeur: 1, densite: 1 },
+  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1, largeurHouppier: 1, densite: 1, buissons: 1 },
+  feuilles: { taille: 1, quantite: 1 },
+  turbo: { largeur: 0.09, duree: 1.7 },
+  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 2.3, gravite: 17, saut: 5.6, raideur: 1 },
   camera: { distance: 8.4, hauteur: 5.9, focale: 30 },
 };
 const KEY = 'planete-reglages';
@@ -78,6 +80,10 @@ export async function toggleTunePanel(hooks) {
   ch(fE.addColor(TUNE.eau, 'milieu').name('Couleur intermédiaire'));
   ch(fE.addColor(TUNE.eau, 'large').name('Couleur au large'));
   ch(fE.add(TUNE.eau, 'ecume', 0, 2, 0.05).name('Écume'));
+  ch(fE.add(TUNE.eau, 'largeurLisere', 0, 4, 0.05).name('Écume : largeur du liseré'));
+  ch(fE.add(TUNE.eau, 'epaisseurTraits', 0, 4, 0.05).name('Écume : épaisseur des traits'));
+  ch(fE.add(TUNE.eau, 'espacementTraits', 0.3, 4, 0.05).name('Écume : espacement des traits'));
+  ch(fE.add(TUNE.eau, 'longueurTraits', 0, 1, 0.01).name('Écume : longueur des traits'));
   ch(fE.add(TUNE.eau, 'paillettes', 0, 1, 0.005).name('Paillettes (densité)'));
   ch(fE.add(TUNE.eau, 'eclatPaillettes', 0, 5, 0.05).name('Paillettes (éclat)'));
 
@@ -87,13 +93,25 @@ export async function toggleTunePanel(hooks) {
   ch(fS.add(TUNE.sable, 'paillettes', 0, 1, 0.005).name('Paillettes (densité)'));
   ch(fS.add(TUNE.sable, 'eclatPaillettes', 0, 6, 0.05).name('Paillettes (éclat)'));
 
-  const fH = gui.addFolder('Herbe et arbres');
-  ch(fH.addColor(TUNE.herbe, 'base').name('Herbe : base'), () => hooks.recolorGrass());
-  ch(fH.addColor(TUNE.herbe, 'pointe').name('Herbe : pointe'), () => hooks.recolorGrass());
-  ch(fH.addColor(TUNE.arbres, 'tronc').name('Troncs'));
-  ch(fH.addColor(TUNE.arbres, 'feuillage').name('Teinte du feuillage'));
+  const fH = gui.addFolder('Herbe');
+  ch(fH.addColor(TUNE.herbe, 'base').name('Couleur : base'), () => hooks.recolorGrass());
+  ch(fH.addColor(TUNE.herbe, 'pointe').name('Couleur : pointe'), () => hooks.recolorGrass());
+  ch(fH.add(TUNE.herbe, 'hauteur', 0.1, 3, 0.05).name('Hauteur'));
+  ch(fH.add(TUNE.herbe, 'largeur', 0.2, 3, 0.05).name('Largeur des brins'));
+  ch(fH.add(TUNE.herbe, 'densite', 0, 1, 0.01).name('Densité'));
+  const fT = gui.addFolder('Arbres et buissons');
+  ch(fT.addColor(TUNE.arbres, 'tronc').name('Troncs'));
+  ch(fT.addColor(TUNE.arbres, 'feuillage').name('Teinte du feuillage'));
+  ch(fT.add(TUNE.arbres, 'taille', 0.3, 3, 0.05).name('Taille des arbres'));
+  ch(fT.add(TUNE.arbres, 'largeurHouppier', 0.3, 3, 0.05).name('Largeur des houppiers'));
+  ch(fT.add(TUNE.arbres, 'densite', 0, 1, 0.01).name('Nombre d’arbres'));
+  ch(fT.add(TUNE.arbres, 'buissons', 0.2, 3, 0.05).name('Taille des buissons'));
+  const fF = gui.addFolder('Feuilles au sol');
+  ch(fF.add(TUNE.feuilles, 'taille', 0.2, 4, 0.05).name('Taille'));
+  ch(fF.add(TUNE.feuilles, 'quantite', 0, 1, 0.01).name('Quantité'));
 
   const fV = gui.addFolder('Voiture');
+  ch(fV.add(TUNE.voiture, 'taille', 0.4, 3, 0.05).name('Taille'));
   ch(fV.add(TUNE.voiture, 'vitesse', 2, 15, 0.1).name('Vitesse max'));
   ch(fV.add(TUNE.voiture, 'acceleration', 2, 30, 0.5).name('Accélération'));
   ch(fV.add(TUNE.voiture, 'turbo', 0, 2, 0.05).name('Bonus du turbo'));
@@ -102,12 +120,15 @@ export async function toggleTunePanel(hooks) {
   ch(fV.add(TUNE.voiture, 'saut', 0, 15, 0.1).name('Saut'));
   ch(fV.add(TUNE.voiture, 'raideur', 0.2, 3, 0.05).name('Raideur des suspensions'));
 
+  const fR = gui.addFolder('Traînées du turbo');
+  ch(fR.add(TUNE.turbo, 'largeur', 0.01, 0.5, 0.005).name('Largeur'));
+  ch(fR.add(TUNE.turbo, 'duree', 0.2, 5, 0.05).name('Durée'));
   const fC = gui.addFolder('Caméra');
   ch(fC.add(TUNE.camera, 'distance', 2, 25, 0.1).name('Distance'));
   ch(fC.add(TUNE.camera, 'hauteur', 0.5, 20, 0.1).name('Hauteur'));
   ch(fC.add(TUNE.camera, 'focale', 15, 80, 1).name('Angle de vue'));
 
-  [fA, fL, fP, fE, fS, fH, fV, fC].forEach(f => f.close());
+  [fA, fL, fP, fE, fS, fH, fT, fF, fV, fR, fC].forEach(f => f.close());
 
   const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
   const actions = {

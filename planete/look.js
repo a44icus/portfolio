@@ -139,6 +139,7 @@ export function makeSpray(count) {
 
 
 /* ---------- feuilles mortes au sol : elles s'envolent au passage de la voiture ---------- */
+export const GLEAF = { uLeafS: { value: 1 } };
 const LEAF_SHAPE = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   g.translate(32, 32); g.rotate(0.5);
@@ -155,6 +156,8 @@ const LEAF_SHAPE = (() => {
 export function makeGroundLeaves(planet, count, spot) {
   const geo = new THREE.PlaneGeometry(0.26, 0.26).rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 });
+  mat.onBeforeCompile = sh => { sh.uniforms.uLeafS = GLEAF.uLeafS; sh.vertexShader = 'uniform float uLeafS;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed *= uLeafS;'); };
+  mat.customProgramCacheKey = () => 'ground-leaf';
   const mesh = new THREE.InstancedMesh(geo, mat, count); mesh.frustumCulled = false; mesh.receiveShadow = true;
   const palette = ['#f07a32', '#e8502e', '#d93a2a', '#f2a23a', '#c94a2e', '#ee6aa4', '#e2b83a'].map(c => new THREE.Color(c));
   const CELL = 1, cells = new Map(), L = [];
@@ -174,7 +177,7 @@ export function makeGroundLeaves(planet, count, spot) {
   mesh.instanceColor.needsUpdate = true;
   const active = new Set();
   return {
-    mesh,
+    mesh, max: count,
     /** car : position de la voiture ; speed : vitesse ; on : la voiture roule au sol */
     update(dt, car, speed, on) {
       let dirty = false;
@@ -209,7 +212,8 @@ export function makeGroundLeaves(planet, count, spot) {
 }
 
 /* ---------- traînées lumineuses du turbo : deux rubans au sol, jaune-blanc puis rose, qui s'effacent ---------- */
-export function makeTrails(N = 90, life = 1.7, width = 0.09) {
+export function makeTrails(N = 90, life0 = 1.7, width0 = 0.09) {
+  const cfg = { life: life0, width: width0 };
   const group = new THREE.Group();
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -231,12 +235,12 @@ export function makeTrails(N = 90, life = 1.7, width = 0.09) {
   });
   const v = new THREE.Vector3();
   return {
-    group,
+    group, cfg,
     /** heads : positions des deux échappements au sol ; side : vecteur latéral ; k : force (0 = pas de turbo) */
     update(dt, heads, side, k) {
       trails.forEach((tr, j) => {
         tr.pts.forEach(p => { p.age += dt; });
-        while (tr.pts.length && tr.pts[tr.pts.length - 1].age > life) tr.pts.pop();
+        while (tr.pts.length && tr.pts[tr.pts.length - 1].age > cfg.life) tr.pts.pop();
         const head = heads[j], last = tr.pts[0];
         if (k > 0.02 && (!last || last.p.distanceTo(head) > 0.1)) { tr.pts.unshift({ p: head.clone(), side: side.clone(), age: 0, k }); if (tr.pts.length > N) tr.pts.pop(); }
         else if (last && k > 0.02) { last.p.copy(head); last.side.copy(side); last.age = 0; last.k = k; }
@@ -244,7 +248,7 @@ export function makeTrails(N = 90, life = 1.7, width = 0.09) {
         for (let i = 0; i < N; i++) {
           const p = tr.pts[Math.min(i, tr.pts.length - 1)];
           if (!p) { aA[i * 2] = aA[i * 2 + 1] = 0; continue; }
-          const t = Math.min(1, p.age / life), w = width * (1 - 0.5 * t);
+          const t = Math.min(1, p.age / cfg.life), w = cfg.width * (1 - 0.5 * t);
           v.copy(p.p).addScaledVector(p.side, w / 2); pos.set([v.x, v.y, v.z], i * 6);
           v.copy(p.p).addScaledVector(p.side, -w / 2); pos.set([v.x, v.y, v.z], i * 6 + 3);
           const a = i < tr.pts.length ? p.k * (1 - t) : 0;

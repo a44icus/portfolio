@@ -167,6 +167,7 @@ function waterMaterial(uniforms) {
       void main() { vDepth = aDepth; vec4 wp = modelMatrix * vec4(position, 1.0); vWorld = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }`,
     fragmentShader: `
       uniform vec3 uTeal; uniform float uFoam; uniform float uGlitW; uniform float uGlitWI;
+      uniform float uFoamEdge; uniform float uFoamLine; uniform float uFoamGap; uniform float uFoamLen;
       uniform float uTime; uniform vec3 uSun; uniform vec3 uSunColor; uniform vec3 uSky; uniform vec3 uShallow; uniform vec3 uDeep; uniform float uScale;
       varying float vDepth; varying vec3 vWorld;
       ${WAVES_GLSL}
@@ -201,15 +202,15 @@ function waterMaterial(uniforms) {
         // écume découpée : un liseré déchiqueté contre la rive, puis des traits fins de longueurs variables,
         // effilés aux bouts, qui ondulent, se fragmentent et s'éloignent lentement du bord
         float n1 = fnoise(p * 0.45), n2 = fnoise(p * 1.3 + 17.0);
-        float edgeW = 0.05 + 0.32 * n1 * n1 + 0.08 * n2;
+        float edgeW = (0.05 + 0.32 * n1 * n1 + 0.08 * n2) * uFoamEdge;
         float edge = 1.0 - smoothstep(edgeW, edgeW + 0.025, d);
         float ring = 0.0;
         for (int i = 0; i < 4; i++) {
           float fi = float(i);
-          float ph = fract(d * 0.55 + n2 * 0.18 - uTime * 0.07 + fi * 0.25);
+          float ph = fract(d * 0.55 / uFoamGap + n2 * 0.18 - uTime * 0.07 + fi * 0.25);
           float seg = fnoise(p * (0.13 + fi * 0.05) + vec3(fi * 7.3, 3.1 - uTime * 0.04, fi * 2.9));
-          float on = smoothstep(0.56, 0.6, seg);
-          float w = 0.006 + 0.022 * smoothstep(0.55, 0.75, seg);
+          float on = smoothstep(0.76 - 0.4 * uFoamLen, 0.8 - 0.4 * uFoamLen, seg);
+          float w = (0.006 + 0.022 * smoothstep(0.55, 0.75, seg)) * uFoamLine;
           ring = max(ring, on * (1.0 - smoothstep(w, w + 0.008, abs(ph - 0.5))));
         }
         ring *= 1.0 - smoothstep(0.6, 3.2, d);
@@ -448,7 +449,7 @@ export function buildPlanet(anchors, quality = 'high') {
   const waterUniforms = {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
-    uShallow: { value: new THREE.Color('#34bdb0') }, uTeal: { value: new THREE.Color('#38b5bf') }, uFoam: { value: 1 }, uGlitW: { value: 0.05 }, uGlitWI: { value: 1.6 },
+    uShallow: { value: new THREE.Color('#34bdb0') }, uTeal: { value: new THREE.Color('#38b5bf') }, uFoam: { value: 1 }, uGlitW: { value: 0.05 }, uGlitWI: { value: 1.6 }, uFoamEdge: { value: 1 }, uFoamLine: { value: 1 }, uFoamGap: { value: 1 }, uFoamLen: { value: 0.5 },
     uDeep: { value: new THREE.Color('#0b4766') },
   };
   const wMat = waterMaterial(waterUniforms), water = new THREE.Group();
@@ -586,18 +587,24 @@ export function buildPlanet(anchors, quality = 'high') {
     const s = 0.45 + rng() * 0.5;
     bushes.push([place(d, h * S + 0.12 * s, s, s * (0.7 + rng() * 0.25)), leafCol().multiplyScalar(0.95 + rng() * 0.15)]);
   }
-  const barkM = new THREE.MeshStandardMaterial({ emissive: '#6a50a8', emissiveIntensity: 0.25, color: '#d4c2ff', roughness: 0.9 });
-  inst(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), barkM, trunks, { color: false });
-  variants.forEach((v, k) => { inst(v.wood, barkM, vWood[k], { color: false }); inst(v.leaves, LEAF_MAT, vLeaf[k]); });
-  inst(leafCluster(60, 0.24, 2.4, 0.15), LEAF_MAT, cypress);
-  inst(leafCluster(34, 0.3, 0.75, 0.17), LEAF_MAT, bushes);
+  const barkM = scaleMat(new THREE.MeshStandardMaterial({ emissive: '#6a50a8', emissiveIntensity: 0.25, color: '#d4c2ff', roughness: 0.9 }), TREE, 'transformed *= uTreeS;', 'treeW');
+  const treeLeaf = scaleMat(fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })), TREE, 'transformed *= uTreeS; transformed.xz *= uCrownW;', 'treeL');
+  const bushLeaf = scaleMat(fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })), BUSH, 'transformed *= uBushS;', 'bush');
+  // ombres portées à la même taille que les arbres
+  const depthOf = (leaf, U, code, key) => scaleMat(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leaf ? LEAF_TEX : null, alphaTest: leaf ? 0.5 : 0 }), U, code, key + 'D');
+  const dWood = depthOf(false, TREE, 'transformed *= uTreeS;', 'treeW'), dLeaf = depthOf(true, TREE, 'transformed *= uTreeS; transformed.xz *= uCrownW;', 'treeL'), dBush = depthOf(true, BUSH, 'transformed *= uBushS;', 'bush');
+  const treeMeshes = [];
+  const pair = (wGeo, lGeo, mats, lw, ll) => { const w = inst(wGeo, barkM, lw, { color: false }); w.customDepthMaterial = dWood; const l = inst(lGeo, treeLeaf, ll); l.customDepthMaterial = dLeaf; treeMeshes.push([w, l, ll.length]); };
+  pair(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), leafCluster(60, 0.24, 2.4, 0.15), null, trunks, cypress);
+  variants.forEach((v, k) => pair(v.wood, v.leaves, null, vWood[k], vLeaf[k]));
+  const bushMesh = inst(leafCluster(34, 0.3, 0.75, 0.17), bushLeaf, bushes); bushMesh.customDepthMaterial = dBush;
   // sapins dans le même style : tronc fin et pâle, étages de petites feuilles qui rétrécissent vers la pointe
   [0, 1].forEach(k => {
     const v = pineVariant(k, quality), list = pines.filter(p => p[0] === k);
-    inst(v.wood, barkM, list.map(p => p[1]), { color: false }); inst(v.leaves, LEAF_MAT, list.map(p => [p[1], p[2]]));
+    pair(v.wood, v.leaves, null, list.map(p => p[1]), list.map(p => [p[1], p[2]]));
   });
 
-  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null;
+  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null;
   const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
   /** Écrase l'herbe autour des points donnés (positions du monde), à l'instant t. */
   function crushGrass(points, radius, t) {
@@ -640,8 +647,9 @@ export function buildPlanet(anchors, quality = 'high') {
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
     const gmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide });
     gmat.onBeforeCompile = sh => {
-      sh.uniforms.uTime = waterUniforms.uTime; sh.uniforms.uWind = WIND.uWind; sh.uniforms.uWindDir = WIND.uWindDir;
-      sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform vec3 uWindDir;\nattribute float aCrush;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.uniforms.uTime = waterUniforms.uTime; sh.uniforms.uWind = WIND.uWind; sh.uniforms.uWindDir = WIND.uWindDir; Object.assign(sh.uniforms, GRASS);
+      sh.vertexShader = 'uniform float uGrassH;\nuniform float uGrassW;\nuniform float uTime;\nuniform float uWind;\nuniform vec3 uWindDir;\nattribute float aCrush;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        transformed.y *= uGrassH; transformed.xz *= uGrassW;
         float crushAge = uTime - aCrush;
         float flat2 = aCrush > 0.0 ? smoothstep(0.0, 0.1, crushAge) * (1.0 - smoothstep(12.0, 20.0, crushAge)) : 0.0;
         transformed.y *= 1.0 - 0.86 * flat2;
@@ -660,8 +668,9 @@ export function buildPlanet(anchors, quality = 'high') {
         transformed.z += cos(uTime * 4.1 + ph * 1.3) * 0.025 * bend * (0.4 + uWind);`);
     };
     gmat.customProgramCacheKey = () => 'grass-wind';
+    for (let i = grassM.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = grassM[i]; grassM[i] = grassM[j]; grassM[j] = t; }   // ordre mélangé : la densité éclaircit partout pareil
     g.setAttribute('aCrush', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, grassM.length)), 1));
-    inst(g, gmat, grassM, { cast: false });
+    grassMesh = inst(g, gmat, grassM, { cast: false });
     // grille spatiale des touffes, pour trouver vite celles qui sont sous les roues
     grassM.forEach((it, i) => {
       const e = it[0].elements, key = gkey(e[12], e[13], e[14]);
@@ -751,7 +760,23 @@ export function buildPlanet(anchors, quality = 'high') {
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, recolorGrass: (b, t) => recolorGrass(b, t) };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, treeMeshes, bushMesh, get grassMesh() { return grassMesh; }, recolorGrass: (b, t) => recolorGrass(b, t) };
+}
+
+/** Réglages de forme (barre de réglages) : herbe, arbres, buissons. */
+export const GRASS = { uGrassH: { value: 1 }, uGrassW: { value: 1 } };
+export const TREE = { uTreeS: { value: 1 }, uCrownW: { value: 1 } };
+export const BUSH = { uBushS: { value: 1 } };
+/** Ajoute une mise à l'échelle dans le repère de l'objet (code GLSL appliqué à « transformed »). */
+function scaleMat(m, U, code, key) {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = Object.keys(U).map(k => 'uniform float ' + k + ';\n').join('') + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + code);
+  };
+  const k0 = m.customProgramCacheKey.bind(m); m.customProgramCacheKey = () => k0() + '|' + key;
+  return m;
 }
 
 /** Sable : paillettes et teinte (barre de réglages). */
