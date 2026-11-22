@@ -107,7 +107,9 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
 
   /* ---------- menu « Ambiance » ---------- */
   const btn = document.getElementById('ambBtn'), menu = document.getElementById('ambMenu'), icon = document.getElementById('ambIcon'), clock = document.getElementById('ambTime');
-  const syncMenu = () => menu.querySelectorAll('button[data-k]').forEach(b => b.classList.toggle('on', (b.dataset.k === 'time' ? S.timeMode : S.weatherMode) === b.dataset.v));
+  const hasMenu = !!(btn && menu && icon && clock);   // page en cache sans le menu : l'ambiance tourne quand même
+  const syncMenu = () => hasMenu && menu.querySelectorAll('button[data-k]').forEach(b => b.classList.toggle('on', (b.dataset.k === 'time' ? S.timeMode : S.weatherMode) === b.dataset.v));
+  if (hasMenu) {
   btn.addEventListener('click', e => { e.stopPropagation(); const on = !menu.classList.contains('on'); menu.classList.toggle('on', on); btn.setAttribute('aria-expanded', on); });
   addEventListener('click', e => { if (!menu.contains(e.target)) { menu.classList.remove('on'); btn.setAttribute('aria-expanded', false); } });
   menu.addEventListener('click', e => {
@@ -116,6 +118,7 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
     else { S.weatherMode = b.dataset.v; if (b.dataset.v !== 'auto') S.weather = b.dataset.v; else S.nextWeather = 40 + Math.random() * 60; }
     syncMenu();
   });
+  }
   syncMenu();
 
   /* ---------- mise à jour ---------- */
@@ -183,7 +186,7 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
     const hh = Math.floor(S.hour), mm = Math.floor((S.hour - hh) * 60 / 10) * 10;
     const ic = W.storm > 0.5 ? '⛈' : W.rain > 0.5 ? '🌧' : W.cloud > 0.5 ? '☁' : S.night > 0.5 ? '☾' : '☀';
     const label = ic + '|' + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
-    if (label !== lastLabel) { lastLabel = label; icon.textContent = ic; clock.textContent = label.split('|')[1]; btn.title = 'Ambiance : ' + LABEL_W[S.weather]; }
+    if (hasMenu && label !== lastLabel) { lastLabel = label; icon.textContent = ic; clock.textContent = label.split('|')[1]; btn.title = 'Ambiance : ' + LABEL_W[S.weather]; }
   }
   return { update, collect, get night() { return S.night; }, state: S };
 }
