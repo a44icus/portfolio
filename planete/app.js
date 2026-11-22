@@ -10,7 +10,7 @@ import { makeCar, buildZones } from './props.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
 import { TUNE, toggleTunePanel } from './tune.js';
-import { SAND, GRASS, TREE, BUSH } from './world.js';
+import { SAND, GRASS, TREE, BUSH, LUPIN } from './world.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -636,6 +636,7 @@ const tuneHooks = {
     post.grade.uniforms.uSat.value = T.post.saturation; post.bloom.radius = T.post.bloomRayon; post.bloom.threshold = T.post.bloomSeuil; post.setBand(T.post.zoneNette);
     W.uFoamEdge.value = T.eau.largeurLisere; W.uFoamLine.value = T.eau.epaisseurTraits; W.uFoamGap.value = T.eau.espacementTraits; W.uFoamLen.value = T.eau.longueurTraits;
     GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur;
+    LUPIN.uLupS.value = T.lupins.taille; LUPIN.uLupH.value = T.lupins.hauteur; LUPIN.uLupWind.value = T.lupins.vent; planet.setLupinDensity(T.lupins.densite);
     if (planet.grassMesh) planet.grassMesh.count = Math.floor(planet.grassMesh.instanceMatrix.count * T.herbe.densite);
     TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons;
     planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * T.arbres.densite); });
@@ -650,9 +651,10 @@ const tuneHooks = {
   },
   recolorGrass() { planet.recolorGrass(TUNE.herbe.base, TUNE.herbe.pointe); },
   recolorTrees() { const A = TUNE.arbres; planet.recolorTrees([A.jaune, A.olive, A.orange, A.rouge, A.rose, A.sapin]); },
+  recolorLupins() { const L = TUNE.lupins; planet.recolorLupins([L.violet, L.mauve, L.rose, L.bleu, L.blanc]); },
 };
 tuneHooks.apply();
-tuneHooks.recolorGrass(); tuneHooks.recolorTrees();
+tuneHooks.recolorGrass(); tuneHooks.recolorTrees(); tuneHooks.recolorLupins();
 $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });   // page en cache sans le bouton : on s'en passe
 
 /* ---------- boucle ---------- */

@@ -487,8 +487,8 @@ export function buildPlanet(anchors, quality = 'high') {
       grassM.push([gm.clone(), new THREE.Color(1, 1, 1).multiplyScalar(0.82 + rng() * 0.32)]);
     }
     if (patch > 0.22 && rng() < 0.09) {
-      const LUP = ['#8f5cf0', '#c873ff', '#ff7ab8', '#6f86ff', '#f4f0ff'];
-      const fc = new THREE.Color(LUP[Math.floor((noise.noise(dd.x * 14, dd.y * 14, dd.z * 14) * 0.5 + 0.5) * LUP.length) % LUP.length]).multiplyScalar(0.9 + rng() * 0.2);
+      const li = Math.floor((noise.noise(dd.x * 14, dd.y * 14, dd.z * 14) * 0.5 + 0.5) * LUPIN_COLORS.length) % LUPIN_COLORS.length, lf = 0.9 + rng() * 0.2;
+      const fc = new THREE.Color(LUPIN_COLORS[li]).multiplyScalar(lf); fc._g = li; fc._f = lf;
       const ls = 0.8 + rng() * 0.6;
       gm.compose(gp.copy(dd).multiplyScalar(h * S - 0.01).addScaledVector(va, (rng() - 0.5) * 0.4), gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(ls, ls * (0.85 + rng() * 0.4), ls));
       flowers.push([gm.clone(), fc]);
@@ -622,7 +622,7 @@ export function buildPlanet(anchors, quality = 'high') {
     pair(v.wood, v.leaves, null, list.map(p => p[1]), list.map(p => [p[1], p[2]]));
   });
 
-  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null, padMesh = null, bloomMesh = null; const padState = [];
+  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null, padMesh = null, bloomMesh = null, lupinSpikes = null, lupinStems = null; const padState = [];
   const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
   /** Écrase l'herbe autour des points donnés (positions du monde), à l'instant t. */
   function crushGrass(points, radius, t) {
@@ -707,11 +707,13 @@ export function buildPlanet(anchors, quality = 'high') {
       for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 + r * 0.63; spike.push(new THREE.SphereGeometry(fr, 5, 3).scale(1, 0.8, 1).translate(Math.cos(a) * rad, y, Math.sin(a) * rad)); }
     }
     spike.push(new THREE.SphereGeometry(0.008, 5, 3).translate(0, 0.26 + 11 * 0.026, 0));
-    const lupSway = SWAY.replace('0.06 * max(transformed.y, 0.0)', '0.18 * max(transformed.y, 0.0)');
-    const spikeM = scaleMat(new THREE.MeshStandardMaterial({ roughness: 0.55, emissive: '#2a1040', emissiveIntensity: 0.3 }), WINDU, lupSway, 'lupin');
-    const stemM = scaleMat(new THREE.MeshStandardMaterial({ color: '#5f7a24', roughness: 0.8 }), WINDU, lupSway, 'lupinStem');
-    inst(mergeGeos(spike), spikeM, flowers, { cast: false });
-    inst(mergeGeos(stem), stemM, flowers.map(f => f[0]), { color: false, cast: false });
+    const lupSway = 'transformed.xz *= uLupS; transformed.y *= uLupS * uLupH;' + SWAY.replace('0.06 * max(transformed.y, 0.0)', '0.18 * uLupWind * max(transformed.y, 0.0)').replace(/\n\s*transformed \+= normal \* sin[^\n]*;/, '');
+    const LUPU = { ...WINDU, ...LUPIN };
+    const spikeM = scaleMat(new THREE.MeshStandardMaterial({ roughness: 0.55, emissive: '#2a1040', emissiveIntensity: 0.3 }), LUPU, lupSway, 'lupin');
+    const stemM = scaleMat(new THREE.MeshStandardMaterial({ color: '#5f7a24', roughness: 0.8 }), LUPU, lupSway, 'lupinStem');
+    for (let i = flowers.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = flowers[i]; flowers[i] = flowers[j]; flowers[j] = t; }   // ordre mélangé : la densité éclaircit partout pareil
+    lupinSpikes = inst(mergeGeos(spike), spikeM, flowers, { cast: false }); lupinSpikes.userData.tint = flowers.map(f => [f[1]._g, f[1]._f]);
+    lupinStems = inst(mergeGeos(stem), stemM, flowers.map(f => f[0]), { color: false, cast: false });
   }
 
   // rochers
@@ -822,6 +824,14 @@ export function buildPlanet(anchors, quality = 'high') {
   function animate() {}
 
   return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, treeMeshes, bushMesh, updatePads,
+    /** Lupins : densité (0 à 1), tige et épi suivent. */
+    setLupinDensity(k) { if (lupinSpikes) lupinSpikes.count = lupinStems.count = Math.floor(lupinSpikes.instanceMatrix.count * k); },
+    /** Lupins : une couleur par famille, chaque fleur garde sa nuance. */
+    recolorLupins(hexes) {
+      if (!lupinSpikes) return; const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
+      lupinSpikes.userData.tint.forEach(([g, f], i) => lupinSpikes.setColorAt(i, c.copy(G[g]).multiplyScalar(f)));
+      lupinSpikes.instanceColor.needsUpdate = true;
+    },
     /** Repeint les feuillages : une couleur par famille (jaune, olive, orange, rouge, rose, sapin), chaque arbre gardant sa nuance. */
     recolorTrees(hexes) {
       const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
@@ -832,6 +842,10 @@ export function buildPlanet(anchors, quality = 'high') {
       });
     }, get grassMesh() { return grassMesh; }, recolorGrass: (b, t) => recolorGrass(b, t) };
 }
+
+/** Lupins : couleurs par famille (violet, mauve, rose, bleu, blanc) et réglages de forme. */
+export const LUPIN_COLORS = ['#8f5cf0', '#c873ff', '#ff7ab8', '#6f86ff', '#f4f0ff'];
+export const LUPIN = { uLupS: { value: 1 }, uLupH: { value: 1 }, uLupWind: { value: 1 } };
 
 /** Couleur de référence de chaque famille de feuillage (jaune, olive, orange, rouge, rose, sapin). */
 export const TREE_COLORS = ['#c9b52e', '#b0a52a', '#ec7a2e', '#e0502e', '#ee6aa4', '#6e6a20'];

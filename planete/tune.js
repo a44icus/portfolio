@@ -17,6 +17,7 @@ export const DEFAULTS = {
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
     jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
   feuilles: { taille: 0.9, quantite: 0.69 },
+  lupins: { densite: 1, taille: 1, hauteur: 1, vent: 1, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.31, duree: 1.7, couleurDebut: '#ffd159', couleurMilieu: '#ff6168', couleurFin: '#e629b8', milieu: 0.15, eclat: 1 },
   voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 4, saut: 4.8, raideur: 1 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
@@ -114,6 +115,12 @@ export async function toggleTunePanel(hooks) {
   const fK = gui.addFolder('Couleurs des arbres');
   [['jaune', 'Feuillage jaune'], ['olive', 'Feuillage olive'], ['orange', 'Feuillage orange'], ['rouge', 'Feuillage rouge'], ['rose', 'Feuillage rose'], ['sapin', 'Sapins']]
     .forEach(([k, n]) => ch(fK.addColor(TUNE.arbres, k).name(n), () => hooks.recolorTrees()));
+  const fU = gui.addFolder('Lupins');
+  ch(fU.add(TUNE.lupins, 'densite', 0, 1, 0.01).name('Densité'));
+  ch(fU.add(TUNE.lupins, 'taille', 0.3, 3, 0.05).name('Taille'));
+  ch(fU.add(TUNE.lupins, 'hauteur', 0.3, 3, 0.05).name('Hauteur'));
+  ch(fU.add(TUNE.lupins, 'vent', 0, 3, 0.05).name('Balancement au vent'));
+  [['violet', 'Violet'], ['mauve', 'Mauve'], ['rose', 'Rose'], ['bleu', 'Bleu'], ['blanc', 'Blanc']].forEach(([k, n]) => ch(fU.addColor(TUNE.lupins, k).name('Couleur : ' + n.toLowerCase()), () => hooks.recolorLupins()));
   const fF = gui.addFolder('Feuilles au sol');
   ch(fF.add(TUNE.feuilles, 'taille', 0.2, 4, 0.05).name('Taille'));
   ch(fF.add(TUNE.feuilles, 'quantite', 0, 1, 0.01).name('Quantité'));
@@ -141,7 +148,7 @@ export async function toggleTunePanel(hooks) {
   ch(fC.add(TUNE.camera, 'hauteur', 0.5, 20, 0.1).name('Hauteur'));
   ch(fC.add(TUNE.camera, 'focale', 15, 80, 1).name('Angle de vue'));
 
-  [fA, fL, fP, fE, fS, fH, fT, fK, fF, fV, fR, fC].forEach(f => f.close());
+  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fC].forEach(f => f.close());
 
   const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
   const actions = {
@@ -153,7 +160,7 @@ export async function toggleTunePanel(hooks) {
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(TUNE, null, 2)], { type: 'application/json' }));
       a.download = 'reglages-planete.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     },
-    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
+    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); hooks.recolorLupins(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
   };
   gui.add(actions, 'copier').name('📋 Copier les réglages');
   gui.add(actions, 'telecharger').name('⬇ Télécharger (JSON)');
