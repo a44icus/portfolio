@@ -389,7 +389,7 @@ function stepWalk(dt) {
   P.steer += (steerIn - P.steer) * (1 - Math.exp(-dt * 10));
   up.copy(P.dir);
   const grip = Math.min(1, Math.abs(P.speed) / 2) * Math.sign(P.speed || 1);
-  const turn = !P.ground ? 1 : hv > 0.5 ? (Math.abs(P.speed) > 0.3 ? grip : 0.7) * 1.15 : grip;   // en l'air, on braque librement   // l'aéroglisseur pivote même à l'arrêt
+  const turn = !P.ground ? 0.4 : hv > 0.5 ? (Math.abs(P.speed) > 0.3 ? grip : 0.7) * 1.15 : grip;   // en l'air, on braque librement   // l'aéroglisseur pivote même à l'arrêt
   if (Math.abs(P.speed) > 0.05 || hv > 0.5 || !P.ground) P.fwd.applyAxisAngle(up, -P.steer * CAR.braquage * dt * turn * (1 - 0.3 * P.boost));
   right.crossVectors(up, P.fwd).normalize();
   // direction du mouvement : collée au capot sur terre, en retard sur l'eau (dérive)
@@ -432,7 +432,7 @@ function stepWalk(dt) {
   if (!P.ground && !P.recover) {
     const kk = c => keys.has(c);
     const ap = (kk('KeyW') || kk('ArrowUp') ? 1 : 0) - (kk('KeyS') || kk('ArrowDown') ? 1 : 0) + joy.y, ar = (kk('KeyD') || kk('ArrowRight') ? 1 : 0) - (kk('KeyA') || kk('ArrowLeft') ? 1 : 0) + joy.x;
-    P.wx += ap * 3.5 * dt; P.wz -= ar * 0.8 * dt;   // avant/arrière : piquer ou cabrer ; gauche/droite : on tourne (et un soupçon de roulis)
+    P.wx += ap * 5.5 * dt; P.wz -= ar * 5.5 * dt;   // en l'air : avant/arrière = tangage, gauche/droite = roulis   // avant/arrière : piquer ou cabrer ; gauche/droite : on tourne (et un soupçon de roulis)
     P.ax += P.wx * dt; P.az += P.wz * dt;
   }
   if (!P.ground && P.r <= g) { land(hv); if (P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
@@ -549,7 +549,7 @@ function updateFlip(dt) {
     P.ax = R2.ax0 * (1 - e); P.az = R2.az0 * (1 - e);
     if (R2.t >= 1) { P.recover = null; P.ax = P.az = P.wx = P.wz = 0; }
   } else if (!P.ground) {
-    P.wx *= Math.exp(-dt * 0.3); P.wz *= Math.exp(-dt * 0.3);   // un peu de résistance de l'air
+    P.wx *= Math.exp(-dt * 1.1); P.wz *= Math.exp(-dt * 1.1);   // la rotation ralentit quand on lâche les touches
   } else if (P.hover > 0.5) {
     P.ax *= Math.exp(-dt * 6); P.az *= Math.exp(-dt * 6); P.wx = P.wz = 0;   // sur l'eau, la jupe la garde à plat
   } else {
