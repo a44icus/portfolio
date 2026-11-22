@@ -23,7 +23,7 @@ export function makeAudio() {
     ctx = new AC();
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 3;
     master = ctx.createGain(); master.connect(comp); comp.connect(ctx.destination);
-    for (const k of ['musique', 'ambiance', 'effets']) { bus[k] = ctx.createGain(); bus[k].connect(master); }
+    for (const k of ['musique', 'ambiance', 'effets', 'vehicules']) { bus[k] = ctx.createGain(); bus[k].connect(master); }
     // réverbération douce (réponse impulsionnelle générée)
     reverb = ctx.createConvolver();
     { const len = ctx.sampleRate * 2.6, b = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -44,13 +44,13 @@ export function makeAudio() {
     if (!ctx) return;
     const V = TUNE.son;
     set(master.gain, V.actif ? V.general : 0, 0.15);
-    set(bus.musique.gain, V.musique, 0.3); set(bus.ambiance.gain, V.ambiance, 0.3); set(bus.effets.gain, V.effets, 0.1);
+    set(bus.musique.gain, V.musique, 0.3); set(bus.ambiance.gain, V.ambiance, 0.3); set(bus.effets.gain, V.effets, 0.1); set(bus.vehicules.gain, V.vehicules, 0.1);
   }
 
   /* ---------- voiture et aéroglisseur ---------- */
   let car = null;
   function buildCar() {
-    const out = gainNode(1); out.connect(bus.effets);
+    const out = gainNode(1); out.connect(bus.vehicules);
     // moteur : deux oscillateurs désaccordés, filtrés, un peu de grain
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), o3 = ctx.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square'; o3.type = 'sine';
     const lp = filt('lowpass', 500, 2), eng = gainNode(0);
@@ -86,13 +86,13 @@ export function makeAudio() {
     // planches des ponts : un petit claquement à chaque planche
     if (w && s.bridge && s.ground && hv < 0.5 && Math.abs(s.speed) > 0.5) {
       car.plank += Math.abs(s.speed) * dt / 0.24;
-      while (car.plank >= 1) { car.plank -= 1; click(0.05 + Math.min(0.06, Math.abs(s.speed) * 0.006), 180 + Math.random() * 60); }
+      while (car.plank >= 1) { car.plank -= 1; click(0.05 + Math.min(0.06, Math.abs(s.speed) * 0.006), 180 + Math.random() * 60, bus.vehicules); }
     }
   }
   /** Petit claquement de bois. */
-  function click(v, f) {
+  function click(v, f, dest) {
     const t = ctx.currentTime, o = ctx.createOscillator(), g = gainNode(0), b = filt('bandpass', f * 2, 3);
-    o.type = 'square'; o.frequency.value = f; o.connect(b); b.connect(g); g.connect(bus.effets);
+    o.type = 'square'; o.frequency.value = f; o.connect(b); b.connect(g); g.connect(dest || bus.effets);
     g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07); o.start(t); o.stop(t + 0.08);
   }
 
