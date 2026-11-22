@@ -17,7 +17,7 @@ export const DEFAULTS = {
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
     jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
   feuilles: { taille: 0.9, quantite: 0.69 },
-  lupins: { densite: 1, taille: 1, hauteur: 1, vent: 1, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
+  lupins: { densite: 1, taille: 1, hauteur: 1, vent: 1, fleurs: 0.6, tailleFleurs: 1, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.31, duree: 1.7, couleurDebut: '#ffd159', couleurMilieu: '#ff6168', couleurFin: '#e629b8', milieu: 0.15, eclat: 1 },
   voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 14, saut: 1.7, raideur: 0.9 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
@@ -120,6 +120,8 @@ export async function toggleTunePanel(hooks) {
   ch(fU.add(TUNE.lupins, 'taille', 0.3, 3, 0.05).name('Taille'));
   ch(fU.add(TUNE.lupins, 'hauteur', 0.3, 3, 0.05).name('Hauteur'));
   ch(fU.add(TUNE.lupins, 'vent', 0, 3, 0.05).name('Balancement au vent'));
+  ch(fU.add(TUNE.lupins, 'fleurs', 0, 1, 0.01).name('Densité des fleurs sur l’épi'));
+  ch(fU.add(TUNE.lupins, 'tailleFleurs', 0.2, 3, 0.05).name('Taille des fleurs'));
   [['violet', 'Violet'], ['mauve', 'Mauve'], ['rose', 'Rose'], ['bleu', 'Bleu'], ['blanc', 'Blanc']].forEach(([k, n]) => ch(fU.addColor(TUNE.lupins, k).name('Couleur : ' + n.toLowerCase()), () => hooks.recolorLupins()));
   const fF = gui.addFolder('Feuilles au sol');
   ch(fF.add(TUNE.feuilles, 'taille', 0.2, 4, 0.05).name('Taille'));
