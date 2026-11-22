@@ -183,13 +183,14 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   setTimeout(function () { if (!window.__planetReady) { var t = document.getElementById('loadTxt'); if (t) t.dataset.err = 1; window.__planetFail('La planète met trop de temps à se générer sur cet appareil. Patiente encore un peu…' + report(), true); } }, 45000);
 })();
 </script>
-<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.1/dist/es-module-shims.js"></script>
+<!-- three.js (0.170.0) est servi par le site lui-même : un CDN injoignable sur certains réseaux mobiles bloquait tout le chargement -->
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  "three": "./vendor/three/three.module.min.js",
+  "three/addons/": "./vendor/three/addons/"
 } }
 </script>
+<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.1/dist/es-module-shims.js"></script>
 </head>
 <body>
 <canvas id="scene" aria-label="Planète interactive : chaque zone est une section du portfolio"></canvas>
@@ -242,7 +243,8 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- async : si le CDN traîne, la planète démarre quand même (les contenus arrivent ensuite, ou ceux par défaut) -->
+<script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/site-data.js"></script>
 <script src="../styles/content.js"></script>
 <script src="../styles/transition.js"></script>

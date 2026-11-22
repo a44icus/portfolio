@@ -10,7 +10,7 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { leafCluster, LEAF_MAT, fadeNearCamera, SEA_R } from './world.js';
 
-const FONT_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_bold.typeface.json';
+const FONT_URL = new URL('./vendor/three/fonts/helvetiker_bold.typeface.json', import.meta.url).href;   // servie par le site (pas de CDN)
 const Y = new THREE.Vector3(0, 1, 0);
 const WOOD = '#de8a4e', WOOD_DARK = '#a8583a', CREAM = '#fbe9d7';
 

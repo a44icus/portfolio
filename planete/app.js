@@ -956,7 +956,9 @@ setTimeout(() => {
 const introBtn = $('#introBtn');
 introBtn.disabled = false; introBtn.textContent = 'Explorer la planète'; window.__planetReady = true;
 introBtn.addEventListener('click', () => { audio.start(); document.body.classList.add('started'); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
-(window.loadPortfolio ? window.loadPortfolio() : Promise.resolve(DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
+// Supabase arrive en asynchrone : on l'attend au plus 10 s avant de lire les contenus
+const sbReady = new Promise(r => { const t0 = Date.now(); (function chk() { if (window.supabase || Date.now() - t0 > 10000) r(); else setTimeout(chk, 150); })(); });
+sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
   .catch(() => { $('#loadTxt').textContent = ''; });
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
