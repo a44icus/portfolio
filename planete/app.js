@@ -354,8 +354,8 @@ addEventListener('blur', () => keys.clear());
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
   $('#jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (P.ground && !P.flipped && !P.tumble) { P.vr = CAR.saut; P.ground = false; takeoff(); } });
   const bb = $('#boostBtn');
-  bb.addEventListener('pointerdown', e => { e.preventDefault(); boostTouch = true; bb.setPointerCapture(e.pointerId); });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => bb.addEventListener(ev, () => { boostTouch = false; }));
+  bb?.addEventListener('pointerdown', e => { e.preventDefault(); boostTouch = true; bb.setPointerCapture(e.pointerId); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => bb?.addEventListener(ev, () => { boostTouch = false; }));
 }
 
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vector3(), basis = new THREE.Matrix4();
@@ -554,7 +554,7 @@ function updateFlip(dt) {
     }
   } else if (P.ground && !P.flipped) { P.ax *= Math.exp(-dt * 9); P.az *= Math.exp(-dt * 9); }
   if (P.flipped) P.speed *= Math.exp(-dt * 4);
-  flipBtn.classList.toggle('on', P.flipped);
+  flipBtn?.classList.toggle('on', P.flipped);
 }
 /** Touche R (ou bouton) : remet la voiture sur ses roues. */
 function recoverCar() {
@@ -562,7 +562,7 @@ function recoverCar() {
   if (!P.flipped && !P.tumble && Math.abs(wrapA(P.ax)) < 0.3 && Math.abs(wrapA(P.az)) < 0.3) return;
   P.recover = { t: 0, ax0: wrapA(P.ax), az0: wrapA(P.az) }; P.tumble = false; P.flipped = false; P.speed = 0; P.wx = P.wz = 0;
 }
-flipBtn.addEventListener('click', recoverCar);
+flipBtn?.addEventListener('click', recoverCar);
 
 /* ---------- mini-carte (en bas à gauche, tournée dans le sens de la caméra) ---------- */
 const mmEl = $('#minimap'), mmCtx = mmEl.getContext('2d');
@@ -645,7 +645,7 @@ const tuneHooks = {
 };
 tuneHooks.apply();
 if (JSON.stringify(TUNE.herbe) !== JSON.stringify({ base: '#45381a', pointe: '#d6bd38' })) tuneHooks.recolorGrass();
-$('#tuneBtn').addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });
+$('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });   // page en cache sans le bouton : on s'en passe
 
 /* ---------- boucle ---------- */
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); post.setSize(w, h, PR); camera.aspect = w / h; camera.updateProjectionMatrix(); }
