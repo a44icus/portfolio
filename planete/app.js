@@ -5,12 +5,15 @@
    ============================================================================ */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildPlanet, SEA_R } from './world.js';
+import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, buildZones } from './props.js';
+import { stylizeTree, makePost, makeLeaves } from './look.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const touch = matchMedia('(pointer: coarse)').matches;
+// qualité : réduite sur les téléphones et les petites machines
+const quality = (touch && Math.min(innerWidth, innerHeight) < 820) || (navigator.deviceMemory && navigator.deviceMemory < 4) ? 'low' : 'high';
 if (touch) document.body.classList.add('touch');
 const E = (window.PF && PF.esc) || (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 const IMG = (window.PF && PF.img) || (u => u);
@@ -30,7 +33,10 @@ const SECTIONS = [
 /* ---------- scène ---------- */
 const canvas = $('#scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+const PR = Math.min(devicePixelRatio, quality === 'low' ? 1.3 : 1.6);
+renderer.setPixelRatio(PR);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
@@ -41,15 +47,18 @@ camera.position.set(0, 9, 52);
 // éclairage de la surface de Social World (ciel du biome océan)
 scene.add(new THREE.HemisphereLight(new THREE.Color('#2f8ae8').lerp(new THREE.Color('#ffffff'), 0.35), new THREE.Color('#3f8a2a').multiplyScalar(0.8), 1.05));
 scene.add(new THREE.AmbientLight('#ffffff', 0.18));
-const sun = new THREE.DirectionalLight('#fff0dc', 2.6); sun.position.set(40, 30, 35); scene.add(sun);
+const sun = new THREE.DirectionalLight('#fff0dc', 2.6); sun.position.set(40, 30, 35); scene.add(sun, sun.target);
+sun.castShadow = true;
+sun.shadow.mapSize.set(quality === 'low' ? 1024 : 2048, quality === 'low' ? 1024 : 2048);
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; sun.shadow.radius = 3;
 const rim = new THREE.DirectionalLight('#8fb4ff', 0.35); rim.position.set(-40, -10, -30); scene.add(rim);
 
 // ciel de la surface (dégradé du biome océan), visible quand on marche
-const skyU = { uUp: { value: new THREE.Vector3(0, 1, 0) }, uMix: { value: 0 } };
+const skyU = { uUp: { value: new THREE.Vector3(0, 1, 0) }, uMix: { value: 0 }, uZen: { value: new THREE.Color('#2f8ae8') }, uHor: { value: new THREE.Color('#c4e6ff') }, uSpace: { value: new THREE.Color('#070b18') } };
 const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, depthTest: false, uniforms: skyU,   // opaque : dessiné en premier, sous tout le reste
   vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: 'uniform vec3 uUp; uniform float uMix; varying vec3 vD; void main(){ float k = dot(normalize(vD), uUp); vec3 zen = vec3(0.184, 0.541, 0.910), hor = vec3(0.769, 0.902, 1.0); vec3 c = mix(hor, zen, smoothstep(-0.05, 0.55, k)); gl_FragColor = vec4(mix(vec3(0.027, 0.043, 0.094), c, uMix), 1.0); }',
+  fragmentShader: 'uniform vec3 uUp; uniform float uMix; uniform vec3 uZen; uniform vec3 uHor; uniform vec3 uSpace; varying vec3 vD; void main(){ float k = dot(normalize(vD), uUp); vec3 c = mix(uHor, uZen, smoothstep(-0.05, 0.55, k)); gl_FragColor = vec4(mix(uSpace, c, uMix), 1.0);\n#include <colorspace_fragment>\n}',
 }));
 sky.renderOrder = -10; scene.add(sky);
 const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: false, transparent: true });
@@ -73,10 +82,17 @@ const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAt
   scene.add(atmo);
 }
 
-const planet = buildPlanet(SECTIONS);
+performance.mark('planet-start');
+const planet = buildPlanet(SECTIONS, quality);
+performance.measure('planet-build', 'planet-start');
 const world = new THREE.Group();
 world.add(planet.groundMesh, planet.waterMesh, planet.decor, planet.clouds);
 scene.add(world);
+stylizeTree(planet.groundMesh, { cast: true, receive: true });
+stylizeTree(planet.decor);
+stylizeTree(planet.clouds);
+const post = makePost(renderer, scene, camera, quality);
+const leaves = makeLeaves(planet, quality === 'low' ? 50 : 110); scene.add(leaves.mesh); stylizeTree(leaves.mesh);
 // la caméra part face au pavillon « Profil »
 camera.position.copy(SECTIONS[0].dir).multiplyScalar(innerWidth / innerHeight < 0.8 ? 72 : 52).addScaledVector(new THREE.Vector3(0, 1, 0), 6);
 
@@ -239,7 +255,8 @@ $('#lb').addEventListener('click', () => $('#lb').classList.remove('on'));
 const avatar = makeCar();
 avatar.visible = false; scene.add(avatar);
 let zones = null;
-buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); });
+stylizeTree(avatar, { cast: true, receive: true });
+buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0 };
 // la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
 const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; } };
@@ -262,6 +279,7 @@ function setWalk(on) {
     P.dir.copy(s.dir).addScaledVector(z.t2, 5.2 / SEA_R).normalize();
     P.fwd.copy(s.dir).sub(P.dir.clone().multiplyScalar(P.dir.dot(s.dir))).normalize();
     P.r = planet.groundRadius(P.dir) + 2; P.vr = 0; P.ground = false; P.speed = 0;
+    camF.copy(P.fwd);
     mode = 'walk'; controls.enabled = false; controls.autoRotate = false; camAnim = null; avatar.visible = true;
     walkBtn.textContent = 'Décoller'; document.body.classList.add('walking'); closePanel();
   } else {
@@ -296,7 +314,7 @@ addEventListener('blur', () => keys.clear());
 }
 
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vector3(), basis = new THREE.Matrix4();
-const nUp = new THREE.Vector3(), tiltQ = new THREE.Quaternion(), ZONE_COS = Math.cos(1.15 / SEA_R);
+const camF = new THREE.Vector3(), nUp = new THREE.Vector3(), tiltQ = new THREE.Quaternion(), ZONE_COS = Math.cos(1.15 / SEA_R);
 function groundAt(dir, along, side) { return planet.groundRadius(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
   const k = c => keys.has(c);
@@ -341,12 +359,13 @@ function stepWalk(dt) {
   carBody.pos.copy(avatar.position).addScaledVector(up, 0.25); carBody.vel.copy(P.fwd).multiplyScalar(P.speed);
 
   // caméra à la troisième personne, un peu en hauteur
-  const target = tmpA.copy(avatar.position).addScaledVector(P.fwd, -4.2).addScaledVector(up, 3.4);
+  camF.addScaledVector(camF, 0).lerp(P.fwd, 1 - Math.exp(-dt * 1.8)); camF.addScaledVector(up, -camF.dot(up)).normalize();
+  const target = tmpA.copy(avatar.position).addScaledVector(camF, -8.4).addScaledVector(up, 5.9);
   const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
   if (target.length() < clear) target.setLength(clear);
   camera.position.lerp(target, 1 - Math.exp(-dt * 5));
   camera.up.copy(up);
-  camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.5).addScaledVector(P.fwd, 1.6));
+  camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.3).addScaledVector(camF, 0.6));
 
   // dans un cercle de zone ?
   let best = null, bd = -1; SECTIONS.forEach(s => { const d = s.dir.dot(P.dir); if (d > bd) { bd = d; best = s; } });
@@ -359,10 +378,16 @@ function stepWalk(dt) {
 }
 
 /* ---------- boucle ---------- */
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); post.setSize(w, h, PR); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 const clock = new THREE.Clock();
-const sunOff = new THREE.Vector3();
+const sunOff = new THREE.Vector3(), sunDir = new THREE.Vector3(), camR = new THREE.Vector3(), camFw = new THREE.Vector3();
+let shadowBox = 0;
+function setShadowBox(half, near, far) {
+  const c = sun.shadow.camera;
+  if (shadowBox === half && c.near === near && c.far === far) return;
+  shadowBox = half; c.left = c.bottom = -half; c.right = c.top = half; c.near = near; c.far = far; c.updateProjectionMatrix();
+}
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   planet.waterUniforms.uTime.value = t;
@@ -384,11 +409,31 @@ function frame() {
   } else stepWalk(dt);
   if (zones) zones.update(dt, t, mode === 'walk' ? carBody : null);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
-  sun.position.copy(camera.position).add(sunOff.set(22, 26, 4).applyQuaternion(camera.quaternion));
-  planet.waterUniforms.uSun.value.copy(sun.position).normalize();
+  if (mode === 'walk') {
+    // lumière rasante venue du haut à gauche de l'image : de longues ombres vers le bas à droite
+    camR.set(1, 0, 0).applyQuaternion(camera.quaternion); camFw.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    sunDir.copy(up).multiplyScalar(1.05).addScaledVector(camR, -0.75).addScaledVector(camFw, 0.55);
+    sunDir.addScaledVector(up, 0).normalize();
+    sun.target.position.copy(avatar.position);
+    sun.position.copy(avatar.position).addScaledVector(sunDir, 26);
+    setShadowBox(10, 1, 60);
+    planet.waterUniforms.uSun.value.copy(sunDir);
+  } else {
+    sun.position.copy(camera.position).add(sunOff.set(22, 26, 4).applyQuaternion(camera.quaternion));
+    sun.target.position.set(0, 0, 0);
+    sun.position.setLength(60);
+    setShadowBox(24, 30, 90);
+    planet.waterUniforms.uSun.value.copy(sun.position).normalize();
+  }
+  leaves.update(dt, t, avatar.position, mode === 'walk' && !reduce);
+  FADE.uFadeOn.value = mode === 'walk' ? 1 : 0; FADE.uFadeTarget.value.copy(avatar.position).addScaledVector(avatar.position.clone().normalize(), 0.35);
+  // en voiture : focale longue et flou de maquette ; en orbite : vue normale
+  const wantFov = mode === 'walk' ? 30 : 42;
+  if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
+  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? 1 : 0, 1 - Math.exp(-dt * 3)), 0.5);
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   updateLabels();
-  renderer.render(scene, camera);
+  post.render();
   requestAnimationFrame(frame);
 }
 setHint();

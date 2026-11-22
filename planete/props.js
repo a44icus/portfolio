@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { leafCluster, LEAF_MAT, fadeNearCamera } from './world.js';
 
 const FONT_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_bold.typeface.json';
 const Y = new THREE.Vector3(0, 1, 0);
@@ -162,6 +163,123 @@ export async function buildZones(planet, sections) {
 
   const at = (z, x, y) => z.dir.clone().addScaledVector(z.t1, x / 16).addScaledVector(z.t2, y / 16).normalize();   // point (x, y) de la zone
 
+  /* ---------- matériaux et petits modèles partagés ---------- */
+  const paveTex = canvasTex((g, w, h) => {
+    g.fillStyle = '#c9a477'; g.fillRect(0, 0, w, h);
+    const N = 4, cs = w / N;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const off = (y % 2) * cs / 2, k = 0.9 + Math.random() * 0.16;
+      g.fillStyle = `rgb(${Math.round(228 * k)},${Math.round(196 * k)},${Math.round(150 * k)})`;
+      g.fillRect(x * cs + off + 3, y * cs + 3, cs - 6, cs - 6);
+      if (off) g.fillRect(-cs / 2 + 3, y * cs + 3, cs - 6, cs - 6);
+    }
+    g.globalAlpha = 0.08; for (let i = 0; i < 300; i++) { g.fillStyle = Math.random() < 0.5 ? '#000' : '#fff'; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+  }, 256, 256);
+  paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping;
+  const paveM = new THREE.MeshStandardMaterial({ map: paveTex, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+  const bushGeo = leafCluster(38, 0.34, 0.75, 0.18);
+  const bushCols = ['#4f9e34', '#3f8a2c', '#6ab83e', '#8fb840'].map(c => new THREE.Color(c));
+  const bushMats = bushCols.map(c => { const m = fadeNearCamera(LEAF_MAT.clone()); m.color = c; return m; });
+  const bushM = k => bushMats[k % bushMats.length];
+  const soilM = new THREE.MeshStandardMaterial({ color: '#5a3a22', roughness: 1 });
+  const flowerGeo = new THREE.IcosahedronGeometry(0.045, 0);
+  const flowerM = ['#ff7aa8', '#ffffff', '#ffd23a', '#ff8a3a', '#b48cff'].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
+  const pebbleGeo = new THREE.DodecahedronGeometry(1, 0), pebbleM = new THREE.MeshStandardMaterial({ color: '#efeae4', roughness: 0.7, flatShading: true });
+  function makeBench() {
+    const b = new THREE.Group();
+    for (const z2 of [-0.07, 0.07]) { const slat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.035, 0.11), woodM); slat.position.set(0, 0.22, z2); b.add(slat); }
+    for (const y of [0.34, 0.45]) { const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.07, 0.03), woodM); back.position.set(0, y, -0.15); back.rotation.x = -0.15; b.add(back); }
+    for (const x of [-0.34, 0.34]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.3), woodD); leg.position.set(x, 0.11, -0.02); b.add(leg); const up2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.04), woodD); up2.position.set(x, 0.36, -0.15); b.add(up2); }
+    return b;
+  }
+  function makeFence() {
+    const f = new THREE.Group();
+    for (const x of [-0.48, 0.48]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.45, 0.07).translate(0, 0.225, 0), woodD); p.position.x = x; f.add(p); }
+    for (const y of [0.17, 0.34]) { const r = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.04), woodM); r.position.y = y; f.add(r); }
+    return f;
+  }
+  function makeLamp(c) {
+    const lamp = new THREE.Group(), lm = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 2.2, roughness: 0.3 });
+    lamp.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.75, 8).translate(0, 0.375, 0), woodD));
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.16), lm); head.position.y = 0.84; lamp.add(head);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.1, 4).rotateY(Math.PI / 4), woodD); cap.position.y = 0.99; lamp.add(cap);
+    return lamp;
+  }
+  function signBoard(text, w = 0.9, h = 0.2, arrow = 0) {
+    const tex = canvasTex((g, W, H) => {
+      g.fillStyle = WOOD; g.fillRect(0, 0, W, H);
+      g.globalAlpha = 0.15; for (let y = 14; y < H; y += 20) { g.fillStyle = '#000'; g.fillRect(0, y, W, 3); } g.globalAlpha = 1;
+      g.fillStyle = '#fff8ea'; g.font = '800 40px Manrope, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText((arrow < 0 ? '← ' : '') + text + (arrow > 0 ? ' →' : ''), W / 2, H / 2 + 2, W - 24);
+    }, 512, 112);
+    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
+    return new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), [woodM, woodM, woodM, woodM, face, woodM]);
+  }
+  /** Lacet (repère de l'objet) pour regarder vers une direction donnée. */
+  function yawToward(dir, target) {
+    const f = new THREE.Quaternion().setFromUnitVectors(Y, dir);
+    const v = target.clone().sub(dir); v.addScaledVector(dir, -v.dot(dir)).normalize().applyQuaternion(f.invert());
+    return Math.atan2(v.x, v.z);
+  }
+  const yawToPoint = (dir, target) => yawToward(dir, target);
+
+  /* ---------- un objet propre à chaque zone ---------- */
+  const lathe = (pts, m) => new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 16), m);
+  const THEMES = {
+    profil({ add }) {   // une partie de quilles
+      const white = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: 0.4 }), red = new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.4 });
+      const rows = [[0], [-0.5, 0.5], [-1, 0, 1], [-1.5, -0.5, 0.5, 1.5]];
+      rows.forEach((row, r) => row.forEach(c => {
+        const pin = new THREE.Group();
+        pin.add(lathe([[0, 0], [0.05, 0.01], [0.07, 0.1], [0.05, 0.2], [0.03, 0.26], [0.045, 0.32], [0.035, 0.37], [0, 0.38]], white));
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 12), red); band.position.y = 0.255; pin.add(band);
+        add(pin, -2.1 + c * 0.2, -0.7 - r * 0.18, { r: 0.07, lie: 0.06 });
+      }));
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14).translate(0, 0.13, 0), new THREE.MeshStandardMaterial({ color: '#3d5afe', roughness: 0.25 }));
+      add(ball, -2.1, 0.6, { r: 0.13, topple: false });
+    },
+    photos({ add, color }) {   // un appareil photo sur trépied
+      const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: '#2b2b40', roughness: 0.5 });
+      for (let k = 0; k < 3; k++) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.7, 6).translate(0, 0.35, 0), dark); leg.rotation.set(0.28 * Math.cos(k * 2.1), 0, 0.28 * Math.sin(k * 2.1)); g.add(leg); }
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.14), new THREE.MeshStandardMaterial({ color, roughness: 0.4 })); body.position.y = 0.78; g.add(body);
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 16).rotateX(Math.PI / 2), dark); lens.position.set(0, 0.78, 0.12); g.add(lens);
+      add(g, 2.4, -1.3, { r: 0.2, lie: 0.08 });
+    },
+    contact({ add, color }) {   // une boîte aux lettres
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.6, 0.06).translate(0, 0.3, 0), woodD));
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.36), new THREE.MeshStandardMaterial({ color, roughness: 0.4 })); box.position.y = 0.7; g.add(box);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.36, 16, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2), box.material); top.position.y = 0.8; g.add(top);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.08), new THREE.MeshStandardMaterial({ color: '#ff5a3c' })); flag.position.set(0.15, 0.86, -0.08); g.add(flag);
+      add(g, 2.3, -1.2, { r: 0.2, lie: 0.1 });
+    },
+    parcours({ add }) {   // un poteau à flèches
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.4, 8).translate(0, 0.7, 0), woodD));
+      [['Hier', -1, 1.25, 0.4], ['Aujourd’hui', 1, 1.0, -0.3], ['Demain', 1, 0.75, 0.9]].forEach(([t, ar, y, rot]) => { const b = signBoard(t, 0.8, 0.18, ar); b.position.y = y; b.rotation.y = rot; g.add(b); });
+      add(g, 2.4, -1.3, { r: 0.25, lie: 0.06 });
+    },
+    perso({ add, color }) {   // une petite fusée
+      const g = new THREE.Group(), white = new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.4 }), acc = new THREE.MeshStandardMaterial({ color, roughness: 0.4 });
+      g.add(lathe([[0, 0.12], [0.13, 0.14], [0.15, 0.4], [0.13, 0.62], [0.08, 0.78], [0, 0.88]], white));
+      const win = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshStandardMaterial({ color: '#9fd8ff', roughness: 0.1 })); win.position.set(0, 0.5, 0.14); g.add(win);
+      for (let k = 0; k < 3; k++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.14), acc); const a = k / 3 * Math.PI * 2; fin.position.set(Math.sin(a) * 0.15, 0.2, Math.cos(a) * 0.15); fin.rotation.y = a; g.add(fin); }
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 12), acc); nose.position.y = 0.86; g.add(nose);
+      add(g, 2.4, -1.3, { r: 0.2, lie: 0.14 });
+    },
+    services({ add }) {   // une pile de caisses
+      [[2.2, -1.0], [2.65, -1.0], [3.1, -1.0], [2.42, -1.45], [2.88, -1.45], [2.65, -1.9]].forEach(([x, y]) => { const c = new THREE.Mesh(crateGeo, crateM); add(c, x, y, { r: 0.24, topple: false }, Math.random() * 0.4); });
+    },
+    travaux({ add, color }) {   // un chevalet et sa toile
+      const g = new THREE.Group();
+      for (const [x, rz] of [[-0.18, 0.12], [0.18, -0.12]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.04).translate(0, 0.5, 0), woodD); l.position.x = x; l.rotation.z = rz; l.rotation.x = -0.12; g.add(l); }
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.04).translate(0, 0.45, 0), woodD); back.position.z = -0.25; back.rotation.x = 0.3; g.add(back);
+      const tex = canvasTex((c, W, H) => { const gr = c.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#' + color.getHexString()); gr.addColorStop(1, '#3d5afe'); c.fillStyle = gr; c.fillRect(0, 0, W, H); c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(W * 0.62, H * 0.4, W * 0.16, 0, 7); c.fill(); c.fillRect(W * 0.15, H * 0.7, W * 0.5, H * 0.07); }, 256, 192);
+      const canvas = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.03), [woodM, woodM, woodM, woodM, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }), woodM]); canvas.position.set(0, 0.72, 0.04); canvas.rotation.x = -0.12; g.add(canvas);
+      add(g, 2.4, -1.3, { r: 0.3, lie: 0.06 });
+    },
+  };
+
   for (const s of sections) {
     const z = planet.pavilions.find(p => p.id === s.id); if (!z) continue;
     const color = new THREE.Color(s.color);
@@ -200,7 +318,7 @@ export async function buildZones(planet, sections) {
         const cx = x + widths[i] / 2; x += widths[i] + gap;
         const m = new THREE.Mesh(g, i === 0 ? accentM : letterM);
         // accent aigu sur le E de STÉPHANE
-        if (s.id === 'profil' && i === 5) { const acc = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, depth), letterM); acc.position.set(0.04, size + 0.18, 0); acc.rotation.z = -0.75; m.add(acc); }
+        if (s.id === 'profil' && i === 2) { const acc = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, depth), letterM); acc.position.set(0.04, size + 0.18, 0); acc.rotation.z = -0.75; m.add(acc); }
         group.add(m);
         // l'arc des lettres suit l'esplanade : chacune est posée dans son propre repère
         const dir = at(z, -cx, -1.75);
@@ -239,7 +357,98 @@ export async function buildZones(planet, sections) {
       group.add(lamp);
       bodies.add(lamp, at(z, lx, ly), 0, { r: 0.16, lie: 0.08 });
     }
+
+    /* ----- dallage de l'esplanade, qui épouse le sol ----- */
+    {
+      const RINGS = 12, SEG = 56, RAD = 3.05, pos = [], uv = [], idx = [];
+      for (let r = 0; r <= RINGS; r++) for (let k = 0; k <= SEG; k++) {
+        const rr = RAD * r / RINGS, a = k / SEG * Math.PI * 2, x = Math.cos(a) * rr, y = Math.sin(a) * rr, d = at(z, x, y);
+        const p = d.multiplyScalar(planet.heightDir(d) + 0.035); pos.push(p.x, p.y, p.z); uv.push(x / 1.6, y / 1.6);
+      }
+      for (let r = 0; r < RINGS; r++) for (let k = 0; k < SEG; k++) { const a = r * (SEG + 1) + k, b = a + SEG + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+      const nn = g.attributes.normal; for (let i = 0; i < nn.count; i++) { const v = new THREE.Vector3(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).normalize(); nn.setXYZ(i, v.x, v.y, v.z); }
+      const m = new THREE.Mesh(g, paveM); m.receiveShadow = true; group.add(m);
+    }
+
+    /* ----- buissons autour de l'esplanade (l'avant reste dégagé) ----- */
+    for (let k = 0; k < 11; k++) {
+      const a = k / 11 * Math.PI * 2 + 0.3;
+      if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.75) continue;   // passage vers l'avant (+t2)
+      const rr = 3.25 + Math.random() * 0.35, d = at(z, Math.cos(a) * rr, Math.sin(a) * rr), s2 = 0.75 + Math.random() * 0.45;
+      const b = new THREE.Mesh(bushGeo, bushM(k)); b.position.copy(d).multiplyScalar(planet.heightDir(d) + 0.1 * s2);
+      b.quaternion.setFromUnitVectors(Y, d); b.scale.set(s2, s2 * 0.8, s2); b.castShadow = true; group.add(b);
+    }
+
+    /* ----- bancs sur les côtés, tournés vers le cercle ----- */
+    for (const side of [-1, 1]) {
+      const bench = makeBench(); group.add(bench);
+      const d = at(z, side * 2.35, 1.0);
+      bodies.add(bench, d, yawToPoint(d, z.dir), { r: 0.36, lie: 0.12 });
+    }
+
+    /* ----- clôture en bois derrière les lettres ----- */
+    for (let k = -2; k <= 2; k++) {
+      const f = makeFence(); group.add(f);
+      const d = at(z, k * 1.05, -2.7);
+      bodies.add(f, d, yawToFace(d, z), { r: 0.42, lie: 0.06 });
+    }
+
+    /* ----- parterre fleuri ----- */
+    for (const side of [-1, 1]) {
+      const bed = new THREE.Group();
+      bed.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.14, 0.42).translate(0, 0.07, 0), woodD));
+      bed.add(new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.04, 0.34).translate(0, 0.14, 0), soilM));
+      for (let i = 0; i < 14; i++) {
+        const fl = new THREE.Mesh(flowerGeo, flowerM[i % flowerM.length]); fl.position.set(-0.36 + (i % 7) * 0.12, 0.2 + Math.random() * 0.06, i < 7 ? -0.08 : 0.08); fl.scale.setScalar(0.8 + Math.random() * 0.5); bed.add(fl);
+      }
+      group.add(bed);
+      const d = at(z, side * 3.0, -1.9);
+      bodies.add(bed, d, yawToFace(d, z) + side * 0.5, { r: 0.4, topple: false });
+    }
+
+    /* ----- cailloux clairs semés sur les dalles ----- */
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2, rr = 1.4 + Math.random() * 1.5, d = at(z, Math.cos(a) * rr, Math.sin(a) * rr);
+      const p = new THREE.Mesh(pebbleGeo, pebbleM); const sc = 0.05 + Math.random() * 0.05;
+      p.position.copy(d).multiplyScalar(planet.heightDir(d) + 0.04); p.quaternion.setFromUnitVectors(Y, d); p.scale.set(sc * 1.4, sc * 0.7, sc); group.add(p);
+    }
+
+    /* ----- un objet propre à chaque zone ----- */
+    const theme = THEMES[s.id];
+    if (theme) theme({ z, at, color, add: (obj, x, y, opts, yaw) => { group.add(obj); const d = at(z, x, y); return bodies.add(obj, d, yaw !== undefined ? yaw : yawToFace(d, z), opts); } });
   }
+
+  /* ---------- le long des chemins : lanternes, bancs, et un panneau indicateur à mi-chemin ---------- */
+  const labelOf = dir => { const s2 = sections.find(x => x.dir.dot(dir) > 0.9999); return s2 ? s2.label : ''; };
+  for (const e of planet.edges || []) {
+    const u = e.b.clone().addScaledVector(e.a, -e.a.dot(e.b)).normalize(), start = (2.6 + 0.6 + 0.9) / 16, stop = e.len - start;
+    const pointAt = (th, side) => e.a.clone().multiplyScalar(Math.cos(th)).addScaledVector(u, Math.sin(th)).addScaledVector(e.n, side / 16).normalize();
+    let k = 0;
+    for (let th = start; th < stop; th += 2.7 / 16, k++) {
+      const side = k % 2 ? 0.75 : -0.75, d = pointAt(th, side);
+      if (planet.isWet(d) || planet.onPlaza(d, 0.4 / 16)) continue;
+      const lamp = makeLamp(new THREE.Color('#ffd27a')); group.add(lamp);
+      bodies.add(lamp, d, 0, { r: 0.16, lie: 0.08 });
+      if (k % 3 === 1) {
+        const d2 = pointAt(th + 0.9 / 16, side * 1.15);
+        if (!planet.isWet(d2)) { const bench = makeBench(); group.add(bench); bodies.add(bench, d2, yawToward(d2, pointAt(th + 0.9 / 16, 0)), { r: 0.36, lie: 0.12 }); }
+      }
+    }
+    // panneau indicateur au milieu du chemin
+    const mid = pointAt(e.len / 2, 0.9);
+    if (!planet.isWet(mid) && e.len * 16 > 7) {
+      const post = new THREE.Group();
+      post.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.2, 8).translate(0, 0.6, 0), woodD));
+      const toA = signBoard(labelOf(e.a), 0.9, 0.2, -1); toA.position.y = 1.0; post.add(toA);
+      const toB = signBoard(labelOf(e.b), 0.9, 0.2, 1); toB.position.y = 0.74; post.add(toB);
+      group.add(post);
+      // les flèches suivent le chemin : l'axe x du panneau pointe vers B
+      bodies.add(post, mid, yawToward(mid, e.b) - Math.PI / 2, { r: 0.25, lie: 0.06 });
+    }
+  }
+
 
   /** Lacet (dans le repère de l'objet) pour que sa face avant regarde l'avant de la zone (+t2). */
   function yawToFace(dir, z) {
