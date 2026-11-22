@@ -1,0 +1,127 @@
+/* ============================================================================
+   Barre de réglages : tous les paramètres de la planète, modifiables en direct.
+   Les valeurs sont gardées dans le navigateur et s'exportent en JSON
+   (bouton « Copier les réglages ») pour être transmises telles quelles.
+   ============================================================================ */
+export const DEFAULTS = {
+  ambiance: { heureFixe: false, heure: 12.5, vitesseJour: 1, meteo: 'auto', vent: 1, brume: 1 },
+  lumiere: {
+    soleil: 1, ciel: 1, ambiante: 1, exposition: 1,
+    teinteOmbres: '#9466d1', forceTeinteOmbres: 0,
+    teinteLumiere: '#ffe0c4', forceTeinteLumiere: 0,
+  },
+  post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
+  eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, paillettes: 0.05, eclatPaillettes: 1.6 },
+  sable: { couleur: '#f59a46', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 2.2 },
+  herbe: { base: '#45381a', pointe: '#d6bd38' },
+  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff' },
+  voiture: { vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 2.3, gravite: 17, saut: 5.6, raideur: 1 },
+  camera: { distance: 8.4, hauteur: 5.9, focale: 30 },
+};
+const KEY = 'planete-reglages';
+const clone = o => JSON.parse(JSON.stringify(o));
+function merge(dst, src) { for (const k in src) { if (dst[k] && typeof dst[k] === 'object' && typeof src[k] === 'object') merge(dst[k], src[k]); else if (k in dst) dst[k] = src[k]; } return dst; }
+export const TUNE = clone(DEFAULTS);
+try { const saved = localStorage.getItem(KEY); if (saved) merge(TUNE, JSON.parse(saved)); } catch (e) { /* stockage indisponible : valeurs par défaut */ }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(TUNE)); } catch (e) { /* rien */ } };
+
+/** Seuls les réglages qui diffèrent des valeurs d'origine (pour un export lisible). */
+function changes(a = TUNE, b = DEFAULTS) {
+  const out = {};
+  for (const k in a) {
+    if (typeof a[k] === 'object') { const c = changes(a[k], b[k]); if (Object.keys(c).length) out[k] = c; }
+    else if (a[k] !== b[k]) out[k] = a[k];
+  }
+  return out;
+}
+
+let gui = null;
+/**
+ * Ouvre (ou ferme) le panneau. hooks.apply() répercute les réglages sur la scène,
+ * hooks.recolorGrass() repeint l'herbe.
+ */
+export async function toggleTunePanel(hooks) {
+  if (gui) { gui.destroy(); gui = null; return; }
+  const { GUI } = await import('https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/+esm');
+  gui = new GUI({ title: 'Réglages de la planète', width: 300 });
+  Object.assign(gui.domElement.style, { top: 'calc(max(14px, env(safe-area-inset-top)) + 54px)', right: '16px', maxHeight: 'calc(100vh - 160px)', overflowY: 'auto', zIndex: 45 });
+  const ch = (c, extra) => c.onChange(() => { save(); hooks.apply(); if (extra) extra(); });
+
+  const fA = gui.addFolder('Ambiance');
+  ch(fA.add(TUNE.ambiance, 'heureFixe').name('Heure figée'));
+  ch(fA.add(TUNE.ambiance, 'heure', 0, 24, 0.1).name('Heure'));
+  ch(fA.add(TUNE.ambiance, 'vitesseJour', 0, 10, 0.1).name('Vitesse du jour'));
+  ch(fA.add(TUNE.ambiance, 'meteo', { Auto: 'auto', Beau: 'clear', Nuages: 'cloudy', Pluie: 'rain', Orage: 'storm' }).name('Météo'));
+  ch(fA.add(TUNE.ambiance, 'vent', 0, 3, 0.05).name('Force du vent'));
+  ch(fA.add(TUNE.ambiance, 'brume', 0, 3, 0.05).name('Brume'));
+
+  const fL = gui.addFolder('Lumière');
+  ch(fL.add(TUNE.lumiere, 'soleil', 0, 3, 0.05).name('Soleil'));
+  ch(fL.add(TUNE.lumiere, 'ciel', 0, 3, 0.05).name('Lumière du ciel'));
+  ch(fL.add(TUNE.lumiere, 'ambiante', 0, 4, 0.05).name('Lumière ambiante'));
+  ch(fL.add(TUNE.lumiere, 'exposition', 0.3, 2, 0.01).name('Exposition'));
+  ch(fL.addColor(TUNE.lumiere, 'teinteOmbres').name('Teinte des ombres'));
+  ch(fL.add(TUNE.lumiere, 'forceTeinteOmbres', 0, 1, 0.01).name('↳ force'));
+  ch(fL.addColor(TUNE.lumiere, 'teinteLumiere').name('Teinte de la lumière'));
+  ch(fL.add(TUNE.lumiere, 'forceTeinteLumiere', 0, 1, 0.01).name('↳ force'));
+
+  const fP = gui.addFolder('Rendu');
+  ch(fP.add(TUNE.post, 'bloom', 0, 3, 0.05).name('Halo (bloom)'));
+  ch(fP.add(TUNE.post, 'bloomRayon', 0, 1.5, 0.01).name('Rayon du halo'));
+  ch(fP.add(TUNE.post, 'bloomSeuil', 0, 2, 0.01).name('Seuil du halo'));
+  ch(fP.add(TUNE.post, 'flou', 0, 3, 0.05).name('Flou de maquette'));
+  ch(fP.add(TUNE.post, 'zoneNette', 0, 0.5, 0.01).name('Zone nette'));
+  ch(fP.add(TUNE.post, 'saturation', 0.5, 2, 0.01).name('Saturation'));
+
+  const fE = gui.addFolder('Eau');
+  ch(fE.addColor(TUNE.eau, 'bord').name('Couleur au bord'));
+  ch(fE.addColor(TUNE.eau, 'milieu').name('Couleur intermédiaire'));
+  ch(fE.addColor(TUNE.eau, 'large').name('Couleur au large'));
+  ch(fE.add(TUNE.eau, 'ecume', 0, 2, 0.05).name('Écume'));
+  ch(fE.add(TUNE.eau, 'paillettes', 0, 1, 0.005).name('Paillettes (densité)'));
+  ch(fE.add(TUNE.eau, 'eclatPaillettes', 0, 5, 0.05).name('Paillettes (éclat)'));
+
+  const fS = gui.addFolder('Sable');
+  ch(fS.addColor(TUNE.sable, 'couleur').name('Couleur'));
+  ch(fS.add(TUNE.sable, 'forceCouleur', 0, 1, 0.01).name('↳ force'));
+  ch(fS.add(TUNE.sable, 'paillettes', 0, 1, 0.005).name('Paillettes (densité)'));
+  ch(fS.add(TUNE.sable, 'eclatPaillettes', 0, 6, 0.05).name('Paillettes (éclat)'));
+
+  const fH = gui.addFolder('Herbe et arbres');
+  ch(fH.addColor(TUNE.herbe, 'base').name('Herbe : base'), () => hooks.recolorGrass());
+  ch(fH.addColor(TUNE.herbe, 'pointe').name('Herbe : pointe'), () => hooks.recolorGrass());
+  ch(fH.addColor(TUNE.arbres, 'tronc').name('Troncs'));
+  ch(fH.addColor(TUNE.arbres, 'feuillage').name('Teinte du feuillage'));
+
+  const fV = gui.addFolder('Voiture');
+  ch(fV.add(TUNE.voiture, 'vitesse', 2, 15, 0.1).name('Vitesse max'));
+  ch(fV.add(TUNE.voiture, 'acceleration', 2, 30, 0.5).name('Accélération'));
+  ch(fV.add(TUNE.voiture, 'turbo', 0, 2, 0.05).name('Bonus du turbo'));
+  ch(fV.add(TUNE.voiture, 'braquage', 0.5, 5, 0.05).name('Braquage'));
+  ch(fV.add(TUNE.voiture, 'gravite', 4, 40, 0.5).name('Gravité'));
+  ch(fV.add(TUNE.voiture, 'saut', 0, 15, 0.1).name('Saut'));
+  ch(fV.add(TUNE.voiture, 'raideur', 0.2, 3, 0.05).name('Raideur des suspensions'));
+
+  const fC = gui.addFolder('Caméra');
+  ch(fC.add(TUNE.camera, 'distance', 2, 25, 0.1).name('Distance'));
+  ch(fC.add(TUNE.camera, 'hauteur', 0.5, 20, 0.1).name('Hauteur'));
+  ch(fC.add(TUNE.camera, 'focale', 15, 80, 1).name('Angle de vue'));
+
+  [fA, fL, fP, fE, fS, fH, fV, fC].forEach(f => f.close());
+
+  const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
+  const actions = {
+    copier() {
+      const txt = JSON.stringify(changes(), null, 2);
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Copié ✓'), () => { prompt('Réglages à copier :', txt); });
+    },
+    telecharger() {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(TUNE, null, 2)], { type: 'application/json' }));
+      a.download = 'reglages-planete.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    },
+    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
+  };
+  gui.add(actions, 'copier').name('📋 Copier les réglages');
+  gui.add(actions, 'telecharger').name('⬇ Télécharger (JSON)');
+  gui.add(actions, 'reinitialiser').name('↺ Réinitialiser');
+}

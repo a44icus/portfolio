@@ -118,6 +118,21 @@ function faceDir(f, s, t, out) {
 }
 
 /* ---------- eau du jeu : profondeur, hauts-fonds, écume, reflets ---------- */
+const GLITTER_GLSL = `
+  float glitHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+  /** 1 sur le pixel qui contient la paillette de cette case (point fixe du monde), 0 ailleurs. */
+  float glitter(vec3 wp, float cellsPerUnit, float density, float t) {
+    vec3 cell = floor(wp * cellsPerUnit);
+    float h = glitHash(cell);
+    if (h > density) return 0.0;
+    vec3 o = vec3(glitHash(cell + 1.3), glitHash(cell + 7.1), glitHash(cell + 3.7));
+    vec3 sp = (cell + 0.15 + 0.7 * o) / cellsPerUnit;
+    vec3 N = normalize(wp), dv = wp - sp; dv -= N * dot(dv, N);
+    float pw = max(length(fwidth(wp)), 1e-5);
+    float onPx = 1.0 - step(0.6 * pw, length(dv));
+    float tw = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * (2.0 + 3.0 * o.x) + h * 80.0), 3.0);
+    return onPx * tw;
+  }`;
 const WAVES_GLSL = `
   float swWaves(vec3 p, float t) {
     float h = 0.0;
@@ -144,9 +159,11 @@ function waterMaterial(uniforms) {
       attribute float aDepth; varying float vDepth; varying vec3 vWorld;
       void main() { vDepth = aDepth; vec4 wp = modelMatrix * vec4(position, 1.0); vWorld = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }`,
     fragmentShader: `
+      uniform vec3 uTeal; uniform float uFoam; uniform float uGlitW; uniform float uGlitWI;
       uniform float uTime; uniform vec3 uSun; uniform vec3 uSunColor; uniform vec3 uSky; uniform vec3 uShallow; uniform vec3 uDeep; uniform float uScale;
       varying float vDepth; varying vec3 vWorld;
       ${WAVES_GLSL}
+      ${GLITTER_GLSL}
       void main() {
         vec3 p = vWorld / uScale;
         vec3 N = normalize(vWorld);
@@ -160,7 +177,7 @@ function waterMaterial(uniforms) {
         float fres = pow(1.0 - max(dot(n, V), 0.0), 4.0);
         float d = max(vDepth, 0.0);
         // turquoise au bord, sarcelle, puis bleu nuit au large, avec de grandes taches plus sombres
-        vec3 teal = vec3(0.04, 0.46, 0.52);
+        vec3 teal = uTeal;
         vec3 col = mix(uShallow, teal, smoothstep(0.2, 2.2, d));
         col = mix(col, uDeep, smoothstep(2.0, 8.0, d));
         float blot = sin(p.x * 0.7 + uTime * 0.05) * sin(p.y * 0.9 - uTime * 0.04) * sin(p.z * 0.8);
@@ -179,13 +196,11 @@ function waterMaterial(uniforms) {
         float ph2 = fract(d * 0.75 - uTime * 0.12);
         float ring = smoothstep(0.0, 0.03, ph2) * (1.0 - smoothstep(0.05, 0.09, ph2)) * (1.0 - smoothstep(0.4, 2.6, d)) * (0.55 + 0.45 * brk);   // traits continus, plus ou moins marqués
         float foam = max(edge, ring * 0.9);
-        col = mix(col, vec3(1.0, 0.98, 0.95), clamp(foam, 0.0, 1.0));
+        col = mix(col, vec3(1.0, 0.98, 0.95), clamp(foam * uFoam, 0.0, 1.0));
         // quelques paillettes d'un pixel qui scintillent à la surface, avec parcimonie
         {
-          vec2 px = floor(gl_FragCoord.xy);
-          float hw = fract(sin(dot(vec3(px, floor(uTime * 5.0 + px.x * 0.013)), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
           float farW = 1.0 - smoothstep(10.0, 30.0, length(cameraPosition - vWorld));
-          col += vec3(1.0, 0.97, 0.9) * step(0.9988, hw) * smoothstep(0.3, 1.0, d) * farW * (0.6 + 0.6 * sunUp) * 1.6;
+          col += vec3(1.0, 0.97, 0.9) * glitter(vWorld, 5.0, uGlitW, uTime) * smoothstep(0.3, 1.0, d) * farW * (0.6 + 0.6 * sunUp) * uGlitWI;
         }
         float alpha = mix(0.62, 0.97, smoothstep(0.05, 1.6, d));
         alpha = clamp(alpha + fres * 0.2 + foam * 0.4, 0.0, 1.0);
@@ -399,27 +414,23 @@ export function buildPlanet(anchors, quality = 'high') {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   // sable pailleté : de minuscules éclats qui scintillent selon l'angle de vue, seulement sur le sable et les routes de terre
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uTime = waterUniforms.uTime;
+    sh.uniforms.uTime = waterUniforms.uTime; Object.assign(sh.uniforms, SAND);
     sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'uniform float uTime;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    sh.fragmentShader = GLITTER_GLSL + 'uniform float uTime;\nuniform float uGlitS;\nuniform float uGlitSI;\nuniform vec3 uSand;\nuniform float uSandMix;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb = mix(diffuseColor.rgb, uSand, uSandMix * smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r));`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       {
         float sand = smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r);
-        // une paillette = un pixel de l'écran ; le motif est accroché au sol (cases de 15 cm) et scintille quand la vue bouge
-        vec3 cell = floor(vWPos * 6.5);
-        float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-        vec2 px = floor(gl_FragCoord.xy);
-        float h2 = fract(sin(dot(vec3(px, h * 917.0), vec3(39.3, 11.1, 73.7))) * 24634.63);
-        float tw = 0.55 + 0.45 * sin(uTime * 3.0 + h2 * 60.0);
+        // une paillette = un point fixe du sol, dessiné sur un seul pixel, qui scintille sur place
         float far = 1.0 - smoothstep(8.0, 24.0, length(cameraPosition - vWPos));
-        float sp = step(0.9975, h2) * step(0.3, h) * tw * sand * far;
-        totalEmissiveRadiance += vec3(1.0, 0.94, 0.82) * sp * 2.2;
+        float sp = glitter(vWPos, 7.0, uGlitS, uTime) * sand * far;
+        totalEmissiveRadiance += vec3(1.0, 0.94, 0.82) * sp * uGlitSI;
       }`);
   };
   mat.customProgramCacheKey = () => 'ground-glitter';
   const waterUniforms = {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
-    uShallow: { value: new THREE.Color('#34bdb0') },
+    uShallow: { value: new THREE.Color('#34bdb0') }, uTeal: { value: new THREE.Color('#38b5bf') }, uFoam: { value: 1 }, uGlitW: { value: 0.05 }, uGlitWI: { value: 1.6 },
     uDeep: { value: new THREE.Color('#0b4766') },
   };
   const wMat = waterMaterial(waterUniforms), water = new THREE.Group();
@@ -533,6 +544,7 @@ export function buildPlanet(anchors, quality = 'high') {
   // arbres : houppiers en petites feuilles (rendu « peint »), quelques cyprès et pins, en forêts
   const NV = 6, variants = Array.from({ length: NV }, (_, v) => treeVariant(v, quality)), vWood = variants.map(() => []), vLeaf = variants.map(() => []);
   const trunks = [], cypress = [], pines = [], bushes = [], treeDirs = [];
+  let recolorGrass = () => {};
   for (let tries = 0; tries < 60000 && treeDirs.length < (quality === 'low' ? 850 : 1350); tries++) {
     randDir(d);
     if (noise.fbm(d.x * 7 + 1.3, d.y * 7, d.z * 7 - 2.1, 3) < 0.05) continue;          // forêts
@@ -590,6 +602,11 @@ export function buildPlanet(anchors, quality = 'high') {
   // herbe : touffes de quatre brins effilés, du vert sombre au vert tendre, qui ondulent au vent
   {
     const base = new THREE.Color(STYLE.grassBase).multiplyScalar(0.8), tip = new THREE.Color(STYLE.grassTip);
+    recolorGrass = (b, t) => {
+      const B = new THREE.Color(b).multiplyScalar(0.8), Tp = new THREE.Color(t), M = B.clone().lerp(Tp, 0.45), c = g.attributes.color;
+      for (let k = 0; k < c.count / 3; k++) { const c0 = k % 2 ? B : M; c.setXYZ(k * 3, c0.r, c0.g, c0.b); c.setXYZ(k * 3 + 1, B.r, B.g, B.b); c.setXYZ(k * 3 + 2, Tp.r, Tp.g, Tp.b); }
+      c.needsUpdate = true;
+    };
     // touffe épaisse : des brins larges et pointus, disposés en étoile et penchés vers l'extérieur
     const pos = [], col = [], nrm = [], NB = quality === 'low' ? 5 : 7, mid = base.clone().lerp(tip, 0.45);
     for (let k = 0; k < NB; k++) {
@@ -716,8 +733,11 @@ export function buildPlanet(anchors, quality = 'high') {
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, recolorGrass: (b, t) => recolorGrass(b, t) };
 }
+
+/** Sable : paillettes et teinte (barre de réglages). */
+export const SAND = { uGlitS: { value: 0.06 }, uGlitSI: { value: 2.2 }, uSand: { value: new THREE.Color('#f59a46') }, uSandMix: { value: 0 } };
 
 /** Vent commun à l'herbe (force et direction), réglé par la météo. */
 export const WIND = { uWind: { value: 0.32 }, uWindDir: { value: new THREE.Vector3(0.7, 0.2, 0.68).normalize() } };

@@ -9,6 +9,8 @@ import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, buildZones } from './props.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails } from './look.js';
 import { makeAmbience } from './ambience.js';
+import { TUNE, toggleTunePanel } from './tune.js';
+import { SAND } from './world.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -284,7 +286,7 @@ function spring(xo, xk, vo, vk, target, k, c, dt) { for (let n = Math.ceil(dt * 
 // sur l'eau, on glisse à la surface (en aéroglisseur) ; sur terre, on roule sur le sol
 const WATER_R = planet.waterR + 0.02;
 const driveR = dir => Math.max(planet.heightDir(dir), WATER_R, planet.bridgeR(dir, P.r));   // sous un pont, l'aéroglisseur passe dessous
-const GRAV = 17, JUMP = 5.6, RAIL = 0.42;
+const RAIL = 0.42, CAR = TUNE.voiture;
 let boostTouch = false;
 const crushPts = [0, 1, 2, 3].map(() => new THREE.Vector3());
 // la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
@@ -349,7 +351,7 @@ addEventListener('blur', () => keys.clear());
   pad.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
   const end = () => { id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
-  $('#jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (P.ground) { P.vr = JUMP; P.ground = false; } });
+  $('#jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (P.ground) { P.vr = CAR.saut; P.ground = false; } });
   const bb = $('#boostBtn');
   bb.addEventListener('pointerdown', e => { e.preventDefault(); boostTouch = true; bb.setPointerCapture(e.pointerId); });
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => bb.addEventListener(ev, () => { boostTouch = false; }));
@@ -363,7 +365,7 @@ function stepWalk(dt) {
   const busy = panel.classList.contains('on');
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
-  if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + JUMP; P.ground = false; }
+  if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + CAR.saut; P.ground = false; }
   const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch) && throttle > 0;
 
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
@@ -372,8 +374,8 @@ function stepWalk(dt) {
   P.t += dt;
   const hv = P.hover;
   P.boost += ((boostOn ? 1 : 0) - P.boost) * (1 - Math.exp(-dt * 6));   // turbo : plus vite, plus nerveux
-  const vmax = (6.5 - 0.7 * hv) * (1 + 0.7 * P.boost);
-  if (throttle && !(throttle > 0 && P.speed >= vmax)) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 - 9 * hv : (9 - 2 * hv) * (1 + 0.9 * P.boost)) * dt;
+  const vmax = (CAR.vitesse - 0.7 * hv) * (1 + CAR.turbo * P.boost);
+  if (throttle && !(throttle > 0 && P.speed >= vmax)) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 - 9 * hv : (CAR.acceleration - 2 * hv) * (1 + 0.9 * P.boost)) * dt;
   else if (!throttle) P.speed *= Math.exp(-dt * (2.2 - 1.6 * hv));
   if (P.speed > vmax) P.speed -= (P.speed - vmax) * (1 - Math.exp(-dt * 3));   // le turbo relâché : on ralentit en douceur
   P.speed = Math.max(-vmax * 0.5, P.speed);
@@ -381,7 +383,7 @@ function stepWalk(dt) {
   up.copy(P.dir);
   const grip = Math.min(1, Math.abs(P.speed) / 2) * Math.sign(P.speed || 1);
   const turn = hv > 0.5 ? (Math.abs(P.speed) > 0.3 ? grip : 0.7) * 1.15 : grip;   // l'aéroglisseur pivote même à l'arrêt
-  if (Math.abs(P.speed) > 0.05 || hv > 0.5) P.fwd.applyAxisAngle(up, -P.steer * 2.3 * dt * turn * (1 - 0.3 * P.boost));
+  if (Math.abs(P.speed) > 0.05 || hv > 0.5) P.fwd.applyAxisAngle(up, -P.steer * CAR.braquage * dt * turn * (1 - 0.3 * P.boost));
   right.crossVectors(up, P.fwd).normalize();
   // direction du mouvement : collée au capot sur terre, en retard sur l'eau (dérive)
   P.mv.lerp(P.fwd, 1 - Math.exp(-dt * (30 - 28.6 * hv))); P.mv.addScaledVector(up, -P.mv.dot(up)).normalize();
@@ -414,10 +416,10 @@ function stepWalk(dt) {
   const g = driveR(P.dir);
   if (P.ground) {
     // au sol : on suit le relief tant qu'il ne se dérobe pas plus vite que la gravité ; sinon la voiture décolle (bosses, crêtes, rampes)
-    const free = rPrev + P.vr * dt - 0.5 * GRAV * dt * dt;
+    const free = rPrev + P.vr * dt - 0.5 * CAR.gravite * dt * dt;
     if (g >= free - 0.012) { const v = (g - rPrev) / Math.max(dt, 1e-3); P.vr += (Math.max(-12, Math.min(12, v)) - P.vr) * 0.6; P.r = g; }
-    else { P.ground = false; P.r = free; P.vr -= GRAV * dt; }
-  } else { P.vr -= GRAV * dt; P.r += P.vr * dt; }
+    else { P.ground = false; P.r = free; P.vr -= CAR.gravite * dt; }
+  } else { P.vr -= CAR.gravite * dt; P.r += P.vr * dt; }
   P.airT = P.ground ? 0 : P.airT + dt;
   if (!P.ground && P.r <= g) { if (P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
 
@@ -441,12 +443,12 @@ function stepWalk(dt) {
     const gw = groundAt(P.dir, w.along, w.side * 0.37), plane = P.rv + slopeF * w.along + slopeR * w.side * 0.37;
     let tgt = P.ground || P.airT < 0.12 ? Math.max(-0.1, Math.min(0.1, gw - plane)) : -0.08;   // en l'air, les roues pendent
     tgt += rough * 0.02 * Math.sin(P.odo * 9 + i * 1.7) * Math.sin(P.odo * 3.1 + i * 2.3);   // cahots
-    spring(S2.wy, i, S2.wv, i, tgt, 900, 42, dt);
+    spring(S2.wy, i, S2.wv, i, tgt, 900 * CAR.raideur, 42 * Math.sqrt(CAR.raideur), dt);
   });
   P.acc += ((P.speed - P.lastSpeed) / Math.max(dt, 1e-3) - P.acc) * (1 - Math.exp(-dt * 8)); P.lastSpeed = P.speed;
   {
     const wy = S2.wy, front = (wy[0] + wy[1]) / 2, rear = (wy[2] + wy[3]) / 2, left = (wy[0] + wy[2]) / 2, rgt = (wy[1] + wy[3]) / 2, spd = Math.min(1, Math.abs(P.speed) / 5);
-    spring(S2, 'y', S2, 'vy', (front + rear) / 2 * 0.7 - (P.ground || P.airT < 0.12 ? 0 : 0.03), 170, 9, dt);
+    spring(S2, 'y', S2, 'vy', (front + rear) / 2 * 0.7 - (P.ground || P.airT < 0.12 ? 0 : 0.03), 170 * CAR.raideur, 9 * Math.sqrt(CAR.raideur), dt);
     spring(S2, 'pitch', S2, 'vp', -(front - rear) / 0.76 * 0.6 - Math.max(-0.12, Math.min(0.12, P.acc * 0.011)), 150, 8, dt);   // le nez se cabre à l'accélération, plonge au freinage
     spring(S2, 'roll', S2, 'vr', (rgt - left) / 0.74 * 0.6 - P.steer * spd * 0.09, 150, 8, dt);                              // la caisse penche dans les virages
   }
@@ -479,7 +481,7 @@ function stepWalk(dt) {
 
   // caméra à la troisième personne, un peu en hauteur
   camF.addScaledVector(camF, 0).lerp(P.fwd, 1 - Math.exp(-dt * 1.8)); camF.addScaledVector(up, -camF.dot(up)).normalize();
-  const target = tmpA.copy(avatar.position).addScaledVector(camF, -8.4 * camZoom - 1.4 * P.boost).addScaledVector(up, 5.9 * camZoom);
+  const target = tmpA.copy(avatar.position).addScaledVector(camF, -TUNE.camera.distance * camZoom - 1.4 * P.boost).addScaledVector(up, TUNE.camera.hauteur * camZoom);
   const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
   if (target.length() < clear) target.setLength(clear);
   camera.position.lerp(target, 1 - Math.exp(-dt * 5));
@@ -551,6 +553,26 @@ function drawMinimap() {
   c.fillStyle = '#fff'; c.fill(); c.lineWidth = 2 * DPR2; c.strokeStyle = '#140a24'; c.stroke(); c.restore();
 }
 
+/* ---------- barre de réglages ---------- */
+const leafMats = new Set(); planet.decor.children.forEach(m => { if (m.material.map) leafMats.add(m.material); });
+const tuneHooks = {
+  apply() {
+    const W = planet.waterUniforms, T = TUNE;
+    W.uShallow.value.set(T.eau.bord); W.uTeal.value.set(T.eau.milieu); W.uDeep.value.set(T.eau.large);
+    W.uFoam.value = T.eau.ecume; W.uGlitW.value = T.eau.paillettes; W.uGlitWI.value = T.eau.eclatPaillettes;
+    SAND.uGlitS.value = T.sable.paillettes; SAND.uGlitSI.value = T.sable.eclatPaillettes; SAND.uSand.value.set(T.sable.couleur); SAND.uSandMix.value = T.sable.forceCouleur;
+    post.grade.uniforms.uSat.value = T.post.saturation; post.bloom.radius = T.post.bloomRayon; post.bloom.threshold = T.post.bloomSeuil; post.setBand(T.post.zoneNette);
+    planet.barkM.color.set(T.arbres.tronc); leafMats.forEach(m => m.color.set(T.arbres.feuillage));
+    const S = ambience.state;
+    if (T.ambiance.meteo === 'auto') { if (S.weatherMode !== 'auto') { S.weatherMode = 'auto'; S.nextWeather = 30; } }
+    else { S.weatherMode = T.ambiance.meteo; S.weather = T.ambiance.meteo; }
+  },
+  recolorGrass() { planet.recolorGrass(TUNE.herbe.base, TUNE.herbe.pointe); },
+};
+tuneHooks.apply();
+if (JSON.stringify(TUNE.herbe) !== JSON.stringify({ base: '#45381a', pointe: '#d6bd38' })) tuneHooks.recolorGrass();
+$('#tuneBtn').addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });
+
 /* ---------- boucle ---------- */
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); post.setSize(w, h, PR); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
@@ -606,9 +628,9 @@ function frame() {
   ambience.update(dt, t, mode, avatar.position, camera);
   FADE.uFadeOn.value = mode === 'walk' ? 1 : 0; FADE.uFadeTarget.value.copy(avatar.position).addScaledVector(avatar.position.clone().normalize(), 0.35);
   // en voiture : focale longue et flou de maquette ; en orbite : vue normale
-  const wantFov = mode === 'walk' ? 30 + 7 * P.boost : 42;
+  const wantFov = mode === 'walk' ? TUNE.camera.focale + 7 * P.boost : 42;
   if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
-  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? 1 : 0, 1 - Math.exp(-dt * 3)), 0.5);
+  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou : 0, 1 - Math.exp(-dt * 3)), 0.5);
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   updateLabels();
   post.render();

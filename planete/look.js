@@ -65,14 +65,14 @@ const TiltShift = {
 };
 /** Étalonnage : couleurs plus franches, ombres poussées vers le violet, hautes lumières vers l'orangé. */
 const Grade = {
-  uniforms: { tDiffuse: { value: null } },
+  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.18 } },
   vertexShader: TiltShift.vertexShader,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uSat; varying vec2 vUv;
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-      c.rgb = mix(vec3(l), c.rgb, 1.18);
+      c.rgb = mix(vec3(l), c.rgb, uSat);
       float sh = 1.0 - smoothstep(0.0, 0.35, l), hi = smoothstep(0.35, 1.2, l);
       c.rgb += vec3(0.035, -0.01, 0.05) * sh + vec3(0.04, 0.012, -0.03) * hi;
       gl_FragColor = vec4(max(c.rgb, 0.0), c.a);
@@ -88,7 +88,7 @@ export function makePost(renderer, scene, camera, quality) {
   const tiltH = new ShaderPass(TiltShift), tiltV = new ShaderPass(TiltShift), tiltH2 = new ShaderPass(TiltShift), tiltV2 = new ShaderPass(TiltShift);
   const tilts = quality === 'low' ? [tiltH, tiltV] : [tiltH, tiltV, tiltH2, tiltV2];
   tilts.forEach(p => composer.addPass(p));
-  composer.addPass(new ShaderPass(Grade));
+  const grade = new ShaderPass(Grade); composer.addPass(grade);
   composer.addPass(new OutputPass());
   let amount = 0;
   return {
@@ -105,7 +105,8 @@ export function makePost(renderer, scene, camera, quality) {
       tilts.forEach(p => { p.uniforms.uAmount.value = k; p.uniforms.uFocus.value = focus; p.enabled = k > 0.02; });
     },
     get tilt() { return amount; },
-    bloom,
+    bloom, grade,
+    setBand(b) { tilts.forEach(p => { p.uniforms.uBand.value = b; }); },
     render() { composer.render(); },
   };
 }

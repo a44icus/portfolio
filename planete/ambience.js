@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { LOOK } from './look.js';
 import { WIND } from './world.js';
+import { TUNE } from './tune.js';
 
 const C = h => new THREE.Color(h), V = (x, y, z) => new THREE.Vector3(x, y, z);
 const NIGHT = { sun: C('#8c96ff'), sunI: 0.45, sky: C('#5a5aa8'), gnd: C('#2a1a4a'), hemiI: 0.5, amb: 0.1, zen: C('#100a2c'), hor: C('#30245a'), sh: V(0.3, 0.26, 0.85), lit: V(0.8, 0.84, 1.2), lamp: 1, exp: 1.0, bloom: 0.8, water: C('#9fb0ff') };
@@ -127,7 +128,8 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
   let lastLabel = '';
   function update(dt, t, mode, car, camera) {
     // heure : cycle complet en 12 minutes ; un choix du menu y amène en douceur puis s'y tient
-    if (S.target === null) S.hour = (S.hour + dt * 24 / 720) % 24;
+    if (TUNE.ambiance.heureFixe) S.hour = TUNE.ambiance.heure;
+    else if (S.target === null) S.hour = (S.hour + dt * 24 / 720 * TUNE.ambiance.vitesseJour) % 24;
     else { let d = S.target - S.hour; if (d > 12) d -= 24; if (d < -12) d += 24; S.hour = (S.hour + Math.sign(d) * Math.min(Math.abs(d), dt * 8) + 24) % 24; }
     // météo automatique : change toutes les 1 à 3 minutes
     if (S.weatherMode === 'auto' && (S.nextWeather -= dt) <= 0) {
@@ -158,7 +160,7 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
     if (cloudMat) { cloudMat.color.copy(cloudBase).lerp(grey.set('#76748c'), dark * 0.8).multiplyScalar(0.35 + 0.65 * dayK); }
     stormMat.opacity = W.cloud * 0.85; stormMat.color.set('#cfcbe0').lerp(grey.set('#5c5a72'), dark).multiplyScalar(0.3 + 0.7 * dayK); storm.visible = W.cloud > 0.02;
     storm.rotation.y += dt * 0.01; storm.scale.copy(planet.clouds.scale).multiplyScalar(walk2(mode) ? 1.06 : 1);   // au sol, la couche monte au-dessus de la caméra
-    WIND.uWind.value = W.wind; WIND.uWindDir.value.set(Math.cos(t * 0.02), 0.25, Math.sin(t * 0.02)).normalize();
+    WIND.uWind.value = W.wind * TUNE.ambiance.vent; WIND.uWindDir.value.set(Math.cos(t * 0.02), 0.25, Math.sin(t * 0.02)).normalize();
     // brume : seulement au sol (en orbite, la planète reste nette)
     const walk = mode === 'walk';
     scene.fog.color.copy(skyU.uHor.value).lerp(skyU.uZen.value, 0.3);
@@ -183,6 +185,12 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
     }
     pools.forEach(l => { l.intensity = walk ? lampK * 7 : 0; });
     head.intensity = walk ? lampK * 40 : 0;
+    // barre de réglages : multiplicateurs et teintes imposées
+    { const L = TUNE.lumiere;
+      sun.intensity *= L.soleil; hemi.intensity *= L.ciel; amb.intensity *= L.ambiante; renderer.toneMappingExposure *= L.exposition; post.bloom.strength *= TUNE.post.bloom;
+      if (L.forceTeinteOmbres > 0) { tmpC.set(L.teinteOmbres).convertSRGBToLinear(); LOOK.uShadowTint.value.lerp(fwd.set(tmpC.r, tmpC.g, tmpC.b).multiplyScalar(1.6), L.forceTeinteOmbres); }
+      if (L.forceTeinteLumiere > 0) { tmpC.set(L.teinteLumiere).convertSRGBToLinear(); LOOK.uLitTint.value.lerp(fwd.set(tmpC.r, tmpC.g, tmpC.b).multiplyScalar(1.15), L.forceTeinteLumiere); }
+      if (fog > 0.01) { const k = Math.max(0.05, TUNE.ambiance.brume); scene.fog.near /= k; scene.fog.far /= k; } }
     // menu : icône et heure
     const hh = Math.floor(S.hour), mm = Math.floor((S.hour - hh) * 60 / 10) * 10;
     const ic = W.storm > 0.5 ? '⛈' : W.rain > 0.5 ? '🌧' : W.cloud > 0.5 ? '☁' : S.night > 0.5 ? '☾' : '☀';
