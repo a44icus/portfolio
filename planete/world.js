@@ -390,6 +390,24 @@ export function buildPlanet(anchors, quality = 'high') {
   /* ---------- sol et mer, maillés ensemble (la profondeur de l'eau vient du relief) ---------- */
   const n = quality === 'low' ? 160 : 224, side = n + 3, group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  // sable pailleté : de minuscules éclats qui scintillent selon l'angle de vue, seulement sur le sable et les routes de terre
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uTime = waterUniforms.uTime;
+    sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = 'uniform float uTime;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      {
+        float sand = smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r);
+        vec3 cell = floor(vWPos * 24.0);
+        float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+        vec3 V = normalize(cameraPosition - vWPos);
+        float h2 = fract(sin(dot(cell + floor(V * 7.0), vec3(39.3, 11.1, 73.7))) * 24634.63);
+        float tw = 0.55 + 0.45 * sin(uTime * 3.0 + h * 40.0);
+        float far = 1.0 - smoothstep(8.0, 24.0, length(cameraPosition - vWPos));
+        float sp = step(0.984, h2) * step(0.4, h) * tw * sand * far;
+        totalEmissiveRadiance += vec3(1.0, 0.94, 0.82) * sp * 2.2;
+      }`);
+  };
+  mat.customProgramCacheKey = () => 'ground-glitter';
   const waterUniforms = {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
