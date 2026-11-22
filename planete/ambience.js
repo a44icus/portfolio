@@ -9,7 +9,7 @@
    ============================================================================ */
 import * as THREE from 'three';
 import { LOOK } from './look.js';
-import { WIND } from './world.js';
+import { WIND, SAND } from './world.js';
 import { TUNE } from './tune.js';
 
 const C = h => new THREE.Color(h), V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -147,6 +147,7 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
     sample(S.hour);
     const dayK = Math.min(1, out.sunI / 2.8); S.night = Math.max(0, 1 - out.sunI / 1.2);
     const dark = W.dark;
+    SAND.uGlitDay.value = waterUniforms.uGlitDay.value = Math.max(0, dayK - 0.25 - dark * 0.5) / 0.75;   // paillettes : seulement au soleil
     sun.color.copy(out.sun).lerp(grey.set('#b8b8d0'), dark * 0.5); sun.intensity = out.sunI * (1 - 0.7 * dark) + fl * 3;
     hemi.color.copy(out.sky).lerp(grey.set('#9a98b4').multiplyScalar(0.3 + 0.7 * dayK), dark * 0.6); hemi.groundColor.copy(out.gnd); hemi.intensity = out.hemiI * (1 - 0.2 * dark) + fl * 1.5;
     amb.intensity = out.amb + fl * 1.2;

@@ -11,13 +11,13 @@ export const DEFAULTS = {
     teinteLumiere: '#ffe0c4', forceTeinteLumiere: 0,
   },
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
-  eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 1.6 },
-  sable: { couleur: '#f59a46', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 2.2 },
+  eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
+  sable: { couleur: '#f59a46', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
   herbe: { base: '#45381a', pointe: '#d6bd38', hauteur: 1, largeur: 1, densite: 1 },
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1, largeurHouppier: 1, densite: 1, buissons: 1 },
   feuilles: { taille: 1, quantite: 1 },
   turbo: { largeur: 0.09, duree: 1.7 },
-  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 2.3, gravite: 17, saut: 5.6, raideur: 1 },
+  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 2.3, gravite: 11, saut: 4.8, raideur: 1 },
   camera: { distance: 8.4, hauteur: 5.9, focale: 30 },
 };
 const KEY = 'planete-reglages';
@@ -25,6 +25,9 @@ const clone = o => JSON.parse(JSON.stringify(o));
 function merge(dst, src) { for (const k in src) { if (dst[k] && typeof dst[k] === 'object' && typeof src[k] === 'object') merge(dst[k], src[k]); else if (k in dst) dst[k] = src[k]; } return dst; }
 export const TUNE = clone(DEFAULTS);
 try { const saved = localStorage.getItem(KEY); if (saved) merge(TUNE, JSON.parse(saved)); } catch (e) { /* stockage indisponible : valeurs par défaut */ }
+// anciennes valeurs par défaut enregistrées telles quelles : on prend les nouvelles
+if (TUNE.voiture.gravite === 17) TUNE.voiture.gravite = DEFAULTS.voiture.gravite;
+if (TUNE.voiture.saut === 5.6) TUNE.voiture.saut = DEFAULTS.voiture.saut;
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(TUNE)); } catch (e) { /* rien */ } };
 
 /** Seuls les réglages qui diffèrent des valeurs d'origine (pour un export lisible). */

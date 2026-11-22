@@ -279,7 +279,7 @@ let zones = null;
 stylizeTree(avatar, { cast: true, receive: true });
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
 buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); ambience.collect(z.group); });
-const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
+const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
 function spring(xo, xk, vo, vk, target, k, c, dt) { for (let n = Math.ceil(dt * 120), h = dt / n; n > 0; n--) { vo[vk] += ((target - xo[xk]) * k - vo[vk] * c) * h; xo[xk] += vo[vk] * h; } }
@@ -308,7 +308,7 @@ const hintEl = $('#hint'), walkBtn = $('#walkBtn'), promptEl = $('#prompt');
 function setHint() {
   hintEl.textContent = mode === 'orbit'
     ? (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
-    : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches · Maj : turbo · Espace : sauter · molette : recul · E : ouvrir la zone');
+    : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches · Maj : turbo · Espace : sauter · R : redresser · molette : recul · E : ouvrir la zone');
 }
 function setWalk(on) {
   if (on) {
@@ -338,6 +338,7 @@ addEventListener('keydown', e => {
   if (mode !== 'walk' || panel.classList.contains('on')) return;
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyE' && near) { openIsland(near.id); return; }
+  if (e.code === 'KeyR') { recoverCar(); return; }
   keys.add(e.code);
 });
 addEventListener('keyup', e => keys.delete(e.code));
@@ -351,7 +352,7 @@ addEventListener('blur', () => keys.clear());
   pad.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
   const end = () => { id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
-  $('#jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (P.ground) { P.vr = CAR.saut; P.ground = false; } });
+  $('#jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (P.ground && !P.flipped && !P.tumble) { P.vr = CAR.saut; P.ground = false; takeoff(); } });
   const bb = $('#boostBtn');
   bb.addEventListener('pointerdown', e => { e.preventDefault(); boostTouch = true; bb.setPointerCapture(e.pointerId); });
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => bb.addEventListener(ev, () => { boostTouch = false; }));
@@ -362,10 +363,10 @@ const camF = new THREE.Vector3(), nUp = new THREE.Vector3(), tiltQ = new THREE.Q
 function groundAt(dir, along, side) { return driveR(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
   const k = c => keys.has(c);
-  const busy = panel.classList.contains('on');
+  const busy = panel.classList.contains('on') || P.tumble || P.flipped || !!P.recover;   // sur le toit : on ne conduit plus
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
-  if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + CAR.saut; P.ground = false; }
+  if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + CAR.saut; P.ground = false; takeoff(); }
   const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch) && throttle > 0;
 
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
@@ -418,22 +419,37 @@ function stepWalk(dt) {
     // au sol : on suit le relief tant qu'il ne se dérobe pas plus vite que la gravité ; sinon la voiture décolle (bosses, crêtes, rampes)
     const free = rPrev + P.vr * dt - 0.5 * CAR.gravite * dt * dt;
     if (g >= free - 0.012) { const v = (g - rPrev) / Math.max(dt, 1e-3); P.vr += (Math.max(-12, Math.min(12, v)) - P.vr) * 0.6; P.r = g; }
-    else { P.ground = false; P.r = free; P.vr -= CAR.gravite * dt; }
+    else { P.ground = false; P.r = free; P.vr -= CAR.gravite * dt; takeoff(); }
   } else { P.vr -= CAR.gravite * dt; P.r += P.vr * dt; }
   P.airT = P.ground ? 0 : P.airT + dt;
-  if (!P.ground && P.r <= g) { if (P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
+  // en l'air : la voiture garde sa rotation de décollage ; on peut la corriger (avant/arrière, gauche/droite)
+  if (!P.ground && !P.recover) {
+    const kk = c => keys.has(c);
+    const ap = (kk('KeyW') || kk('ArrowUp') ? 1 : 0) - (kk('KeyS') || kk('ArrowDown') ? 1 : 0) + joy.y, ar = (kk('KeyD') || kk('ArrowRight') ? 1 : 0) - (kk('KeyA') || kk('ArrowLeft') ? 1 : 0) + joy.x;
+    P.wx += ap * 4.5 * dt; P.wz -= ar * 4.5 * dt;
+    P.ax += P.wx * dt; P.az += P.wz * dt;
+  }
+  if (!P.ground && P.r <= g) { land(hv); if (P.vr < -1.5) { P.sus.vy += P.vr * 0.07; P.sus.vp += P.vr * 0.05 * Math.sign(P.speed || 1); } P.r = g; P.vr = 0; P.ground = true; }   // atterrissage : la caisse s'écrase sur ses ressorts
 
   // la voiture épouse le relief (tangage et roulis)
   up.copy(P.dir); right.crossVectors(up, P.fwd).normalize();
   const hf = groundAt(P.dir, 0.45, 0), hb = groundAt(P.dir, -0.45, 0), hr = groundAt(P.dir, 0, 0.37), hl = groundAt(P.dir, 0, -0.37);
   const clampS = v => Math.max(-0.45, Math.min(0.45, v));   // au bord d'un pont, une roue au-dessus du vide ne retourne pas la voiture
   // pentes lissées : pas d'à-coups quand le sol change brusquement (bord de route, entrée de pont)
+  const sf0 = P.sf, sr0 = P.sr;
   P.sf += (clampS((hf - hb) / 0.9) - P.sf) * (1 - Math.exp(-dt * 14)); P.sr += (clampS((hr - hl) / 0.74) - P.sr) * (1 - Math.exp(-dt * 14));
+  if (P.ground) { P.sfRate += ((P.sf - sf0) / Math.max(dt, 1e-3) - P.sfRate) * 0.5; P.srRate += ((P.sr - sr0) / Math.max(dt, 1e-3) - P.srRate) * 0.5; }
+  updateFlip(dt);
   nUp.copy(up).addScaledVector(P.fwd, -P.sf).addScaledVector(right, -P.sr).normalize();
   if (Math.abs(P.r - P.rv) > 0.6) P.rv = P.r; else P.rv += (P.r - P.rv) * (1 - Math.exp(-dt * 28));
   basis.makeBasis(right, up, P.fwd); avatar.quaternion.setFromRotationMatrix(basis);
   tiltQ.setFromUnitVectors(up, P.ground ? nUp : up); avatar.quaternion.premultiply(tiltQ);
+  // rotation propre (vol, tonneaux, voiture sur le flanc ou le toit), autour du centre de la caisse
+  flipQ.setFromEuler(flipE.set(P.ax, 0, P.az)); avatar.quaternion.multiply(flipQ);
   avatar.position.copy(P.dir).multiplyScalar(P.rv);
+  { const dev = 1 - flipV.set(0, 1, 0).applyQuaternion(flipQ).y, L = 0.42;   // 0 debout, 2 sur le toit
+    if (dev > 0.01) avatar.position.sub(flipV.set(0, L, 0).applyQuaternion(avatar.quaternion).sub(tmpB.copy(up).multiplyScalar(L)).multiplyScalar(Math.min(1, dev * 1.4)));
+    if (P.recover) avatar.position.addScaledVector(up, Math.sin(Math.PI * Math.min(1, P.recover.t)) * 0.9); }
   P.spin += P.speed * dt / 0.2; P.odo += Math.abs(P.speed) * dt;
   avatar.userData.wheels.forEach(w => { w.w.rotation.x = P.spin; if (w.front) w.pivot.rotation.y = -P.steer * 0.45; });
   // suspensions : chaque roue suit le sol sous elle, la caisse flotte sur ses ressorts
@@ -497,6 +513,56 @@ function stepWalk(dt) {
     if (near) promptEl.textContent = (touch ? 'Ouvrir · ' : 'E · Ouvrir ') + near.label;
   }
 }
+
+/* ---------- tonneaux : décollage, atterrissage raté, retournement, redressement ---------- */
+const flipQ = new THREE.Quaternion(), flipE = new THREE.Euler(), flipV = new THREE.Vector3();
+const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+const clampW = v => Math.max(-7, Math.min(7, v));
+/** Au décollage, la voiture part avec l'inclinaison et la vitesse de rotation du relief (une rampe qui bascule la fait tourner). */
+function takeoff() {
+  P.ax = -Math.atan(P.sf); P.az = Math.atan(P.sr);
+  P.wx = clampW(-P.sfRate * 1.1); P.wz = clampW(P.srRate * 1.1 - P.steer * Math.abs(P.speed) * 0.1);
+}
+/** À l'atterrissage : posée à peu près droite, ça passe ; sinon elle part en tonneaux. */
+function land(hv) {
+  if (hv > 0.5 || P.recover) { P.wx = P.wz = 0; return; }
+  const dev = Math.max(Math.abs(wrapA(P.ax + Math.atan(P.sf))), Math.abs(wrapA(P.az - Math.atan(P.sr))));
+  if (dev > 0.8 || (dev > 0.5 && P.vr < -7)) {
+    P.tumble = true; P.speed *= 0.65;
+    if (Math.abs(P.wz) < 2.5 && Math.abs(P.wx) < 2.5) P.wz = (Math.sign(wrapA(P.az)) || 1) * (3 + Math.abs(P.vr) * 0.35);
+  } else { P.wx = P.wz = 0; P.ax = wrapA(P.ax + Math.atan(P.sf)) * 0.5; P.az = wrapA(P.az - Math.atan(P.sr)) * 0.5; }
+}
+const flipBtn = $('#flipBtn');
+function updateFlip(dt) {
+  if (P.recover) {
+    // on la remet sur ses roues : petit saut, elle pivote et retombe droite
+    const R2 = P.recover; R2.t += dt / 0.9; const k = Math.min(1, R2.t), e = k * k * (3 - 2 * k);
+    P.ax = R2.ax0 * (1 - e); P.az = R2.az0 * (1 - e);
+    if (R2.t >= 1) { P.recover = null; P.ax = P.az = P.wx = P.wz = 0; }
+  } else if (P.tumble && P.ground) {
+    // tonneaux : elle roule en perdant de l'élan, puis se pose sur une face
+    P.ax += P.wx * dt; P.az += P.wz * dt; P.wx *= Math.exp(-dt * 1.4); P.wz *= Math.exp(-dt * 1.4); P.speed *= Math.exp(-dt * 1.8);
+    if (Math.abs(P.wx) < 1.3 && Math.abs(P.wz) < 1.3) {
+      P.wx = P.wz = 0;
+      const tx = Math.round(P.ax / Math.PI) * Math.PI, tz = Math.round(P.az / (Math.PI / 2)) * (Math.PI / 2);
+      P.ax += (tx - P.ax) * (1 - Math.exp(-dt * 7)); P.az += (tz - P.az) * (1 - Math.exp(-dt * 7));
+      if (Math.abs(tx - P.ax) < 0.02 && Math.abs(tz - P.az) < 0.02) {
+        P.ax = tx; P.az = tz; P.tumble = false;
+        const upright = flipV.set(0, 1, 0).applyQuaternion(flipQ.setFromEuler(flipE.set(P.ax, 0, P.az))).y > 0.7;
+        if (upright) { P.ax = P.az = 0; } else { P.flipped = true; P.speed = 0; }
+      }
+    }
+  } else if (P.ground && !P.flipped) { P.ax *= Math.exp(-dt * 9); P.az *= Math.exp(-dt * 9); }
+  if (P.flipped) P.speed *= Math.exp(-dt * 4);
+  flipBtn.classList.toggle('on', P.flipped);
+}
+/** Touche R (ou bouton) : remet la voiture sur ses roues. */
+function recoverCar() {
+  if (mode !== 'walk' || P.recover) return;
+  if (!P.flipped && !P.tumble && Math.abs(wrapA(P.ax)) < 0.3 && Math.abs(wrapA(P.az)) < 0.3) return;
+  P.recover = { t: 0, ax0: wrapA(P.ax), az0: wrapA(P.az) }; P.tumble = false; P.flipped = false; P.speed = 0; P.wx = P.wz = 0;
+}
+flipBtn.addEventListener('click', recoverCar);
 
 /* ---------- mini-carte (en bas à gauche, tournée dans le sens de la caméra) ---------- */
 const mmEl = $('#minimap'), mmCtx = mmEl.getContext('2d');
