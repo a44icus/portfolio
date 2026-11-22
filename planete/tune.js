@@ -4,7 +4,7 @@
    (bouton « Copier les réglages ») pour être transmises telles quelles.
    ============================================================================ */
 export const DEFAULTS = {
-  ambiance: { heureFixe: false, heure: 12.5, vitesseJour: 1, meteo: 'auto', vent: 1, brume: 1 },
+  ambiance: { heureFixe: false, heure: 12.5, vitesseJour: 1, meteo: 'auto', vent: 2.1, brume: 1 },
   lumiere: {
     soleil: 1, ciel: 1, ambiante: 1, exposition: 1,
     teinteOmbres: '#9466d1', forceTeinteOmbres: 0,
@@ -13,12 +13,13 @@ export const DEFAULTS = {
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
   eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
   sable: { couleur: '#f59a46', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
-  herbe: { base: '#45381a', pointe: '#d6bd38', hauteur: 1, largeur: 1, densite: 1 },
-  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1, largeurHouppier: 1, densite: 1, buissons: 1 },
-  feuilles: { taille: 1, quantite: 1 },
-  turbo: { largeur: 0.09, duree: 1.7 },
-  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 2.3, gravite: 11, saut: 4.8, raideur: 1 },
-  camera: { distance: 8.4, hauteur: 5.9, focale: 30 },
+  herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
+  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
+    jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
+  feuilles: { taille: 0.9, quantite: 0.69 },
+  turbo: { largeur: 0.31, duree: 1.7, couleurDebut: '#ffd159', couleurMilieu: '#ff6168', couleurFin: '#e629b8', milieu: 0.15, eclat: 1 },
+  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 4, saut: 4.8, raideur: 1 },
+  camera: { distance: 8.1, hauteur: 6, focale: 30 },
 };
 const KEY = 'planete-reglages';
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -26,7 +27,7 @@ function merge(dst, src) { for (const k in src) { if (dst[k] && typeof dst[k] ==
 export const TUNE = clone(DEFAULTS);
 try { const saved = localStorage.getItem(KEY); if (saved) merge(TUNE, JSON.parse(saved)); } catch (e) { /* stockage indisponible : valeurs par défaut */ }
 // anciennes valeurs par défaut enregistrées telles quelles : on prend les nouvelles
-if (TUNE.voiture.gravite === 17) TUNE.voiture.gravite = DEFAULTS.voiture.gravite;
+if (TUNE.voiture.gravite === 17 || TUNE.voiture.gravite === 11) TUNE.voiture.gravite = DEFAULTS.voiture.gravite;
 if (TUNE.voiture.saut === 5.6) TUNE.voiture.saut = DEFAULTS.voiture.saut;
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(TUNE)); } catch (e) { /* rien */ } };
 
@@ -91,8 +92,9 @@ export async function toggleTunePanel(hooks) {
   ch(fE.add(TUNE.eau, 'eclatPaillettes', 0, 5, 0.05).name('Paillettes (éclat)'));
 
   const fS = gui.addFolder('Sable');
-  ch(fS.addColor(TUNE.sable, 'couleur').name('Couleur'));
-  ch(fS.add(TUNE.sable, 'forceCouleur', 0, 1, 0.01).name('↳ force'));
+  const sandForce = fS.add(TUNE.sable, 'forceCouleur', 0, 1, 0.01).name('↳ force (0 = d’origine)');
+  ch(fS.addColor(TUNE.sable, 'couleur').name('Teinte du sable'), () => { if (TUNE.sable.forceCouleur === 0) { TUNE.sable.forceCouleur = 1; sandForce.updateDisplay(); save(); hooks.apply(); } });
+  ch(sandForce);
   ch(fS.add(TUNE.sable, 'paillettes', 0, 1, 0.005).name('Paillettes (densité)'));
   ch(fS.add(TUNE.sable, 'eclatPaillettes', 0, 6, 0.05).name('Paillettes (éclat)'));
 
@@ -109,6 +111,9 @@ export async function toggleTunePanel(hooks) {
   ch(fT.add(TUNE.arbres, 'largeurHouppier', 0.3, 3, 0.05).name('Largeur des houppiers'));
   ch(fT.add(TUNE.arbres, 'densite', 0, 1, 0.01).name('Nombre d’arbres'));
   ch(fT.add(TUNE.arbres, 'buissons', 0.2, 3, 0.05).name('Taille des buissons'));
+  const fK = gui.addFolder('Couleurs des arbres');
+  [['jaune', 'Feuillage jaune'], ['olive', 'Feuillage olive'], ['orange', 'Feuillage orange'], ['rouge', 'Feuillage rouge'], ['rose', 'Feuillage rose'], ['sapin', 'Sapins']]
+    .forEach(([k, n]) => ch(fK.addColor(TUNE.arbres, k).name(n), () => hooks.recolorTrees()));
   const fF = gui.addFolder('Feuilles au sol');
   ch(fF.add(TUNE.feuilles, 'taille', 0.2, 4, 0.05).name('Taille'));
   ch(fF.add(TUNE.feuilles, 'quantite', 0, 1, 0.01).name('Quantité'));
@@ -126,12 +131,17 @@ export async function toggleTunePanel(hooks) {
   const fR = gui.addFolder('Traînées du turbo');
   ch(fR.add(TUNE.turbo, 'largeur', 0.01, 0.5, 0.005).name('Largeur'));
   ch(fR.add(TUNE.turbo, 'duree', 0.2, 5, 0.05).name('Durée'));
+  ch(fR.addColor(TUNE.turbo, 'couleurDebut').name('Couleur : départ'));
+  ch(fR.addColor(TUNE.turbo, 'couleurMilieu').name('Couleur : milieu'));
+  ch(fR.addColor(TUNE.turbo, 'couleurFin').name('Couleur : fin'));
+  ch(fR.add(TUNE.turbo, 'milieu', 0.02, 0.9, 0.01).name('Position du milieu'));
+  ch(fR.add(TUNE.turbo, 'eclat', 0, 3, 0.05).name('Éclat'));
   const fC = gui.addFolder('Caméra');
   ch(fC.add(TUNE.camera, 'distance', 2, 25, 0.1).name('Distance'));
   ch(fC.add(TUNE.camera, 'hauteur', 0.5, 20, 0.1).name('Hauteur'));
   ch(fC.add(TUNE.camera, 'focale', 15, 80, 1).name('Angle de vue'));
 
-  [fA, fL, fP, fE, fS, fH, fT, fF, fV, fR, fC].forEach(f => f.close());
+  [fA, fL, fP, fE, fS, fH, fT, fK, fF, fV, fR, fC].forEach(f => f.close());
 
   const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
   const actions = {
@@ -143,7 +153,7 @@ export async function toggleTunePanel(hooks) {
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(TUNE, null, 2)], { type: 'application/json' }));
       a.download = 'reglages-planete.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     },
-    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
+    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
   };
   gui.add(actions, 'copier').name('📋 Copier les réglages');
   gui.add(actions, 'telecharger').name('⬇ Télécharger (JSON)');

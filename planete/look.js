@@ -214,14 +214,15 @@ export function makeGroundLeaves(planet, count, spot) {
 /* ---------- traînées lumineuses du turbo : deux rubans au sol, jaune-blanc puis rose, qui s'effacent ---------- */
 export function makeTrails(N = 90, life0 = 1.7, width0 = 0.09) {
   const cfg = { life: life0, width: width0 };
+  const U = { uC1: { value: new THREE.Color('#ffd159') }, uC2: { value: new THREE.Color('#ff6168') }, uC3: { value: new THREE.Color('#e629b8') }, uI: { value: 1 }, uMid: { value: 0.15 } };
   const group = new THREE.Group();
   const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: U,
     vertexShader: 'attribute float aT; attribute float aA; varying float vT; varying float vA; void main(){ vT = aT; vA = aA; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `varying float vT; varying float vA;
+    fragmentShader: `uniform vec3 uC1; uniform vec3 uC2; uniform vec3 uC3; uniform float uI; uniform float uMid; varying float vT; varying float vA;
       void main(){
-        vec3 hot = vec3(1.0, 0.82, 0.35) * 1.25, mid = vec3(1.0, 0.38, 0.42) * 0.95, cool = vec3(0.9, 0.16, 0.72) * 0.8;
-        vec3 c = vT < 0.15 ? mix(hot, mid, vT / 0.15) : mix(mid, cool, min(1.0, (vT - 0.15) / 0.35));
+        vec3 hot = uC1 * 1.25 * uI, mid = uC2 * 0.95 * uI, cool = uC3 * 0.8 * uI;
+        vec3 c = vT < uMid ? mix(hot, mid, vT / max(uMid, 1e-3)) : mix(mid, cool, min(1.0, (vT - uMid) / max(1.0 - uMid, 1e-3) * 1.4));
         gl_FragColor = vec4(c * vA * (1.0 - 0.35 * smoothstep(0.0, 0.08, vT)), vA);
       }`,
   });
@@ -235,7 +236,7 @@ export function makeTrails(N = 90, life0 = 1.7, width0 = 0.09) {
   });
   const v = new THREE.Vector3();
   return {
-    group, cfg,
+    group, cfg, uniforms: U,
     /** heads : positions des deux échappements au sol ; side : vecteur latéral ; k : force (0 = pas de turbo) */
     update(dt, heads, side, k) {
       trails.forEach((tr, j) => {

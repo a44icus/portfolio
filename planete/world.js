@@ -486,9 +486,11 @@ export function buildPlanet(anchors, quality = 'high') {
       gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * tall * (0.85 + rng() * 0.35), s));
       grassM.push([gm.clone(), new THREE.Color(1, 1, 1).multiplyScalar(0.82 + rng() * 0.32)]);
     }
-    if (patch > 0.25 && rng() < 0.22) {
-      const fc = new THREE.Color(STYLE.flowers[Math.floor((noise.noise(dd.x * 14, dd.y * 14, dd.z * 14) * 0.5 + 0.5) * STYLE.flowers.length) % STYLE.flowers.length]);
-      gm.compose(gp.copy(dd).multiplyScalar(h * S + 0.16 + rng() * 0.08), gq, gs.setScalar(0.04 + rng() * 0.02));
+    if (patch > 0.22 && rng() < 0.09) {
+      const LUP = ['#8f5cf0', '#c873ff', '#ff7ab8', '#6f86ff', '#f4f0ff'];
+      const fc = new THREE.Color(LUP[Math.floor((noise.noise(dd.x * 14, dd.y * 14, dd.z * 14) * 0.5 + 0.5) * LUP.length) % LUP.length]).multiplyScalar(0.9 + rng() * 0.2);
+      const ls = 0.8 + rng() * 0.6;
+      gm.compose(gp.copy(dd).multiplyScalar(h * S - 0.01).addScaledVector(va, (rng() - 0.5) * 0.4), gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(ls, ls * (0.85 + rng() * 0.4), ls));
       flowers.push([gm.clone(), fc]);
     }
   }
@@ -551,7 +553,14 @@ export function buildPlanet(anchors, quality = 'high') {
     return m4.compose(ps.copy(dir).multiplyScalar(hScene), qq, sc.set(s, sy, s)).clone();
   };
   const decor = new THREE.Group();
-  const leafCol = () => new THREE.Color(STYLE.leaves[Math.floor(rng() * STYLE.leaves.length)]).multiplyScalar(0.9 + rng() * 0.2);
+  // familles de couleur du feuillage : jaune, olive, orange, rouge, rose (+ sapins) ; chaque arbre garde sa nuance propre
+  const LEAF_GROUP = [0, 1, 0, 1, 2, 3, 4, 0];
+  const leafCol = (k = 1) => {
+    const i = Math.floor(rng() * STYLE.leaves.length), f = (0.9 + rng() * 0.2) * k, base = new THREE.Color(TREE_COLORS[LEAF_GROUP[i]]), v = new THREE.Color(STYLE.leaves[i]);
+    const c = v.clone().multiplyScalar(f); c._g = LEAF_GROUP[i]; c._k = [f * v.r / Math.max(base.r, 1e-3), f * v.g / Math.max(base.g, 1e-3), f * v.b / Math.max(base.b, 1e-3)];
+    return c;
+  };
+  const pineCol = () => { const v = new THREE.Color(['#6e6a20', '#857a22', '#5f6a26'][Math.floor(rng() * 3)]), base = new THREE.Color(TREE_COLORS[5]), f = 0.9 + rng() * 0.2, c = v.clone().multiplyScalar(f); c._g = 5; c._k = [f * v.r / base.r, f * v.g / base.g, f * v.b / base.b]; return c; };
   const inst = (geo, mat, list, { color = true, cast = true } = {}) => {
     const m = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length)); m.count = list.length;
     list.forEach((it, i) => { if (color) { m.setMatrixAt(i, it[0]); m.setColorAt(i, it[1]); } else m.setMatrixAt(i, it); });
@@ -572,8 +581,8 @@ export function buildPlanet(anchors, quality = 'high') {
     const s = 0.85 + rng() * 0.55, r = rng(), hs = h * S - 0.03;
     treeDirs.push(d.clone());
     if (r < 0.78) { const k = Math.floor(rng() * NV), m = place(d, hs, s, s * (0.9 + rng() * 0.25)); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
-    else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol().multiplyScalar(0.85)]); }
-    else if (r < 0.95) { const k = Math.floor(rng() * 2), m = place(d, hs, s, s * (1 + rng() * 0.25)); pines.push([k, m, new THREE.Color(['#6e6a20', '#857a22', '#5f6a26'][Math.floor(rng() * 3)]).multiplyScalar(0.9 + rng() * 0.2)]); }
+    else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol(0.85)]); }
+    else if (r < 0.95) { const k = Math.floor(rng() * 2), m = place(d, hs, s, s * (1 + rng() * 0.25)); pines.push([k, m, pineCol()]); }
     else { const k = Math.floor(rng() * NV), m = place(d, hs, s * 1.15, s * 1.25); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
   }
   // buissons : lisières des forêts, bords des chemins et des esplanades
@@ -585,26 +594,35 @@ export function buildPlanet(anchors, quality = 'high') {
     const h = heightB(d.x, d.y, d.z), above = h - R;
     if (above < 1.8 || above > 26 || roadNear(d, 0.6) || onPlaza(d, 0.2 / SEA_R)) continue;
     const s = 0.45 + rng() * 0.5;
-    bushes.push([place(d, h * S + 0.12 * s, s, s * (0.7 + rng() * 0.25)), leafCol().multiplyScalar(0.95 + rng() * 0.15)]);
+    bushes.push([place(d, h * S + 0.12 * s, s, s * (0.7 + rng() * 0.25)), leafCol(0.95 + rng() * 0.15)]);
   }
   const barkM = scaleMat(new THREE.MeshStandardMaterial({ emissive: '#6a50a8', emissiveIntensity: 0.25, color: '#d4c2ff', roughness: 0.9 }), TREE, 'transformed *= uTreeS;', 'treeW');
-  const treeLeaf = scaleMat(fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })), TREE, 'transformed *= uTreeS; transformed.xz *= uCrownW;', 'treeL');
-  const bushLeaf = scaleMat(fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })), BUSH, 'transformed *= uBushS;', 'bush');
+  const SWAY = `
+    { vec3 ipw = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+      float ph = dot(ipw, vec3(1.3, 1.7, 1.1));
+      float gust = 0.5 + 0.5 * sin(dot(ipw, uWindDir) * 0.5 - uTime * 1.6);
+      float sway = (0.5 + gust) * uWind * 0.06 * max(transformed.y, 0.0);
+      transformed.x += sin(uTime * 1.7 + ph) * sway;
+      transformed.z += cos(uTime * 1.3 + ph * 1.2) * sway;
+      transformed += normal * sin(uTime * 7.0 + ph + position.x * 9.0 + position.y * 7.0) * 0.012 * (0.4 + uWind); }`;
+  const WINDU = { uTime: waterUniforms.uTime, uWind: WIND.uWind, uWindDir: WIND.uWindDir };
+  const treeLeaf = scaleMat(fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })), { ...TREE, ...WINDU }, 'transformed *= uTreeS; transformed.xz *= uCrownW;' + SWAY, 'treeL');
+  const bushLeaf = scaleMat(fadeNearCamera(new THREE.MeshStandardMaterial({ map: LEAF_TEX, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })), { ...BUSH, ...WINDU }, 'transformed *= uBushS;' + SWAY, 'bush');
   // ombres portées à la même taille que les arbres
   const depthOf = (leaf, U, code, key) => scaleMat(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leaf ? LEAF_TEX : null, alphaTest: leaf ? 0.5 : 0 }), U, code, key + 'D');
-  const dWood = depthOf(false, TREE, 'transformed *= uTreeS;', 'treeW'), dLeaf = depthOf(true, TREE, 'transformed *= uTreeS; transformed.xz *= uCrownW;', 'treeL'), dBush = depthOf(true, BUSH, 'transformed *= uBushS;', 'bush');
+  const dWood = depthOf(false, TREE, 'transformed *= uTreeS;', 'treeW'), dLeaf = depthOf(true, { ...TREE, ...WINDU }, 'transformed *= uTreeS; transformed.xz *= uCrownW;' + SWAY, 'treeL'), dBush = depthOf(true, { ...BUSH, ...WINDU }, 'transformed *= uBushS;' + SWAY, 'bush');
   const treeMeshes = [];
-  const pair = (wGeo, lGeo, mats, lw, ll) => { const w = inst(wGeo, barkM, lw, { color: false }); w.customDepthMaterial = dWood; const l = inst(lGeo, treeLeaf, ll); l.customDepthMaterial = dLeaf; treeMeshes.push([w, l, ll.length]); };
+  const pair = (wGeo, lGeo, mats, lw, ll) => { const w = inst(wGeo, barkM, lw, { color: false }); w.customDepthMaterial = dWood; const l = inst(lGeo, treeLeaf, ll); l.customDepthMaterial = dLeaf; l.userData.tint = ll.map(it => [it[1]._g, it[1]._k]); treeMeshes.push([w, l, ll.length]); };
   pair(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), leafCluster(60, 0.24, 2.4, 0.15), null, trunks, cypress);
   variants.forEach((v, k) => pair(v.wood, v.leaves, null, vWood[k], vLeaf[k]));
-  const bushMesh = inst(leafCluster(34, 0.3, 0.75, 0.17), bushLeaf, bushes); bushMesh.customDepthMaterial = dBush;
+  const bushMesh = inst(leafCluster(34, 0.3, 0.75, 0.17), bushLeaf, bushes); bushMesh.customDepthMaterial = dBush; bushMesh.userData.tint = bushes.map(it => [it[1]._g, it[1]._k]);
   // sapins dans le même style : tronc fin et pâle, étages de petites feuilles qui rétrécissent vers la pointe
   [0, 1].forEach(k => {
     const v = pineVariant(k, quality), list = pines.filter(p => p[0] === k);
     pair(v.wood, v.leaves, null, list.map(p => p[1]), list.map(p => [p[1], p[2]]));
   });
 
-  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null;
+  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null, padMesh = null, bloomMesh = null; const padState = [];
   const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
   /** Écrase l'herbe autour des points donnés (positions du monde), à l'instant t. */
   function crushGrass(points, radius, t) {
@@ -679,7 +697,22 @@ export function buildPlanet(anchors, quality = 'high') {
     gpos = grassM.map(it => [it[0].elements[12], it[0].elements[13], it[0].elements[14]]);
     gattr = g.attributes.aCrush;
   }
-  inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: '#222', emissiveIntensity: 0.25 }), flowers, { cast: false });
+  // lupins : une tige fine, quelques feuilles en étoile au pied, et un épi de petites fleurs qui s'effile vers la pointe ; ils se balancent au vent
+  {
+    const spike = [], stem = [];
+    stem.push(new THREE.CylinderGeometry(0.007, 0.011, 0.5, 5).translate(0, 0.25, 0));
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; stem.push(new THREE.BoxGeometry(0.11, 0.004, 0.022).translate(0.055, 0.06, 0).rotateY(a)); }
+    for (let r = 0; r < 11; r++) {
+      const y = 0.26 + r * 0.026, rad = 0.034 * (1 - r / 12), fr = 0.013 * (1 - r / 16);
+      for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 + r * 0.63; spike.push(new THREE.SphereGeometry(fr, 5, 3).scale(1, 0.8, 1).translate(Math.cos(a) * rad, y, Math.sin(a) * rad)); }
+    }
+    spike.push(new THREE.SphereGeometry(0.008, 5, 3).translate(0, 0.26 + 11 * 0.026, 0));
+    const lupSway = SWAY.replace('0.06 * max(transformed.y, 0.0)', '0.18 * max(transformed.y, 0.0)');
+    const spikeM = scaleMat(new THREE.MeshStandardMaterial({ roughness: 0.55, emissive: '#2a1040', emissiveIntensity: 0.3 }), WINDU, lupSway, 'lupin');
+    const stemM = scaleMat(new THREE.MeshStandardMaterial({ color: '#5f7a24', roughness: 0.8 }), WINDU, lupSway, 'lupinStem');
+    inst(mergeGeos(spike), spikeM, flowers, { cast: false });
+    inst(mergeGeos(stem), stemM, flowers.map(f => f[0]), { color: false, cast: false });
+  }
 
   // rochers
   const rocks = [];
@@ -704,15 +737,43 @@ export function buildPlanet(anchors, quality = 'high') {
       for (let k = 0, nk = 2 + Math.floor(rng() * 4); k < nk; k++) {
         q.copy(d).addScaledVector(t1, (rng() - 0.5) * 1.2 / SEA_R).addScaledVector(t2, (rng() - 0.5) * 1.2 / SEA_R).normalize();
         if (R - heightB(q.x, q.y, q.z) < 0.6) continue;
-        const sz = 0.7 + rng() * 0.6;
-        pads.push([place(q, WR2, sz, 1), new THREE.Color(padCols[Math.floor(rng() * padCols.length)])]);
-        if (rng() < 0.3) blooms.push([place(q, WR2 + 0.03, sz * 0.9, sz * 0.7), new THREE.Color(bloomCols[Math.floor(rng() * bloomCols.length)])]);
+        const sz = 0.7 + rng() * 0.6, yaw = rng() * Math.PI * 2, pad = { home: q.clone(), off: new THREE.Vector3(), vel: new THREE.Vector3(), yaw, spin: 0, s: sz, bloom: -1, tilt: 0 };
+        pads.push([place(q, WR2, sz, 1, yaw), new THREE.Color(padCols[Math.floor(rng() * padCols.length)])]); padState.push(pad);
+        if (rng() < 0.3) { pad.bloom = blooms.length; blooms.push([place(q, WR2 + 0.03, sz * 0.9, sz * 0.7, yaw), new THREE.Color(bloomCols[Math.floor(rng() * bloomCols.length)])]); }
       }
     }
     const padGeo = new THREE.CircleGeometry(0.17, 16, 0.35, Math.PI * 2 - 0.5).rotateX(-Math.PI / 2);
-    inst(padGeo, new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide }), pads, { cast: false });
+    padMesh = inst(padGeo, new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide }), pads, { cast: false });
     const petal = new THREE.ConeGeometry(0.05, 0.09, 6, 1, true).translate(0, 0.045, 0);
-    inst(petal, new THREE.MeshStandardMaterial({ roughness: 0.5, side: THREE.DoubleSide, emissive: '#552244', emissiveIntensity: 0.3 }), blooms, { cast: false });
+    bloomMesh = inst(petal, new THREE.MeshStandardMaterial({ roughness: 0.5, side: THREE.DoubleSide, emissive: '#552244', emissiveIntensity: 0.3 }), blooms, { cast: false });
+  }
+  /** Nénuphars : poussés par la vague du véhicule, ils tournoient, tanguent puis reviennent doucement à leur place. */
+  function updatePads(dt, car, speed) {
+    if (!padMesh) return;
+    const WR3 = (R - 0.3) * S + 0.012, pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), py = new THREE.Quaternion(), pt = new THREE.Quaternion(), pv = new THREE.Vector3(), up2 = new THREE.Vector3(), aw = new THREE.Vector3();
+    let dirty = false;
+    padState.forEach((p, i) => {
+      up2.copy(p.home).multiplyScalar(WR3).add(p.off);
+      const dist = up2.distanceTo(car), reach = 1.0 + Math.abs(speed) * 0.08;
+      if (dist < reach && Math.abs(speed) > 0.3) {
+        aw.copy(up2).sub(car); const n = up2.clone().normalize(); aw.addScaledVector(n, -aw.dot(n)); if (aw.lengthSq() < 1e-6) aw.set(1, 0, 0); aw.normalize();
+        p.vel.addScaledVector(aw, (reach - dist) * (0.6 + Math.abs(speed) * 0.15) * dt * 4); if (p.vel.length() > 0.6) p.vel.setLength(0.6);
+        p.spin += (Math.random() - 0.5) * Math.abs(speed) * dt * 6; p.tilt = Math.min(0.5, p.tilt + Math.abs(speed) * dt * 0.6);
+      }
+      const moving = p.vel.lengthSq() > 1e-7 || p.off.lengthSq() > 1e-7 || Math.abs(p.spin) > 1e-3 || p.tilt > 1e-3;
+      if (!moving) return;
+      p.vel.addScaledVector(p.off, -1.2 * dt); p.vel.multiplyScalar(Math.exp(-dt * 2.2));   // retour lent vers sa place
+      p.off.addScaledVector(p.vel, dt);
+      const n = pv.copy(p.home).multiplyScalar(WR3).add(p.off).normalize(); p.off.addScaledVector(n, -p.off.dot(n));
+      p.yaw += p.spin * dt; p.spin *= Math.exp(-dt * 1.2); p.tilt *= Math.exp(-dt * 2.5);
+      if (p.vel.lengthSq() < 1e-7 && p.off.lengthSq() < 1e-6 && Math.abs(p.spin) < 1e-3) { p.vel.set(0, 0, 0); p.off.set(0, 0, 0); p.spin = 0; p.tilt = 0; }
+      const pos = pv.copy(p.home).multiplyScalar(WR3).add(p.off), dir = pos.clone().normalize(); pos.copy(dir).multiplyScalar(WR3 + Math.sin(performance.now() * 0.006 + i) * 0.01 * p.tilt * 3);
+      pq.setFromUnitVectors(Y, dir).multiply(py.setFromAxisAngle(Y, p.yaw)).multiply(pt.setFromAxisAngle(aw.set(1, 0, 0), Math.sin(performance.now() * 0.008 + i) * p.tilt * 0.4));
+      padMesh.setMatrixAt(i, pm.compose(pos, pq, new THREE.Vector3(p.s, 1, p.s)));
+      if (p.bloom >= 0) bloomMesh.setMatrixAt(p.bloom, pm.compose(pos.clone().addScaledVector(dir, 0.03), pq, new THREE.Vector3(p.s * 0.9, p.s * 0.7, p.s * 0.9)));
+      dirty = true;
+    });
+    if (dirty) { padMesh.instanceMatrix.needsUpdate = true; bloomMesh.instanceMatrix.needsUpdate = true; }
   }
 
   /* ---------- coquillages, avec parcimonie, sur le sable au bord de l'eau ---------- */
@@ -760,8 +821,20 @@ export function buildPlanet(anchors, quality = 'high') {
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, treeMeshes, bushMesh, get grassMesh() { return grassMesh; }, recolorGrass: (b, t) => recolorGrass(b, t) };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, map: MAP, treeDirs, barkM, treeMeshes, bushMesh, updatePads,
+    /** Repeint les feuillages : une couleur par famille (jaune, olive, orange, rouge, rose, sapin), chaque arbre gardant sa nuance. */
+    recolorTrees(hexes) {
+      const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
+      [...treeMeshes.map(t => t[1]), bushMesh].forEach(m => {
+        const T = m.userData.tint; if (!T) return;
+        T.forEach(([g, k], i) => { const b = G[g]; m.setColorAt(i, c.setRGB(b.r * k[0], b.g * k[1], b.b * k[2])); });
+        m.instanceColor.needsUpdate = true;
+      });
+    }, get grassMesh() { return grassMesh; }, recolorGrass: (b, t) => recolorGrass(b, t) };
 }
+
+/** Couleur de référence de chaque famille de feuillage (jaune, olive, orange, rouge, rose, sapin). */
+export const TREE_COLORS = ['#c9b52e', '#b0a52a', '#ec7a2e', '#e0502e', '#ee6aa4', '#6e6a20'];
 
 /** Réglages de forme (barre de réglages) : herbe, arbres, buissons. */
 export const GRASS = { uGrassH: { value: 1 }, uGrassW: { value: 1 } };
@@ -773,7 +846,7 @@ function scaleMat(m, U, code, key) {
   m.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = Object.keys(U).map(k => 'uniform float ' + k + ';\n').join('') + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + code);
+    sh.vertexShader = Object.keys(U).map(k => 'uniform ' + (U[k].value && U[k].value.isVector3 ? 'vec3 ' : 'float ') + k + ';\n').join('') + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + code);
   };
   const k0 = m.customProgramCacheKey.bind(m); m.customProgramCacheKey = () => k0() + '|' + key;
   return m;

@@ -480,6 +480,8 @@ function stepWalk(dt) {
   avatar.localToWorld(trailHeads[0].set(-0.22, 0.05, -0.66)); avatar.localToWorld(trailHeads[1].set(0.22, 0.05, -0.66));
   trailSide.copy(right);
   trails.update(dt, trailHeads, trailSide, P.boost * (1 - hv) * (P.ground || P.airT < 0.2 ? 1 : 0.5));
+  // nénuphars bousculés par la vague du véhicule
+  planet.updatePads(dt, avatar.position, P.speed);
   // l'herbe se couche sous les pneus
   if (P.ground && hv < 0.5 && Math.abs(P.speed) > 0.05) {
     avatar.updateMatrixWorld(true);
@@ -518,20 +520,20 @@ function stepWalk(dt) {
 const flipQ = new THREE.Quaternion(), flipE = new THREE.Euler(), flipV = new THREE.Vector3();
 const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
 const clampW = v => Math.max(-7, Math.min(7, v));
-/** Au décollage, la voiture part avec l'inclinaison et la vitesse de rotation du relief (une rampe qui bascule la fait tourner). */
+/** Au décollage, la voiture garde son inclinaison et la vitesse de rotation du relief (atténuée), rien de plus. */
 function takeoff() {
-  P.ax = -Math.atan(P.sf); P.az = Math.atan(P.sr);
-  P.wx = clampW(-P.sfRate * 1.1); P.wz = clampW(P.srRate * 1.1 - P.steer * Math.abs(P.speed) * 0.1);
+  P.ax = wrapA(P.ax - Math.atan(P.sf)); P.az = wrapA(P.az + Math.atan(P.sr));
+  P.wx = clampW(P.wx - P.sfRate * 0.6); P.wz = clampW(P.wz + P.srRate * 0.6);
 }
-/** À l'atterrissage : posée à peu près droite, ça passe ; sinon elle part en tonneaux. */
+/** À l'atterrissage : on repasse dans le repère du sol ; c'est ensuite la gravité qui décide (elle se redresse ou elle bascule). */
 function land(hv) {
-  if (hv > 0.5 || P.recover) { P.wx = P.wz = 0; return; }
-  const dev = Math.max(Math.abs(wrapA(P.ax + Math.atan(P.sf))), Math.abs(wrapA(P.az - Math.atan(P.sr))));
-  if (dev > 0.8 || (dev > 0.5 && P.vr < -7)) {
-    P.tumble = true; P.speed *= 0.65;
-    if (Math.abs(P.wz) < 2.5 && Math.abs(P.wx) < 2.5) P.wz = (Math.sign(wrapA(P.az)) || 1) * (3 + Math.abs(P.vr) * 0.35);
-  } else { P.wx = P.wz = 0; P.ax = wrapA(P.ax + Math.atan(P.sf)) * 0.5; P.az = wrapA(P.az - Math.atan(P.sr)) * 0.5; }
+  P.ax = wrapA(P.ax + Math.atan(P.sf)); P.az = wrapA(P.az - Math.atan(P.sr));
+  if (hv > 0.5 || P.recover) { P.wx = P.wz = 0; }
 }
+// faces stables : roulis 0 (roues), ±90° (flanc), 180° (toit) ; tangage 0 ou 180°. Basculement : 41° de côté, 52° d'avant en arrière.
+const TIP_R = 0.72, TIP_R2 = Math.PI / 2 + 0.85, TIP_P = 0.9;
+const restRoll = t => { const a = Math.abs(t), s = Math.sign(t) || 1; return a < TIP_R ? 0 : a < TIP_R2 ? s * Math.PI / 2 : s * Math.PI; };
+const restPitch = t => (Math.abs(t) < TIP_P ? 0 : (Math.sign(t) || 1) * Math.PI);
 const flipBtn = $('#flipBtn');
 function updateFlip(dt) {
   if (P.recover) {
@@ -539,21 +541,25 @@ function updateFlip(dt) {
     const R2 = P.recover; R2.t += dt / 0.9; const k = Math.min(1, R2.t), e = k * k * (3 - 2 * k);
     P.ax = R2.ax0 * (1 - e); P.az = R2.az0 * (1 - e);
     if (R2.t >= 1) { P.recover = null; P.ax = P.az = P.wx = P.wz = 0; }
-  } else if (P.tumble && P.ground) {
-    // tonneaux : elle roule en perdant de l'élan, puis se pose sur une face
-    P.ax += P.wx * dt; P.az += P.wz * dt; P.wx *= Math.exp(-dt * 1.4); P.wz *= Math.exp(-dt * 1.4); P.speed *= Math.exp(-dt * 1.8);
-    if (Math.abs(P.wx) < 1.3 && Math.abs(P.wz) < 1.3) {
-      P.wx = P.wz = 0;
-      const tx = Math.round(P.ax / Math.PI) * Math.PI, tz = Math.round(P.az / (Math.PI / 2)) * (Math.PI / 2);
-      P.ax += (tx - P.ax) * (1 - Math.exp(-dt * 7)); P.az += (tz - P.az) * (1 - Math.exp(-dt * 7));
-      if (Math.abs(tx - P.ax) < 0.02 && Math.abs(tz - P.az) < 0.02) {
-        P.ax = tx; P.az = tz; P.tumble = false;
-        const upright = flipV.set(0, 1, 0).applyQuaternion(flipQ.setFromEuler(flipE.set(P.ax, 0, P.az))).y > 0.7;
-        if (upright) { P.ax = P.az = 0; } else { P.flipped = true; P.speed = 0; }
-      }
-    }
-  } else if (P.ground && !P.flipped) { P.ax *= Math.exp(-dt * 9); P.az *= Math.exp(-dt * 9); }
-  if (P.flipped) P.speed *= Math.exp(-dt * 4);
+  } else if (!P.ground) {
+    P.wx *= Math.exp(-dt * 0.3); P.wz *= Math.exp(-dt * 0.3);   // un peu de résistance de l'air
+  } else if (P.hover > 0.5) {
+    P.ax *= Math.exp(-dt * 6); P.az *= Math.exp(-dt * 6); P.wx = P.wz = 0;   // sur l'eau, la jupe la garde à plat
+  } else {
+    // au sol : la gravité ramène vers la face stable la plus proche ; le contact freine la rotation
+    P.ax = wrapA(P.ax); P.az = wrapA(P.az);
+    const K = CAR.gravite * 2.2, c = 2 * Math.sqrt(K) * 0.45, sx = restPitch(P.ax), sz = restRoll(P.az);
+    const dz0 = P.az - sz, dx0 = P.ax - sx;
+    P.wx += (-K * Math.sin(dx0) - c * P.wx) * dt; P.wz += (-K * Math.sin(dz0) - c * P.wz) * dt;
+    P.ax += P.wx * dt; P.az += P.wz * dt;
+    // en roulant, chaque face qui tape le sol coûte de l'énergie et fait rebondir la caisse
+    if (Math.sign(P.az - sz) !== Math.sign(dz0) && Math.abs(P.wz) > 2.5) { P.wz *= 0.6; P.vr = Math.min(3, Math.abs(P.wz) * 0.2); P.ground = false; }
+    if (Math.sign(P.ax - sx) !== Math.sign(dx0) && Math.abs(P.wx) > 2.5) { P.wx *= 0.6; P.vr = Math.min(3, Math.abs(P.wx) * 0.2); P.ground = false; }
+    if (Math.abs(P.ax) > 0.5 || Math.abs(P.az) > 0.5) P.speed *= Math.exp(-dt * 2.5);   // couchée, elle glisse et s'arrête
+  }
+  const off = Math.abs(wrapA(P.ax)) > 0.5 || Math.abs(wrapA(P.az)) > 0.5;
+  P.flipped = P.ground && !P.recover && off && Math.abs(P.wx) < 0.4 && Math.abs(P.wz) < 0.4;
+  P.tumble = off && !P.flipped && !P.recover;
   flipBtn?.classList.toggle('on', P.flipped);
 }
 /** Touche R (ou bouton) : remet la voiture sur ses roues. */
@@ -636,15 +642,17 @@ const tuneHooks = {
     GLEAF.uLeafS.value = T.feuilles.taille; groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
     avatar.scale.setScalar(T.voiture.taille);
     trails.cfg.width = T.turbo.largeur; trails.cfg.life = T.turbo.duree;
+    const TU = trails.uniforms; TU.uC1.value.set(T.turbo.couleurDebut); TU.uC2.value.set(T.turbo.couleurMilieu); TU.uC3.value.set(T.turbo.couleurFin); TU.uMid.value = T.turbo.milieu; TU.uI.value = T.turbo.eclat;
     planet.barkM.color.set(T.arbres.tronc); leafMats.forEach(m => m.color.set(T.arbres.feuillage));
     const S = ambience.state;
     if (T.ambiance.meteo === 'auto') { if (S.weatherMode !== 'auto') { S.weatherMode = 'auto'; S.nextWeather = 30; } }
     else { S.weatherMode = T.ambiance.meteo; S.weather = T.ambiance.meteo; }
   },
   recolorGrass() { planet.recolorGrass(TUNE.herbe.base, TUNE.herbe.pointe); },
+  recolorTrees() { const A = TUNE.arbres; planet.recolorTrees([A.jaune, A.olive, A.orange, A.rouge, A.rose, A.sapin]); },
 };
 tuneHooks.apply();
-if (JSON.stringify(TUNE.herbe) !== JSON.stringify({ base: '#45381a', pointe: '#d6bd38' })) tuneHooks.recolorGrass();
+tuneHooks.recolorGrass(); tuneHooks.recolorTrees();
 $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });   // page en cache sans le bouton : on s'en passe
 
 /* ---------- boucle ---------- */
