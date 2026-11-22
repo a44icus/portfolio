@@ -180,6 +180,13 @@ function waterMaterial(uniforms) {
         float ring = smoothstep(0.0, 0.03, ph2) * (1.0 - smoothstep(0.05, 0.09, ph2)) * (1.0 - smoothstep(0.4, 2.6, d)) * (0.55 + 0.45 * brk);   // traits continus, plus ou moins marqués
         float foam = max(edge, ring * 0.9);
         col = mix(col, vec3(1.0, 0.98, 0.95), clamp(foam, 0.0, 1.0));
+        // quelques paillettes d'un pixel qui scintillent à la surface, avec parcimonie
+        {
+          vec2 px = floor(gl_FragCoord.xy);
+          float hw = fract(sin(dot(vec3(px, floor(uTime * 5.0 + px.x * 0.013)), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+          float farW = 1.0 - smoothstep(10.0, 30.0, length(cameraPosition - vWorld));
+          col += vec3(1.0, 0.97, 0.9) * step(0.9988, hw) * smoothstep(0.3, 1.0, d) * farW * (0.6 + 0.6 * sunUp) * 1.6;
+        }
         float alpha = mix(0.62, 0.97, smoothstep(0.05, 1.6, d));
         alpha = clamp(alpha + fres * 0.2 + foam * 0.4, 0.0, 1.0);
         gl_FragColor = vec4(col, alpha);
@@ -535,7 +542,7 @@ export function buildPlanet(anchors, quality = 'high') {
     treeDirs.push(d.clone());
     if (r < 0.78) { const k = Math.floor(rng() * NV), m = place(d, hs, s, s * (0.9 + rng() * 0.25)); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
     else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol().multiplyScalar(0.85)]); }
-    else if (r < 0.95) { trunks.push(place(d, hs, s, s * 1.1)); pines.push([place(d, hs + 0.42 * s, s, s * 1.1), new THREE.Color('#6a6a22').multiplyScalar(0.9 + rng() * 0.2)]); }
+    else if (r < 0.95) { const k = Math.floor(rng() * 2), m = place(d, hs, s, s * (1 + rng() * 0.25)); pines.push([k, m, new THREE.Color(['#6e6a20', '#857a22', '#5f6a26'][Math.floor(rng() * 3)]).multiplyScalar(0.9 + rng() * 0.2)]); }
     else { const k = Math.floor(rng() * NV), m = place(d, hs, s * 1.15, s * 1.25); vWood[k].push(m); vLeaf[k].push([m, leafCol()]); }
   }
   // buissons : lisières des forêts, bords des chemins et des esplanades
@@ -554,10 +561,11 @@ export function buildPlanet(anchors, quality = 'high') {
   variants.forEach((v, k) => { inst(v.wood, barkM, vWood[k], { color: false }); inst(v.leaves, LEAF_MAT, vLeaf[k]); });
   inst(leafCluster(60, 0.24, 2.4, 0.15), LEAF_MAT, cypress);
   inst(leafCluster(34, 0.3, 0.75, 0.17), LEAF_MAT, bushes);
-  {
-    const g1 = new THREE.ConeGeometry(0.3, 0.45, 9).translate(0, 0.1, 0), g2 = new THREE.ConeGeometry(0.23, 0.38, 9).translate(0, 0.38, 0), g3 = new THREE.ConeGeometry(0.15, 0.3, 9).translate(0, 0.62, 0);
-    inst(mergeGeos([g1, g2, g3]), new THREE.MeshStandardMaterial({ roughness: 0.85 }), pines);
-  }
+  // sapins dans le même style : tronc fin et pâle, étages de petites feuilles qui rétrécissent vers la pointe
+  [0, 1].forEach(k => {
+    const v = pineVariant(k, quality), list = pines.filter(p => p[0] === k);
+    inst(v.wood, barkM, list.map(p => p[1]), { color: false }); inst(v.leaves, LEAF_MAT, list.map(p => [p[1], p[2]]));
+  });
 
   const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null;
   const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
@@ -800,6 +808,18 @@ function treeVariant(seed, quality) {
     g.translate(tip.x, tip.y + rad * 0.25, tip.z); leaves.push(g);
   }
   return { wood: mergeGeos(wood), leaves: mergeLeaves(leaves) };
+}
+/** Un sapin : tronc fin et pâle, cinq à sept étages de feuilles aplatis, de plus en plus petits vers la pointe. */
+function pineVariant(seed, quality) {
+  let s0 = 4111 + seed * 1213; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  const H = 1.9 + r() * 0.4, trunk = new THREE.CylinderGeometry(0.018, 0.045, H, 6).translate(0, H / 2, 0), leaves = [];
+  const tiers = 5 + Math.floor(r() * 3), per = quality === 'low' ? 34 : 52;
+  for (let i = 0; i < tiers; i++) {
+    const k = i / (tiers - 1), y = H * (0.3 + 0.72 * k), rad = 0.5 - 0.38 * k;
+    const g = leafCluster(Math.round(per * (1 - 0.45 * k)), rad, 0.42, 0.15);
+    g.translate((r() - 0.5) * 0.05, y, (r() - 0.5) * 0.05); leaves.push(g);
+  }
+  return { wood: mergeGeos([trunk]), leaves: mergeLeaves(leaves) };
 }
 /** Fusionne des grappes de feuilles (positions, normales, uv, couleurs). */
 function mergeLeaves(geos) {
