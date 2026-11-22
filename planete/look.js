@@ -107,7 +107,7 @@ export function makePost(renderer, scene, camera, quality) {
       tilts.forEach(p => { p.uniforms.uAmount.value = k; p.uniforms.uFocus.value = focus; p.enabled = k > 0.02; });
     },
     get tilt() { return amount; },
-    bloom, grade,
+    bloom, grade, target: rt,   // la scène est dessinée dans ce tampon (linéaire, sans tone mapping) : sert à précompiler les bons shaders
     setBand(b) { tilts.forEach(p => { p.uniforms.uBand.value = b; }); },
     render() { composer.render(); },
   };

@@ -98,7 +98,9 @@ stylizeTree(planet.groundMesh, { cast: true, receive: true });
 stylizeTree(planet.decor);
 stylizeTree(planet.clouds);
 let post;
-try { post = makePost(renderer, scene, camera, quality); post.render(); }
+// essai du post-traitement sans la planète : un rendu complet ici compilerait tous les shaders
+// avant que l'ambiance n'ajoute brouillard et lumières, et tout serait recompilé juste après (fatal sur téléphone)
+try { post = makePost(renderer, scene, camera, quality); world.visible = false; post.render(); world.visible = true; }
 catch (e) {   // sans post-traitement : rendu direct
   console.warn('post-traitement indisponible', e);
   post = { setSize() {}, setTilt() {}, tilt: 0, bloom: {}, grade: { uniforms: { uSat: {} } }, setBand() {}, render() { renderer.render(scene, camera); } };
@@ -289,7 +291,7 @@ avatar.visible = false; scene.add(avatar);
 let zones = null;
 stylizeTree(avatar, { cast: true, receive: true });
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
-buildZones(planet, SECTIONS).then(z => { zones = z; z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); ambience.collect(z.group); });
+const zonesReady = buildZones(planet, SECTIONS).then(z => { zones = z; z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
@@ -496,10 +498,11 @@ function stepWalk(dt) {
   const pitch = S2.pitch * (1 - hv) + bob * (0.03 * Math.sin(P.t * 2.3 + 1) - 0.05 * Math.max(0, throttle) * Math.min(1, Math.abs(P.speed) / 3));
   const roll = S2.roll * (1 - hv) + bob * (0.04 * Math.sin(P.t * 1.9) - P.steer * Math.min(1, Math.abs(P.speed) / 5) * 0.16);
   avatar.userData.pose(hv, P.fan, S2.wy, S2.y, pitch, roll, P.boost, P.t);
-  // traînées du turbo, posées au sol derrière les échappements
+  // traînées du turbo : elles partent de la sortie des échappements, dans l'axe des flammes (suspensions, tangage et roulis compris)
   avatar.updateMatrixWorld(true);
-  avatar.localToWorld(trailHeads[0].set(-0.22, 0.05, -0.66)); avatar.localToWorld(trailHeads[1].set(0.22, 0.05, -0.66));
-  trailSide.copy(right);
+  const fl = avatar.userData.flames;
+  fl[0].localToWorld(trailHeads[0].set(0, 0, 0)); fl[1].localToWorld(trailHeads[1].set(0, 0, 0));
+  trailSide.subVectors(trailHeads[1], trailHeads[0]).normalize();
   trails.update(dt, trailHeads, trailSide, P.boost * (1 - hv) * (P.ground || P.airT < 0.2 ? 1 : 0.5));
   // nénuphars bousculés par la vague du véhicule
   planet.updatePads(dt, avatar.position, P.speed);
@@ -919,12 +922,37 @@ function frame() {
   requestAnimationFrame(frame);
 }
 setHint();
-requestAnimationFrame(frame);
 
 /* ---------- démarrage ---------- */
+const loadTxt = $('#loadTxt'), wait = ms => new Promise(r => setTimeout(r, ms));
+// les zones (texte 3D, police téléchargée) : on les attend un peu pour compiler leurs shaders avec le reste
+loadTxt.textContent = 'Construction des zones…';
+await Promise.race([zonesReady.catch(() => {}), wait(8000)]);
+// shaders compilés en parallèle (KHR_parallel_shader_compile) avant la première image, sans figer la page
+loadTxt.textContent = 'Préparation des couleurs et des lumières…';
+await wait(0);
+try {
+  if (renderer.compileAsync) {
+    // même destination que le vrai rendu (sinon three compile la variante « écran » : sRGB + tone mapping, inutile)
+    renderer.setRenderTarget(post.target || null);
+    const done = renderer.compileAsync(scene, camera);   // les shaders sont lancés ici, de façon synchrone
+    renderer.setRenderTarget(null);
+    await Promise.race([done, wait(30000)]);
+  }
+} catch (e) { renderer.setRenderTarget(null); console.warn('précompilation des shaders', e); }
+requestAnimationFrame(frame);
+loadTxt.textContent = 'Chargement des contenus…';
+// puis, en tâche de fond pendant l'intro : les objets encore cachés (voiture, biplan, pluie…), pour ne pas figer l'atterrissage
+setTimeout(() => {
+  if (!renderer.compileAsync) return;
+  const hidden = []; scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+  try { renderer.setRenderTarget(post.target || null); renderer.compileAsync(scene, camera).catch(() => {}); }
+  catch (e) { console.warn('précompilation (objets cachés)', e); }
+  finally { renderer.setRenderTarget(null); hidden.forEach(o => { o.visible = false; }); }
+}, 300);
 const introBtn = $('#introBtn');
 introBtn.disabled = false; introBtn.textContent = 'Explorer la planète'; window.__planetReady = true;
-introBtn.addEventListener('click', () => { audio.start(); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
+introBtn.addEventListener('click', () => { audio.start(); document.body.classList.add('started'); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 (window.loadPortfolio ? window.loadPortfolio() : Promise.resolve(DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
   .catch(() => { $('#loadTxt').textContent = ''; });
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { leafCluster, LEAF_MAT, fadeNearCamera, SEA_R } from './world.js';
 
 const FONT_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_bold.typeface.json';
@@ -242,7 +243,7 @@ export function makeCar() {
     });
   }
   pose(0);
-  car.userData = { body, wheels, pose };
+  car.userData = { body, wheels, pose, flames };   // flames : sortie des échappements, d'où partent les traînées du turbo
   return car;
 }
 
@@ -718,6 +719,35 @@ export async function buildZones(planet, sections) {
     const localFwd = z.t2.clone().addScaledVector(dir, -z.t2.dot(dir)).normalize().applyQuaternion(f.invert());
     return Math.atan2(localFwd.x, localFwd.z);
   }
+
+  // moins d'appels de dessin (vital sur téléphone) : chaque objet fusionne ses pièces qui partagent un matériau
+  const keep = new Set(glows), mInv = new THREE.Matrix4(), mRel = new THREE.Matrix4();
+  const compact = root => {
+    root.updateMatrixWorld(true); mInv.copy(root.matrixWorld).invert();
+    const buckets = new Map();
+    root.traverse(o => {
+      if (o === root || !o.isMesh || o.isInstancedMesh || o.children.length || keep.has(o) || Array.isArray(o.material) || o.customDepthMaterial || Object.keys(o.userData).length) return;
+      const m = o.material; if (m.transparent || m.alphaTest > 0 || m.userData.glow !== undefined) return;
+      if (o.matrixWorld.determinant() * root.matrixWorld.determinant() < 0) return;   // pièce en miroir : on la laisse
+      const g = o.geometry, sig = m.uuid + '|' + Object.keys(g.attributes).sort().join(',') + '|' + (g.index ? 'i' : 'n') + '|' + o.castShadow + o.receiveShadow + o.renderOrder;
+      if (!buckets.has(sig)) buckets.set(sig, []); buckets.get(sig).push(o);
+    });
+    let saved = 0;
+    for (const list of buckets.values()) {
+      if (list.length < 2) continue;
+      let merged = null;
+      try { merged = mergeGeometries(list.map(o => { const g = o.geometry.clone(); for (const k in g.morphAttributes) delete g.morphAttributes[k]; return g.applyMatrix4(mRel.multiplyMatrices(mInv, o.matrixWorld)); })); } catch (e) { merged = null; }
+      if (!merged) continue;
+      const mm = new THREE.Mesh(merged, list[0].material);
+      mm.castShadow = list[0].castShadow; mm.receiveShadow = list[0].receiveShadow; mm.renderOrder = list[0].renderOrder;
+      root.add(mm); list.forEach(o => o.parent.remove(o)); saved += list.length - 1;
+    }
+    return saved;
+  };
+  let saved = 0;
+  bodies.list.forEach(b => { saved += compact(b.mesh); });
+  group.children.forEach(c => { if (c.isGroup && !bodies.list.some(b => b.mesh === c)) saved += compact(c); });
+  group.userData.merged = saved;
 
   function update(dt, t, car) {
     bodies.step(dt, car);
