@@ -9,8 +9,9 @@ import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, buildZones } from './props.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
+import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
-import { SAND, GRASS, TREE, BUSH, LUPIN } from './world.js';
+import { SAND, GRASS, TREE, BUSH, LUPIN, WIND } from './world.js';
 
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -278,7 +279,7 @@ avatar.visible = false; scene.add(avatar);
 let zones = null;
 stylizeTree(avatar, { cast: true, receive: true });
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
-buildZones(planet, SECTIONS).then(z => { zones = z; world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); ambience.collect(z.group); });
+buildZones(planet, SECTIONS).then(z => { zones = z; z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: true, receive: true }); ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
@@ -365,6 +366,7 @@ function stepWalk(dt) {
   const k = c => keys.has(c);
   const busy = panel.classList.contains('on') || P.tumble || P.flipped || !!P.recover;   // sur le toit : on ne conduit plus
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y));
+  P.throttle = throttle;
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x));
   if (!busy && k('Space') && P.ground) { P.vr = Math.max(P.vr, 0) + CAR.saut; P.ground = false; takeoff(); }
   const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch) && throttle > 0;
@@ -527,6 +529,7 @@ function takeoff() {
 }
 /** À l'atterrissage : on repasse dans le repère du sol ; c'est ensuite la gravité qui décide (elle se redresse ou elle bascule). */
 function land(hv) {
+  if (P.vr < -2) audio.impact(-P.vr * 0.9, 0, hv > 0.5 ? 'sol' : 'lourd');   // la caisse retombe
   P.ax = wrapA(P.ax + Math.atan(P.sf)); P.az = wrapA(P.az - Math.atan(P.sr));
   if (hv > 0.5 || P.recover) { P.wx = P.wz = 0; }
 }
@@ -553,8 +556,8 @@ function updateFlip(dt) {
     P.wx += (-K * Math.sin(dx0) - c * P.wx) * dt; P.wz += (-K * Math.sin(dz0) - c * P.wz) * dt;
     P.ax += P.wx * dt; P.az += P.wz * dt;
     // en roulant, chaque face qui tape le sol coûte de l'énergie et fait rebondir la caisse
-    if (Math.sign(P.az - sz) !== Math.sign(dz0) && Math.abs(P.wz) > 2.5) { P.wz *= 0.6; P.vr = Math.min(3, Math.abs(P.wz) * 0.2); P.ground = false; }
-    if (Math.sign(P.ax - sx) !== Math.sign(dx0) && Math.abs(P.wx) > 2.5) { P.wx *= 0.6; P.vr = Math.min(3, Math.abs(P.wx) * 0.2); P.ground = false; }
+    if (Math.sign(P.az - sz) !== Math.sign(dz0) && Math.abs(P.wz) > 2.5) { audio.impact(Math.abs(P.wz) * 1.4, 0, 'lourd'); P.wz *= 0.6; P.vr = Math.min(3, Math.abs(P.wz) * 0.2); P.ground = false; }
+    if (Math.sign(P.ax - sx) !== Math.sign(dx0) && Math.abs(P.wx) > 2.5) { audio.impact(Math.abs(P.wx) * 1.4, 0, 'lourd'); P.wx *= 0.6; P.vr = Math.min(3, Math.abs(P.wx) * 0.2); P.ground = false; }
     if (Math.abs(P.ax) > 0.5 || Math.abs(P.az) > 0.5) P.speed *= Math.exp(-dt * 2.5);   // couchée, elle glisse et s'arrête
   }
   const off = Math.abs(wrapA(P.ax)) > 0.5 || Math.abs(wrapA(P.az)) > 0.5;
@@ -627,6 +630,12 @@ function drawMinimap() {
 
 /* ---------- barre de réglages ---------- */
 const leafMats = new Set(); planet.decor.children.forEach(m => { if (m.material.map) leafMats.add(m.material); });
+const audio = makeAudio(); let waterProbe = 0, nearWater = 0;
+ambience.state.onFlash = far => audio.thunder(far);
+addEventListener('pointerdown', () => audio.start(), { once: true });
+$('#soundBtn')?.addEventListener('click', e => { e.stopPropagation(); audio.start(); TUNE.son.actif = !TUNE.son.actif; try { localStorage.setItem('planete-reglages', JSON.stringify(TUNE)); } catch (er) { /* rien */ } audio.applyVolumes(); syncSoundBtn(); });
+function syncSoundBtn() { const b = $('#soundBtn'); if (b) { b.textContent = TUNE.son.actif ? '🔊' : '🔇'; b.title = TUNE.son.actif ? 'Couper le son' : 'Activer le son'; } }
+syncSoundBtn();
 const tuneHooks = {
   apply() {
     const W = planet.waterUniforms, T = TUNE;
@@ -644,6 +653,7 @@ const tuneHooks = {
     avatar.scale.setScalar(T.voiture.taille);
     trails.cfg.width = T.turbo.largeur; trails.cfg.life = T.turbo.duree;
     const TU = trails.uniforms; TU.uC1.value.set(T.turbo.couleurDebut); TU.uC2.value.set(T.turbo.couleurMilieu); TU.uC3.value.set(T.turbo.couleurFin); TU.uMid.value = T.turbo.milieu; TU.uI.value = T.turbo.eclat;
+    audio.applyVolumes(); syncSoundBtn();
     planet.barkM.color.set(T.arbres.tronc); leafMats.forEach(m => m.color.set(T.arbres.feuillage));
     const S = ambience.state;
     if (T.ambiance.meteo === 'auto') { if (S.weatherMode !== 'auto') { S.weatherMode = 'auto'; S.nextWeather = 30; } }
@@ -710,6 +720,19 @@ function frame() {
   spray.mesh.visible = mode === 'walk';
   trails.group.visible = mode === 'walk';
   ambience.update(dt, t, mode, avatar.position, camera);
+  // son : voiture, aéroglisseur, ambiance
+  if (audio.started) {
+    if ((waterProbe -= dt) <= 0) {   // de l'eau à proximité ? (pour les vagues)
+      waterProbe = 0.5; let wet = 0; const c = mode === 'walk' ? P.dir : tmpA.copy(camera.position).normalize();
+      const t1 = tmpB.set(0, 1, 0).cross(c).normalize(), t2 = new THREE.Vector3().crossVectors(c, t1);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; if (planet.isWet(new THREE.Vector3().copy(c).addScaledVector(t1, Math.cos(a) * 3 / SEA_R).addScaledVector(t2, Math.sin(a) * 3 / SEA_R).normalize())) wet++; }
+      nearWater = mode === 'walk' ? wet / 8 : 0.35;
+    }
+    const bi = mode === 'walk' ? planet.bridgeAt(P.dir) : null;
+    audio.update(dt,
+      { walk: mode === 'walk', speed: P.speed, throttle: P.throttle || 0, boost: P.boost, hover: P.hover, ground: P.ground, road: planet.pathDir(P.dir) > 0.5, bridge: !!(bi && P.r > bi.top - 0.3) },
+      { walk: mode === 'walk', night: ambience.night, rain: ambience.state.W.rain, wind: WIND.uWind.value, water: nearWater });
+  }
   FADE.uFadeOn.value = mode === 'walk' ? 1 : 0; FADE.uFadeTarget.value.copy(avatar.position).addScaledVector(avatar.position.clone().normalize(), 0.35);
   // en voiture : focale longue et flou de maquette ; en orbite : vue normale
   const wantFov = mode === 'walk' ? TUNE.camera.focale + 7 * P.boost : 42;
@@ -726,7 +749,7 @@ requestAnimationFrame(frame);
 /* ---------- démarrage ---------- */
 const introBtn = $('#introBtn');
 introBtn.disabled = false; introBtn.textContent = 'Explorer la planète';
-introBtn.addEventListener('click', () => { $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
+introBtn.addEventListener('click', () => { audio.start(); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 (window.loadPortfolio ? window.loadPortfolio() : Promise.resolve(DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
   .catch(() => { $('#loadTxt').textContent = ''; });
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),

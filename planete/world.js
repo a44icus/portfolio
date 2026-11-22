@@ -98,6 +98,7 @@ function colorAt(d, h, steep, out, path = 0, rut = 0) {
   out.lerp(COL.dry, dry * 0.6);
   out.lerp(EARTH, (1 - smoothstep(0.0, 0.03, grassPatch(d))) * smoothstep(1.4, 2.2, above) * (1 - smoothstep(0.85, 1.1, steep)));   // terre nue hors des plaques d'herbe
   out.lerp(COL.shore, 1 - smoothstep(0.8, 2.2, above));                                     // plages
+  out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.78), (1 - smoothstep(0.1, 0.9, above)) * smoothstep(-0.6, 0.1, above));   // sable mouillé au bord de l'eau
   if (above < 0) out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.7), Math.min(1, -above / 6)); // fond marin
   out.lerp(COL.rock, smoothstep(0.95, 1.25, steep));                                        // roche des falaises
   out.lerp(COL.snow, smoothstep(0.72, 0.9, (above + tone * 4) / MAX_H) * (1 - smoothstep(0.8, 1.2, steep))); // neige des sommets
@@ -203,7 +204,7 @@ function waterMaterial(uniforms) {
         // effilés aux bouts, qui ondulent, se fragmentent et s'éloignent lentement du bord
         float n1 = fnoise(p * 0.45), n2 = fnoise(p * 1.3 + 17.0);
         float edgeW = (0.05 + 0.32 * n1 * n1 + 0.08 * n2) * uFoamEdge;
-        float edge = 1.0 - smoothstep(edgeW, edgeW + 0.025, d);
+        float edge = 1.0 - smoothstep(0.012, 0.03 + 0.04 * n2, abs(d - (0.14 + edgeW * 0.6)));   // l'écume se tient juste au large du bord
         float ring = 0.0;
         for (int i = 0; i < 4; i++) {
           float fi = float(i);
@@ -221,8 +222,10 @@ function waterMaterial(uniforms) {
           float farW = 1.0 - smoothstep(10.0, 30.0, length(cameraPosition - vWorld));
           col += vec3(1.0, 0.97, 0.9) * glitter(vWorld, 5.0, uGlitW, uTime) * smoothstep(0.3, 1.0, d) * farW * (0.6 + 0.6 * sunUp) * uGlitWI * uGlitDay;
         }
-        float alpha = mix(0.62, 0.97, smoothstep(0.05, 1.6, d));
-        alpha = clamp(alpha + fres * 0.2 + foam * 0.4, 0.0, 1.0);
+        // transition douce : l'eau devient transparente en approchant du sable, sans liseré net
+        float shoreK = smoothstep(0.0, 1.3, d);
+        float alpha = mix(0.0, 0.97, shoreK);
+        alpha = clamp(alpha + fres * 0.2 * shoreK + foam * 0.85, 0.0, 1.0);
         gl_FragColor = vec4(col, alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

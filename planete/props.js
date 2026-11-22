@@ -188,6 +188,7 @@ class Bodies {
   /** Pousse un objet (vitesse tangente) ; s'il est debout et que le choc est fort, il bascule dans le sens du choc. */
   hit(b, push, strength) {
     b.vel.add(push); b.awake = true; b.moved = true; b.lastHit = this.time;
+    if (this.onHit) this.onHit(b, strength, false);
     if (b.ret) { b.ret = null; b.retOff = 0; }
     if (b.topple && !b.down && !b.fall && strength > 1.6) {
       // axe de bascule dans le repère local de la zone de l'objet
@@ -239,7 +240,7 @@ class Bodies {
         else b.dir.copy(next);
       }
       b.vel.multiplyScalar(Math.exp(-dt * (b.down ? 4 : 2.2)));
-      if (b.fall) { b.fall.t += dt * 2.6; if (b.fall.t >= 1) { b.local.premultiply(new THREE.Quaternion().setFromAxisAngle(b.fall.axis, Math.PI / 2)); b.fall = null; b.down = true; } }
+      if (b.fall) { b.fall.t += dt * 2.6; if (b.fall.t >= 1) { b.local.premultiply(new THREE.Quaternion().setFromAxisAngle(b.fall.axis, Math.PI / 2)); b.fall = null; b.down = true; if (this.onHit) this.onHit(b, 2.5 + b.r * 4, true); } }
       if (b.hop > 0 || b.vh > 0) { b.vh -= 18 * dt; b.hop = Math.max(0, b.hop + b.vh * dt); if (b.hop === 0 && b.vh < 0) b.vh = b.vh < -2 ? -b.vh * 0.3 : 0; }
       this.place(b);
       if (sp < 0.03 && !b.fall && b.hop === 0 && b.vh === 0) b.awake = false;

@@ -12,15 +12,16 @@ export const DEFAULTS = {
   },
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
   eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
-  sable: { couleur: '#fbc85b', forceCouleur: 1, paillettes: 0.06, eclatPaillettes: 0.9 },
+  sable: { couleur: '#fbc85b', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
   herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
     jaune: '#c9b52e', olive: '#b0a52a', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#6e6a20' },
   feuilles: { taille: 0.9, quantite: 0.69 },
-  lupins: { densite: 1, taille: 1, hauteur: 1, vent: 1, fleurs: 0.6, tailleFleurs: 1, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
+  lupins: { densite: 1, taille: 0.95, hauteur: 0.9, vent: 0.7, fleurs: 0.88, tailleFleurs: 1.05, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.31, duree: 1.7, couleurDebut: '#ffd159', couleurMilieu: '#ff6168', couleurFin: '#e629b8', milieu: 0.15, eclat: 1 },
   voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 14, saut: 1.7, raideur: 0.9 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
+  son: { actif: true, general: 0.8, musique: 0.45, ambiance: 0.7, effets: 0.8 },
 };
 const KEY = 'planete-reglages';
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -145,12 +146,18 @@ export async function toggleTunePanel(hooks) {
   ch(fR.addColor(TUNE.turbo, 'couleurFin').name('Couleur : fin'));
   ch(fR.add(TUNE.turbo, 'milieu', 0.02, 0.9, 0.01).name('Position du milieu'));
   ch(fR.add(TUNE.turbo, 'eclat', 0, 3, 0.05).name('Éclat'));
+  const fN = gui.addFolder('Son');
+  ch(fN.add(TUNE.son, 'actif').name('Son activé'));
+  ch(fN.add(TUNE.son, 'general', 0, 1, 0.01).name('Volume général'));
+  ch(fN.add(TUNE.son, 'musique', 0, 1, 0.01).name('Musique'));
+  ch(fN.add(TUNE.son, 'ambiance', 0, 1, 0.01).name('Ambiance'));
+  ch(fN.add(TUNE.son, 'effets', 0, 1, 0.01).name('Voiture et chocs'));
   const fC = gui.addFolder('Caméra');
   ch(fC.add(TUNE.camera, 'distance', 2, 25, 0.1).name('Distance'));
   ch(fC.add(TUNE.camera, 'hauteur', 0.5, 20, 0.1).name('Hauteur'));
   ch(fC.add(TUNE.camera, 'focale', 15, 80, 1).name('Angle de vue'));
 
-  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fC].forEach(f => f.close());
+  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fN, fC].forEach(f => f.close());
 
   const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
   const actions = {

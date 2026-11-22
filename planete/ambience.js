@@ -139,7 +139,7 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
     for (const n in tw) S.W[n] += (tw[n] - S.W[n]) * kw;
     const W = S.W;
     // éclairs
-    if (W.storm > 0.5 && (S.nextFlash -= dt) <= 0) { S.flash = 1; S.nextFlash = 3 + Math.random() * 9; S.flash2 = 0.18; }
+    if (W.storm > 0.5 && (S.nextFlash -= dt) <= 0) { if (S.onFlash) S.onFlash(Math.random()); S.flash = 1; S.nextFlash = 3 + Math.random() * 9; S.flash2 = 0.18; }
     if (S.flash2 > 0 && (S.flash2 -= dt) <= 0) S.flash = Math.max(S.flash, 0.8);
     S.flash *= Math.exp(-dt * 9);
     const fl = S.flash * W.storm;
