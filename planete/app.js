@@ -311,6 +311,9 @@ function setHint() {
     ? (touch ? 'Glisse pour tourner · pince pour zoomer · touche une zone' : 'Glisser pour tourner · molette pour zoomer · clic sur une zone')
     : (touch ? 'Joystick pour conduire · Turbo · Saut · roule dans un cercle pour l’ouvrir' : 'ZQSD / WASD ou flèches · Maj : turbo · Espace : sauter · R : redresser · molette : recul · E : ouvrir la zone');
 }
+let hasLanded = false;
+/** Au bout de 15 s sans avoir atterri, le bouton « Atterrir » vient au centre de l'écran. */
+function nudgeLanding() { if (!hasLanded && mode === 'orbit') { document.body.classList.add('nudge'); walkBtn.textContent = 'Atterrir et prendre le volant'; } }
 function setWalk(on) {
   if (on) {
     // atterrit devant la zone la plus proche du regard
@@ -323,6 +326,7 @@ function setWalk(on) {
     P.r = planet.groundRadius(P.dir) + 2; P.vr = 0; P.ground = false; P.speed = 0;
     camF.copy(P.fwd); P.mv.copy(P.fwd);
     mode = 'walk'; controls.enabled = false; controls.autoRotate = false; camAnim = null; avatar.visible = true;
+    hasLanded = true; document.body.classList.remove('nudge');
     walkBtn.textContent = 'Décoller'; document.body.classList.add('walking'); closePanel();
   } else {
     mode = 'orbit'; avatar.visible = false; controls.enabled = true;
@@ -763,7 +767,7 @@ requestAnimationFrame(frame);
 /* ---------- démarrage ---------- */
 const introBtn = $('#introBtn');
 introBtn.disabled = false; introBtn.textContent = 'Explorer la planète';
-introBtn.addEventListener('click', () => { audio.start(); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
+introBtn.addEventListener('click', () => { audio.start(); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 (window.loadPortfolio ? window.loadPortfolio() : Promise.resolve(DATA)).then(d => { DATA = d || DATA; $('#loadTxt').textContent = ''; if (openId) openIsland(openId); })
   .catch(() => { $('#loadTxt').textContent = ''; });
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
