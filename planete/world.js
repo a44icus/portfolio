@@ -10,20 +10,21 @@
    ============================================================================ */
 import * as THREE from 'three';
 
-export const SEA_R = 16;      // rayon de la mer dans la scène
+export const SEA_R = 32;      // rayon de la mer dans la scène
 export const PAV_R = 2.6;     // rayon de l'esplanade d'une zone (scène)
-const R = 120;                // rayon de la mer en blocs (Terre de Social World)
+const R = 240;                // rayon de la mer en blocs (deux fois la Terre de Social World : mêmes blocs, quatre fois plus de terrain)
 const S = SEA_R / R;          // blocs -> unités de la scène
 const MAX_H = 34;             // relief maximal (blocs)
 
 /* ---------- style « océan » de Social World (la Terre) ---------- */
 const STYLE = {
   sea: 0.55, relief: 0.8, mountains: 0.45, cliffs: 0.35,
-  ground: { low: '#3f8a2a', high: '#86c94a', dry: '#a8b85a', rock: '#b4b0ac', shore: '#e6d49a', snow: '#f4f8ff' },
-  grassBase: '#2f6e1e', grassTip: '#b6e86a',
-  flowers: ['#ff7aa8', '#ffffff', '#ffd23a'],
-  leaves: ['#4f9e34', '#3f8a2c', '#6ab83e', '#8fb840'],
-  rockColor: '#a3a09c', liquidColor: '#1fb0d8', skyZenith: '#2f8ae8', skyHorizon: '#c4e6ff',
+  // palette chaude de fin d'après-midi : herbe olive et jaune, terre orange, roche lavande, eau sarcelle
+  ground: { low: '#7c8424', high: '#b3a534', dry: '#e3893c', rock: '#a58fd6', shore: '#f4a25a', snow: '#ffe2cf' },
+  grassBase: '#5a5418', grassTip: '#d8c23c',
+  flowers: ['#ff6aa8', '#ffffff', '#b98cff'],
+  leaves: ['#c9b52e', '#b0a52a', '#d6c43a', '#9a9a26', '#ec7a2e', '#e0502e', '#ee6aa4', '#c8bd3c'],
+  rockColor: '#b4a2ee', liquidColor: '#139a9c', skyZenith: '#ee9b7b', skyHorizon: '#ffe0b8',
 };
 const SEA_LEVEL = -0.42 + STYLE.sea * 0.75;
 
@@ -85,8 +86,8 @@ function rawHeight(x, y, z) {
 /* ---------- palette du sol ---------- */
 const COL = Object.fromEntries(Object.entries(STYLE.ground).map(([k, v]) => [k, new THREE.Color(v)]));
 const tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
-const PATH_COL = new THREE.Color('#d9b27c'), PATH_EDGE = new THREE.Color('#b8925e');
-function colorAt(d, h, steep, out, path = 0) {
+const PATH_COL = new THREE.Color('#f39a4c'), PATH_EDGE = new THREE.Color('#d4703a'), RUT = new THREE.Color('#c25f30');
+function colorAt(d, h, steep, out, path = 0, rut = 0) {
   const above = h - R;
   const tone = noise.fbm(d.x * 6 + 9, d.y * 6, d.z * 6, 3) * 0.5 + 0.5;
   const dry = smoothstep(0.55, 0.8, noise.noise(d.x * 3 - 4, d.y * 3, d.z * 3) * 0.5 + 0.5);
@@ -96,7 +97,8 @@ function colorAt(d, h, steep, out, path = 0) {
   if (above < 0) out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.7), Math.min(1, -above / 6)); // fond marin
   out.lerp(COL.rock, smoothstep(0.95, 1.25, steep));                                        // roche des falaises
   out.lerp(COL.snow, smoothstep(0.72, 0.9, (above + tone * 4) / MAX_H) * (1 - smoothstep(0.8, 1.2, steep))); // neige des sommets
-  if (path > 0 && above > 0.4) out.lerp(tmpC2.copy(PATH_EDGE).lerp(PATH_COL, smoothstep(0.35, 0.8, path)).multiplyScalar(0.92 + tone * 0.16), smoothstep(0, 0.35, path)); // chemins de terre
+  if (path > 0 && above > 0.4) out.lerp(tmpC2.copy(PATH_EDGE).lerp(PATH_COL, smoothstep(0.35, 0.8, path)).multiplyScalar(0.92 + tone * 0.16), smoothstep(0, 0.35, path)); // routes de terre
+  if (rut > 0 && above > 0.4) out.lerp(RUT, rut * 0.55);                                  // ornières
   return out;
 }
 
@@ -233,9 +235,8 @@ export function buildPlanet(anchors, quality = 'high') {
   sites.forEach(s => { s.flat = s.h + 0.6; });
   anchors.forEach((an, k) => { an.dir = sites[k].dir.clone(); });
 
-  /** Rayon du sol en blocs, esplanades comprises. */
-  function heightB(x, y, z) {
-    let h = rawHeight(x, y, z);
+  /** Esplanades : le sol s'aplanit autour de chaque zone. */
+  function plaza(x, y, z, h) {
     for (const s of sites) {
       const c = x * s.dir.x + y * s.dir.y + z * s.dir.z;
       if (c < Math.cos(A1)) continue;
@@ -244,64 +245,152 @@ export function buildPlanet(anchors, quality = 'high') {
     }
     return h;
   }
-  const heightDir = d => heightB(d.x, d.y, d.z) * S;              // en unités de la scène
+  const heightP = (x, y, z) => plaza(x, y, z, rawHeight(x, y, z));
 
-  /* ---------- chemins entre les zones (arbre couvrant minimal, arcs de grand cercle) ---------- */
-  const edges = [];
-  {
-    const inTree = [0];
-    while (inTree.length < sites.length) {
-      let best = null, bd = 9;
-      for (const i of inTree) sites.forEach((s2, j) => { if (inTree.includes(j)) return; const a = Math.acos(Math.min(1, sites[i].dir.dot(s2.dir))); if (a < bd) { bd = a; best = [i, j]; } });
-      inTree.push(best[1]);
-      const a = sites[best[0]].dir, b = sites[best[1]].dir;
-      edges.push({ a: a.clone(), b: b.clone(), n: new THREE.Vector3().crossVectors(a, b).normalize(), len: bd });
+  /* ---------- routes de terre entre les zones, ponts en bois au-dessus de l'eau ---------- */
+  const ROAD_W = 0.8 / SEA_R, STEP = 0.25 / SEA_R, MAX_BRIDGE = 16 / SEA_R;
+  /** Valeur d'un tableau échantillonné le long d'une route, à l'abscisse angulaire th. */
+  function sample(arr, e, th) { const f = Math.max(0, Math.min(e.M, th / e.len * e.M)), i = Math.min(e.M - 1, Math.floor(f)), t = f - i; return arr[i] + (arr[i + 1] - arr[i]) * t; }
+  function makeRoad(a, b) {
+    const len = Math.acos(Math.min(1, a.dot(b)));
+    const u = b.clone().addScaledVector(a, -a.dot(b)).normalize(), n = new THREE.Vector3().crossVectors(a, b).normalize();
+    const M = Math.max(8, Math.ceil(len / STEP)), prof = new Float32Array(M + 1), wet = new Float32Array(M + 1), off = new Float32Array(M + 1), land = new Float32Array(M + 1);
+    const phase = Math.abs(a.x * 13.1 + b.y * 7.7) % 6.28;
+    const e = { a, b, u, n, len, M, prof, wet, off, land };
+    const p = new THREE.Vector3();
+    for (let i = 0; i <= M; i++) {
+      const th = i / M * len;
+      off[i] = Math.sin(th * SEA_R / 7 + phase) * 1.1 / SEA_R * Math.sin(Math.PI * i / M);   // la route serpente doucement
+      p.copy(a).multiplyScalar(Math.cos(th)).addScaledVector(u, Math.sin(th)).addScaledVector(n, off[i]).normalize();
+      const h = heightP(p.x, p.y, p.z);
+      wet[i] = h < R + 0.4 ? 1 : 0;
+      prof[i] = Math.max(h, R + 1);
     }
+    // passages sur l'eau
+    const runs = []; let water = 0, maxRun = 0, run = 0;
+    for (let i = 0; i <= M; i++) {
+      if (wet[i]) { if (!run) runs.push({ i0: i, i1: M }); run++; water++; }
+      else if (run) { runs[runs.length - 1].i1 = i - 1; maxRun = Math.max(maxRun, run); run = 0; }
+    }
+    maxRun = Math.max(maxRun, run);
+    e.runs = runs; e.water = water * len / M; e.maxRun = maxRun * len / M;
+    // profil lissé : pentes douces, en déblai dans les collines et en remblai dans les creux
+    const tmp = new Float32Array(M + 1), Wn = Math.max(2, Math.round(3 / SEA_R / (len / M)));
+    for (let pass = 0; pass < 4; pass++) {
+      for (let i = 0; i <= M; i++) { let sum = 0, c = 0; for (let k = Math.max(0, i - Wn); k <= Math.min(M, i + Wn); k++) { sum += prof[k]; c++; } tmp[i] = sum / c; }
+      tmp[0] = prof[0]; tmp[M] = prof[M];
+      prof.set(tmp);
+    }
+    for (let i = 0; i <= M; i++) { let sum = 0, c = 0; for (let k = Math.max(0, i - 3); k <= Math.min(M, i + 3); k++) { sum += wet[k] ? 0 : 1; c++; } land[i] = wet[i] ? 0 : sum / c; }
+    e.point = (th, side = 0) => new THREE.Vector3().copy(a).multiplyScalar(Math.cos(th)).addScaledVector(u, Math.sin(th)).addScaledVector(n, sample(off, e, th) + side / SEA_R).normalize();
+    e.groundAt = th => sample(prof, e, th) * S;
+    return e;
   }
-  const PATH_W = 0.42 / SEA_R;
-  const cx = new THREE.Vector3(), cp = new THREE.Vector3();
-  /** 1 au milieu d'un chemin, 0 en dehors (les chemins serpentent un peu). */
-  function pathAt(x, y, z) {
-    let best = 0;
+  // toutes les paires proches ; on garde un réseau qui relie les zones au moindre coût (l'eau coûte plus cher)
+  const cands = [];
+  for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) {
+    if (Math.acos(Math.min(1, sites[i].dir.dot(sites[j].dir))) > 1.25) continue;
+    const e = makeRoad(sites[i].dir, sites[j].dir); e.i = i; e.j = j;
+    if (e.maxRun > MAX_BRIDGE || e.water > e.len * 0.45) continue;
+    e.cost = e.len + e.water * 1.5; cands.push(e);
+  }
+  cands.sort((x, y) => x.cost - y.cost);
+  const parent = sites.map((_, k) => k), find = k => (parent[k] === k ? k : (parent[k] = find(parent[k])));
+  const edges = [], extra = [];
+  for (const e of cands) { const ra = find(e.i), rb = find(e.j); if (ra !== rb) { parent[ra] = rb; edges.push(e); } else extra.push(e); }
+  extra.filter(e => e.len * SEA_R < 26).slice(0, 2).forEach(e => edges.push(e));   // quelques boucles
+
+  // ponts : chaque passage sur l'eau, prolongé d'un peu de terre de chaque côté
+  const bridges = [];
+  const LIFT = (R - 0.3) * S + 0.42;
+  for (const e of edges) for (const r of e.runs) {
+    const t0 = Math.max(0, r.i0 / e.M * e.len - 1.4 / SEA_R), t1 = Math.min(e.len, r.i1 / e.M * e.len + 1.4 / SEA_R);
+    const hA = e.groundAt(t0), hB = e.groundAt(t1), L = (t1 - t0) * SEA_R, arch = Math.min(0.5, L * 0.03);
+    const deck = th => {
+      const s2 = (th - t0) / (t1 - t0), base = hA + (hB - hA) * s2;
+      return base + Math.max(0, LIFT - base) * smoothstep(0, 0.22, s2) * smoothstep(1, 0.78, s2) + arch * Math.sin(Math.PI * s2);
+    };
+    bridges.push({ e, t0, t1, deck, len: L });
+  }
+
+  const RT = { e: null, d: 0, th: 0 };
+  /** Route la plus proche (distance angulaire au milieu de la chaussée). */
+  function roadAt(x, y, z) {
+    RT.e = null; RT.d = 1e9;
     for (const e of edges) {
       const dn = x * e.n.x + y * e.n.y + z * e.n.z;
-      if (Math.abs(dn) > PATH_W * 3) continue;
-      cp.set(x, y, z);
-      if (cx.crossVectors(e.a, cp).dot(e.n) < 0) continue;
-      if (cx.crossVectors(cp, e.b).dot(e.n) < 0) continue;
-      const wig = noise.noise(x * 22 + 3, y * 22, z * 22) * PATH_W * 0.9;
-      const k = 1 - smoothstep(PATH_W * 0.6, PATH_W * 1.25, Math.abs(dn + wig));
-      if (k > best) best = k;
+      if (Math.abs(dn) > ROAD_W * 3.2 + 1.2 / SEA_R) continue;
+      const th = Math.atan2(x * e.u.x + y * e.u.y + z * e.u.z, x * e.a.x + y * e.a.y + z * e.a.z);
+      if (th < 0 || th > e.len) continue;
+      const d = Math.abs(dn - sample(e.off, e, th));
+      if (d < RT.d) { RT.d = d; RT.e = e; RT.th = th; }
     }
-    return best;
+    return RT;
+  }
+  /** Rayon du sol en blocs : relief, routes (déblais et remblais), puis esplanades. */
+  function heightB(x, y, z) {
+    let h = rawHeight(x, y, z);
+    const r = roadAt(x, y, z);
+    if (r.e) {
+      const w = (1 - smoothstep(ROAD_W * 1.05, ROAD_W * 2.8, r.d)) * sample(r.e.land, r.e, r.th);
+      if (w > 0) h += (sample(r.e.prof, r.e, r.th) - h) * w;
+    }
+    return plaza(x, y, z, h);
+  }
+  const heightDir = d => heightB(d.x, d.y, d.z) * S;              // en unités de la scène
+  const ROAD = { rut: 0 };
+  /** 1 sur la chaussée, 0 en dehors ; ROAD.rut : les deux ornières. */
+  function pathAt(x, y, z) {
+    ROAD.rut = 0;
+    const r = roadAt(x, y, z);
+    if (!r.e) return 0;
+    const d = r.d + noise.noise(x * 44 + 3, y * 44, z * 44) * ROAD_W * 0.12;
+    const k = 1 - smoothstep(ROAD_W * 0.8, ROAD_W * 1.12, d);
+    ROAD.rut = k * (1 - smoothstep(0.05, 0.14, Math.abs(d / ROAD_W - 0.42)));
+    return k;
   }
   const pathDir = d => pathAt(d.x, d.y, d.z);
+  const roadNear = (d, extraU) => { const r = roadAt(d.x, d.y, d.z); return !!r.e && r.d < ROAD_W + extraU / SEA_R; };
+  /** Dessus du tablier d'un pont sous cette direction (0 s'il n'y en a pas). */
+  function bridgeR(dir) {
+    let top = 0;
+    for (const b of bridges) {
+      const e = b.e, dn = dir.dot(e.n);
+      if (Math.abs(dn) > ROAD_W * 2) continue;
+      const th = Math.atan2(dir.dot(e.u), dir.dot(e.a));
+      if (th < b.t0 || th > b.t1 || Math.abs(dn - sample(e.off, e, th)) > 0.78 / SEA_R) continue;
+      top = Math.max(top, b.deck(th) + 0.07);
+    }
+    return top;
+  }
+
 
   /* ---------- sol et mer, maillés ensemble (la profondeur de l'eau vient du relief) ---------- */
-  const n = 128, side = n + 3, group = new THREE.Group();
+  const n = quality === 'low' ? 160 : 224, side = n + 3, group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   const waterUniforms = {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
-    uShallow: { value: new THREE.Color(STYLE.liquidColor).lerp(new THREE.Color('#5fe6d8'), 0.45) },
-    uDeep: { value: new THREE.Color(STYLE.liquidColor).multiplyScalar(0.34).lerp(new THREE.Color('#07408a'), 0.65) },
+    uShallow: { value: new THREE.Color(STYLE.liquidColor).lerp(new THREE.Color('#2fbcae'), 0.4) },
+    uDeep: { value: new THREE.Color(STYLE.liquidColor).multiplyScalar(0.34).lerp(new THREE.Color('#06324a'), 0.7) },
   };
   const wMat = waterMaterial(waterUniforms), water = new THREE.Group();
   const d = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), nn = new THREE.Vector3(), q = new THREE.Vector3();
   const WR = (R - 0.3) * S;
   const rng = (() => { let s = 0x9e3779b9; return () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0; return s / 4294967296; }; })();
   const onPlaza = (dd, extra = 0) => sites.some(s => dd.dot(s.dir) > Math.cos(A0 + extra));
-  const grassM = [], flowers = [], GRASS_PER = quality === 'low' ? 1 : 2;
+  const grassM = [], flowers = [], GRASS_KEEP = quality === 'low' ? 0.62 : 1;
   const gq = new THREE.Quaternion(), gs = new THREE.Vector3(), gp = new THREE.Vector3(), gm = new THREE.Matrix4(), gy = new THREE.Quaternion(), gyaw = new THREE.Quaternion();
   /** Touffes d'herbe autour d'un sommet du sol (va, vb : vecteurs vers les sommets voisins, sur deux mailles). */
   function grassAt(dd, h, steep, pk, va, vb) {
     const above = h - R;
     if (above < 2 || above > 25 || steep > 0.85 || pk > 0.35) return;
-    if (onPlaza(dd, 0.05 / SEA_R)) return;
-    const patch = noise.fbm(dd.x * 9 + 4, dd.y * 9, dd.z * 9, 2);
+    if (onPlaza(dd, 0.05 / SEA_R) || pk > 0.5) return;
+    const patch = noise.fbm(dd.x * 18 + 4, dd.y * 18, dd.z * 18, 2);
     if (patch < -0.28) return;
     gq.setFromUnitVectors(Y, dd);
-    for (let k = 0; k < GRASS_PER; k++) {
+    if (rng() > GRASS_KEEP) return;
+    {
       gp.copy(dd).multiplyScalar(h * S - 0.02).addScaledVector(va, (rng() - 0.5) * 0.5).addScaledVector(vb, (rng() - 0.5) * 0.5);
       const s = 0.2 + rng() * 0.1 + Math.max(0, patch) * 0.12;
       gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * (0.8 + rng() * 0.7), s));
@@ -333,7 +422,7 @@ export function buildPlanet(anchors, quality = 'high') {
       vn[v] = nn.x; vn[v + 1] = nn.y; vn[v + 2] = nn.z;
       const cos = Math.min(1, Math.max(0.05, nn.dot(d))), steep = Math.sqrt(1 - cos * cos) / cos;
       const pk = pathAt(d.x, d.y, d.z);
-      colorAt(d, hb[g], steep, tmpC, pk);
+      colorAt(d, hb[g], steep, tmpC, pk, ROAD.rut);
       grassAt(d, hb[g], steep, pk, a, b);
       vc[v] = tmpC.r; vc[v + 1] = tmpC.g; vc[v + 2] = tmpC.b;
       wp[v] = d.x * WR; wp[v + 1] = d.y * WR; wp[v + 2] = d.z * WR;
@@ -359,7 +448,7 @@ export function buildPlanet(anchors, quality = 'high') {
 
   /* ---------- végétation et rochers ---------- */
   const slopeAt = dir => {
-    const [t1, t2] = tangents(dir), e = 0.004, h0 = heightB(dir.x, dir.y, dir.z);
+    const [t1, t2] = tangents(dir), e = 0.002, h0 = heightB(dir.x, dir.y, dir.z);
     q.copy(dir).addScaledVector(t1, e).normalize(); const ha = heightB(q.x, q.y, q.z);
     q.copy(dir).addScaledVector(t2, e).normalize(); const hb2 = heightB(q.x, q.y, q.z);
     return Math.hypot(ha - h0, hb2 - h0) / (e * h0);
@@ -382,28 +471,28 @@ export function buildPlanet(anchors, quality = 'high') {
 
   // arbres : houppiers en petites feuilles (rendu « peint »), quelques cyprès et pins, en forêts
   const trunks = [], rounds = [], cypress = [], pines = [], bushes = [];
-  for (let tries = 0; tries < 20000 && trunks.length < 620; tries++) {
+  for (let tries = 0; tries < 60000 && trunks.length < (quality === 'low' ? 1100 : 1600); tries++) {
     randDir(d);
-    if (noise.fbm(d.x * 4 + 1.3, d.y * 4, d.z * 4 - 2.1, 3) < 0.05) continue;          // forêts
+    if (noise.fbm(d.x * 7 + 1.3, d.y * 7, d.z * 7 - 2.1, 3) < 0.05) continue;          // forêts
     const h = heightB(d.x, d.y, d.z), above = h - R;
-    if (above < 2.5 || above > 26 || onPlaza(d, 0.9 / SEA_R) || pathDir(d) > 0.05 || slopeAt(d) > 0.6) continue;
+    if (above < 2.5 || above > 26 || onPlaza(d, 0.9 / SEA_R) || roadNear(d, 1.5) || slopeAt(d) > 0.6) continue;
     const s = 0.7 + rng() * 0.5, r = rng(), hs = h * S - 0.03;
     if (r < 0.72) { trunks.push(place(d, hs, s)); rounds.push([place(d, hs + 0.55 * s, s * (0.9 + rng() * 0.3), s * (0.85 + rng() * 0.3)), leafCol()]); }
     else if (r < 0.9) { trunks.push(place(d, hs, s, s * 1.25)); cypress.push([place(d, hs + 0.72 * s, s, s * 1.3), leafCol().multiplyScalar(0.85)]); }
-    else { trunks.push(place(d, hs, s, s * 1.1)); pines.push([place(d, hs + 0.42 * s, s, s * 1.1), new THREE.Color('#2f6a3a').multiplyScalar(0.9 + rng() * 0.2)]); }
+    else { trunks.push(place(d, hs, s, s * 1.1)); pines.push([place(d, hs + 0.42 * s, s, s * 1.1), new THREE.Color('#6a6a22').multiplyScalar(0.9 + rng() * 0.2)]); }
   }
   // buissons : lisières des forêts, bords des chemins et des esplanades
-  for (let tries = 0; tries < 26000 && bushes.length < (quality === 'low' ? 900 : 1600); tries++) {
+  for (let tries = 0; tries < 70000 && bushes.length < (quality === 'low' ? 1700 : 3000); tries++) {
     randDir(d);
-    const f = noise.fbm(d.x * 4 + 1.3, d.y * 4, d.z * 4 - 2.1, 3), pk = pathDir(d);
+    const f = noise.fbm(d.x * 7 + 1.3, d.y * 7, d.z * 7 - 2.1, 3), pk = pathDir(d);
     const edge = (f > -0.12 && f < 0.12) || (pk > 0 && pk < 0.05 && rng() < 0.5) || (onPlaza(d, 1.3 / SEA_R) && !onPlaza(d, 0.25 / SEA_R));
     if (!edge) continue;
     const h = heightB(d.x, d.y, d.z), above = h - R;
-    if (above < 1.8 || above > 26 || pk > 0.02 || onPlaza(d, 0.2 / SEA_R)) continue;
+    if (above < 1.8 || above > 26 || roadNear(d, 0.6) || onPlaza(d, 0.2 / SEA_R)) continue;
     const s = 0.45 + rng() * 0.5;
     bushes.push([place(d, h * S + 0.12 * s, s, s * (0.7 + rng() * 0.25)), leafCol().multiplyScalar(0.95 + rng() * 0.15)]);
   }
-  inst(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), new THREE.MeshStandardMaterial({ color: '#6e4a2e', roughness: 0.9 }), trunks, { color: false });
+  inst(new THREE.CylinderGeometry(0.05, 0.075, 0.6, 7).translate(0, 0.3, 0), new THREE.MeshStandardMaterial({ color: '#8a64c8', roughness: 0.9 }), trunks, { color: false });
   inst(leafCluster(80, 0.44, 1, 0.2), LEAF_MAT, rounds);
   inst(leafCluster(60, 0.24, 2.4, 0.15), LEAF_MAT, cypress);
   inst(leafCluster(34, 0.3, 0.75, 0.17), LEAF_MAT, bushes);
@@ -443,11 +532,11 @@ export function buildPlanet(anchors, quality = 'high') {
 
   // rochers
   const rocks = [];
-  for (let tries = 0; tries < 7000 && rocks.length < 260; tries++) {
+  for (let tries = 0; tries < 20000 && rocks.length < 600; tries++) {
     randDir(d);
     const h = heightB(d.x, d.y, d.z), above = h - R;
-    if (above < 0.6 || onPlaza(d, 0.3 / SEA_R) || pathDir(d) > 0.3) continue;
-    if (noise.noise(d.x * 6 - 3, d.y * 6, d.z * 6) < 0.2) continue;
+    if (above < 0.6 || onPlaza(d, 0.3 / SEA_R) || roadNear(d, 0.3)) continue;
+    if (noise.noise(d.x * 12 - 3, d.y * 12, d.z * 12) < 0.2) continue;
     const s = 0.07 + rng() * 0.17;
     rocks.push([place(d, h * S, s, s * (0.6 + rng() * 0.4)), new THREE.Color(STYLE.rockColor).multiplyScalar(0.85 + rng() * 0.25)]);
   }
@@ -461,9 +550,9 @@ export function buildPlanet(anchors, quality = 'high') {
 
   /* ---------- nuages arrondis ---------- */
   const clouds = new THREE.Group();
-  const puff = new THREE.IcosahedronGeometry(1, 3), cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, transparent: true, opacity: 0.92, emissive: '#ffffff', emissiveIntensity: 0.15 });
+  const puff = new THREE.IcosahedronGeometry(1, 3), cloudMat = new THREE.MeshStandardMaterial({ color: '#fff1ea', roughness: 1, transparent: true, opacity: 0.92, emissive: '#ffd9c8', emissiveIntensity: 0.18 });
   const puffs = [];
-  for (let c = 0; c < 22; c++) {
+  for (let c = 0; c < 60; c++) {
     d.set(rng() * 2 - 1, (rng() * 2 - 1) * 0.8, rng() * 2 - 1).normalize(); orient(d);
     const t1 = new THREE.Vector3(1, 0, 0).applyQuaternion(quat), t2 = new THREE.Vector3(0, 0, 1).applyQuaternion(quat), alt = SEA_R + MAX_H * S + 1.4 + rng() * 1.2;
     for (let p = 0, np = 4 + Math.floor(rng() * 4); p < np; p++) {
@@ -479,7 +568,7 @@ export function buildPlanet(anchors, quality = 'high') {
   function isWet(dir) { return heightB(dir.x, dir.y, dir.z) < R; }
   function animate() {}
 
-  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, pathDir, onPlaza };
+  return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, pathDir, onPlaza };
 }
 
 /* ---------- feuillage « peint » : des dizaines de petites feuilles découpées ---------- */
