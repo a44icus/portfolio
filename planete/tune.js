@@ -19,7 +19,7 @@ export const DEFAULTS = {
   feuilles: { taille: 0.9, quantite: 0.69 },
   lupins: { densite: 1, taille: 0.95, hauteur: 0.9, vent: 0.7, fleurs: 0.88, tailleFleurs: 1.05, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.12, duree: 3, couleurDebut: '#ffea00', couleurMilieu: '#4c00ff', couleurFin: '#e63528', milieu: 0.12, eclat: 2.3 },
-  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 14, saut: 1.7, raideur: 0.9 },
+  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 30.5, saut: 1.7, raideur: 0.9 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
   son: { actif: true, general: 0.51, musique: 0.45, ambiance: 0.7, vehicules: 0.17, effets: 0.8 },
 };
