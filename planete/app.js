@@ -848,8 +848,39 @@ $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTuneP
 }   // page en cache sans le bouton : on s'en passe
 
 /* ---------- boucle ---------- */
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); post.setSize(w, h, PR); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+/* Ménager la carte graphique :
+   - 60 images/s au plus (inutile de suivre un écran à 144 Hz), 30 quand c'est calme (intro, fiche ouverte, vue planète sans geste) ;
+   - en vue planète, ombres recalculées une image sur deux (le soleil est loin, le décalage ne se voit pas) ;
+   - si la machine n'arrive pas à suivre, la définition baisse un peu, puis remonte quand ça va mieux. */
+let pxScale = 1;
+const PR_MIN = Math.min(PR, quality === 'low' ? 0.75 : 0.85);
+function resize() { const w = innerWidth, h = innerHeight, pr = Math.max(PR_MIN, PR * pxScale); renderer.setPixelRatio(pr); renderer.setSize(w, h, false); post.setSize(w, h, pr); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
+let lastInput = 0;
+for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart']) addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true });
+addEventListener('pointermove', e => { if (e.buttons) lastInput = performance.now(); }, { passive: true });
+renderer.shadowMap.autoUpdate = false;
+const pace = { next: 0, ema: 1000 / 60, slow: 0, fast: 0, n: 0 };
+function targetFps(now) {
+  if (document.getElementById('intro') && !$('#intro').classList.contains('out')) return 30;
+  if (mode === 'walk' || PL.cam) return 60;   // (le biplan qui tourne seul autour de la planète se contente de 30)
+  if (panel.classList.contains('on')) return 30;
+  return camAnim || now - lastInput < 2500 ? 60 : 30;   // la caméra garde de l'élan un moment après le geste
+}
+/** true s'il faut dessiner cette image ; ajuste aussi la définition selon le rythme réellement tenu. */
+function paceFrame(now) {
+  const iv = 1000 / targetFps(now);
+  if (now < pace.next - 3) return false;
+  const gap = now - (pace.last || now); pace.last = now;
+  pace.next = Math.max(pace.next + iv, now - iv);   // rythme moyen tenu même quand l'écran tique à 144 Hz
+  if (gap > 0 && gap < 250) {
+    pace.ema += (gap - pace.ema) * 0.08;
+    if (pace.ema > iv * 1.3) { pace.fast = 0; if (++pace.slow > 90 && PR * pxScale > PR_MIN + 0.01) { pxScale = Math.max(PR_MIN / PR, pxScale * 0.85); pace.slow = 0; resize(); } }
+    else if (pace.ema < iv * 1.08) { pace.slow = 0; if (++pace.fast > 300 && pxScale < 1) { pxScale = Math.min(1, pxScale * 1.12); pace.fast = 0; resize(); } }
+  }
+  renderer.shadowMap.needsUpdate = mode === 'walk' || (++pace.n & 1) === 0;
+  return true;
+}
 const clock = new THREE.Clock();
 const sunOff = new THREE.Vector3(), sunDir = new THREE.Vector3(), camR = new THREE.Vector3(), camFw = new THREE.Vector3();
 let shadowBox = 0;
@@ -858,7 +889,8 @@ function setShadowBox(half, near, far) {
   if (shadowBox === half && c.near === near && c.far === far) return;
   shadowBox = half; c.left = c.bottom = -half; c.right = c.top = half; c.near = near; c.far = far; c.updateProjectionMatrix();
 }
-function frame() {
+function frame(now) {
+  if (!paceFrame(now || performance.now())) { requestAnimationFrame(frame); return; }
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   planet.waterUniforms.uTime.value = t;
   if (!reduce) { planet.clouds.rotation.y += dt * 0.025; planet.animate(t); }
