@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- ouverte en « /planete » (sans barre finale), la page chercherait app.js, three.js… à la racine du site et resterait bloquée : on ajoute la barre -->
+<script>if (/\/planete$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);</script>
 <script src="../js/maintenance.js"></script>
 <title>La planète — Stéphane Donchery</title>
 <meta name="description" content="Le portfolio de Stéphane Donchery, version planète : explorez les zones en vue orbitale ou en voiture.">
@@ -175,8 +177,19 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   window.__planetStep = function (name) { var now = Date.now(); log.push(step.name + ' ' + sec(now - step.t)); step = { name: name, t: now }; paint(); };
   var paint = function () { if (window.__planetReady || shown) return; var t = document.getElementById('loadTxt'); if (t && !t.dataset.err) t.textContent = step.name + '… (' + Math.round((Date.now() - T0) / 1000) + ' s)'; };
   setInterval(paint, 1000);
-  var report = function () { return ' — étape : « ' + step.name + ' » depuis ' + sec(Date.now() - step.t) + ' | ' + log.join(' · ') + ' | GPU : ' + (gpu || '?') + ' | ' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90); };
-  var early = function (m, soft) { if (window.__planetReady) return; var t = document.getElementById('loadTxt'); if (t) t.dataset.err = 1; window.__planetFail('Erreur au chargement : ' + m + report(), soft); };
+  var BUILD = 'v2026-11-22c';
+  // fichiers attendus : ceux qui manquent dans la liste des téléchargements terminés sont les suspects
+  var WANT = ['app.js', 'world.js', 'props.js', 'look.js', 'ambience.js', 'audio.js', 'tune.js', 'three.module.min.js', 'OrbitControls.js', 'EffectComposer.js', 'RenderPass.js', 'UnrealBloomPass.js', 'ShaderPass.js', 'OutputPass.js', 'MaskPass.js', 'Pass.js', 'CopyShader.js', 'LuminosityHighPassShader.js', 'OutputShader.js', 'FontLoader.js', 'TextGeometry.js', 'BufferGeometryUtils.js', 'site-data.js', 'content.js', 'transition.js', 'maintenance.js'];
+  var files = function () {
+    var got = {}; try { performance.getEntriesByType('resource').forEach(function (r) { var n = r.name.split('?')[0].split('/').pop(); got[n] = Math.round(r.duration); }); } catch (e) { /* rien */ }
+    var miss = WANT.filter(function (n) { return !(n in got); });
+    var slow = Object.keys(got).filter(function (n) { return got[n] > 3000; }).map(function (n) { return n + ' ' + sec(got[n]); });
+    return 'reçus ' + (WANT.length - miss.length) + '/' + WANT.length + (miss.length ? ' ; manquants : ' + miss.join(', ') : '') + (slow.length ? ' ; lents : ' + slow.join(', ') : '') + ' ; supabase ' + (window.supabase ? 'ok' : 'absent');
+  };
+  var report = function () { return ' — ' + BUILD + ' | étape : « ' + step.name + ' » depuis ' + sec(Date.now() - step.t) + ' | ' + log.join(' · ') + ' | ' + files() + ' | GPU : ' + (gpu || '?') + ' | ' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90); };
+  window.__planetReport = report;
+  document.addEventListener('DOMContentLoaded', function () { if (step.name === 'Téléchargement des scripts') window.__planetStep('Page lue, attente des modules'); });
+  var early = window.__planetEarly = function (m, soft) { if (window.__planetReady) return; var t = document.getElementById('loadTxt'); if (t) t.dataset.err = 1; window.__planetFail('Erreur au chargement : ' + m + report(), soft); };
   // les erreurs des scripts d'un autre domaine arrivent sans nom de fichier (« Script error. ») : on les affiche quand même, sans abandonner
   window.addEventListener('error', function (e) { if (e.filename && !/planete|three|jsdelivr|es-module-shims/.test(e.filename)) return; early((e.message || 'script') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''), !e.filename); });
   window.addEventListener('unhandledrejection', function (e) { early(String(e.reason && e.reason.message || e.reason)); });
@@ -248,6 +261,17 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
 <script src="../js/site-data.js"></script>
 <script src="../styles/content.js"></script>
 <script src="../styles/transition.js"></script>
-<script type="module" src="app.js"></script>
+<!-- chargement par import() : si un module ne vient pas, on obtient l'erreur exacte (un <script type="module" src> échouerait en silence) -->
+<script type="module">
+window.__planetStep && window.__planetStep('Chargement des modules du jeu');
+import('./app.js').catch(async e => {
+  // on cherche lequel coince en les important un par un
+  let culprit = '';
+  for (const m of ['three', './world.js', './look.js', './props.js', './ambience.js', './audio.js', './tune.js']) {
+    try { await import(m); } catch (e2) { culprit = ' — module en cause : ' + m + ' (' + (e2 && e2.message || e2) + ')'; break; }
+  }
+  window.__planetEarly && window.__planetEarly('import de app.js : ' + (e && e.message || e) + culprit);
+});
+</script>
 </body>
 </html>

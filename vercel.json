@@ -1,4 +1,7 @@
 {
+  "redirects": [
+    { "source": "/planete", "destination": "/planete/", "permanent": true }
+  ],
   "headers": [
     {
       "source": "/(.*)",
