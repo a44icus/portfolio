@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, buildZones } from './props.js';
-import { stylizeTree, makePost, makeGroundLeaves, makeSpray } from './look.js';
+import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails } from './look.js';
 import { makeAmbience } from './ambience.js';
 
 const $ = s => document.querySelector(s);
@@ -105,6 +105,8 @@ const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 2200 : 4500, (
   return e.point(Math.random() * e.len, (Math.random() - 0.5) * 2.6);
 });
 scene.add(groundLeaves.mesh); stylizeTree(groundLeaves.mesh);
+const trails = makeTrails(); scene.add(trails.group);
+const trailHeads = [new THREE.Vector3(), new THREE.Vector3()], trailSide = new THREE.Vector3();
 const spray = makeSpray(quality === 'low' ? 70 : 140); scene.add(spray.mesh);
 // la caméra part face au pavillon « Profil »
 camera.position.copy(SECTIONS[0].dir).multiplyScalar(innerWidth / innerHeight < 0.8 ? 132 : 98).addScaledVector(new THREE.Vector3(0, 1, 0), 6);
@@ -451,6 +453,11 @@ function stepWalk(dt) {
   const pitch = S2.pitch * (1 - hv) + bob * (0.03 * Math.sin(P.t * 2.3 + 1) - 0.05 * Math.max(0, throttle) * Math.min(1, Math.abs(P.speed) / 3));
   const roll = S2.roll * (1 - hv) + bob * (0.04 * Math.sin(P.t * 1.9) - P.steer * Math.min(1, Math.abs(P.speed) / 5) * 0.16);
   avatar.userData.pose(hv, P.fan, S2.wy, S2.y, pitch, roll, P.boost, P.t);
+  // traînées du turbo, posées au sol derrière les échappements
+  avatar.updateMatrixWorld(true);
+  avatar.localToWorld(trailHeads[0].set(-0.22, 0.05, -0.66)); avatar.localToWorld(trailHeads[1].set(0.22, 0.05, -0.66));
+  trailSide.copy(right);
+  trails.update(dt, trailHeads, trailSide, P.boost * (1 - hv) * (P.ground || P.airT < 0.2 ? 1 : 0.5));
   // l'herbe se couche sous les pneus
   if (P.ground && hv < 0.5 && Math.abs(P.speed) > 0.05) {
     avatar.updateMatrixWorld(true);
@@ -591,6 +598,7 @@ function frame() {
   groundLeaves.update(dt, avatar.position, P.speed, mode === 'walk' && P.ground && P.hover < 0.5);
   if (mode === 'walk' && (++mmTick & 1)) drawMinimap();
   spray.mesh.visible = mode === 'walk';
+  trails.group.visible = mode === 'walk';
   ambience.update(dt, t, mode, avatar.position, camera);
   FADE.uFadeOn.value = mode === 'walk' ? 1 : 0; FADE.uFadeTarget.value.copy(avatar.position).addScaledVector(avatar.position.clone().normalize(), 0.35);
   // en voiture : focale longue et flou de maquette ; en orbite : vue normale

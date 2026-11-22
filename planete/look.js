@@ -206,3 +206,51 @@ export function makeGroundLeaves(planet, count, spot) {
     },
   };
 }
+
+/* ---------- traînées lumineuses du turbo : deux rubans au sol, jaune-blanc puis rose, qui s'effacent ---------- */
+export function makeTrails(N = 90, life = 1.7, width = 0.09) {
+  const group = new THREE.Group();
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: 'attribute float aT; attribute float aA; varying float vT; varying float vA; void main(){ vT = aT; vA = aA; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `varying float vT; varying float vA;
+      void main(){
+        vec3 hot = vec3(1.0, 0.82, 0.35) * 1.25, mid = vec3(1.0, 0.38, 0.42) * 0.95, cool = vec3(0.9, 0.16, 0.72) * 0.8;
+        vec3 c = vT < 0.15 ? mix(hot, mid, vT / 0.15) : mix(mid, cool, min(1.0, (vT - 0.15) / 0.35));
+        gl_FragColor = vec4(c * vA * (1.0 - 0.35 * smoothstep(0.0, 0.08, vT)), vA);
+      }`,
+  });
+  const trails = [0, 1].map(() => {
+    const pos = new Float32Array(N * 2 * 3), aT = new Float32Array(N * 2), aA = new Float32Array(N * 2), idx = [];
+    for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aT', new THREE.BufferAttribute(aT, 1)); g.setAttribute('aA', new THREE.BufferAttribute(aA, 1)); g.setIndex(idx);
+    const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = 3; group.add(m);
+    return { g, pts: [] };   // pts : { p, side, age, k }
+  });
+  const v = new THREE.Vector3();
+  return {
+    group,
+    /** heads : positions des deux échappements au sol ; side : vecteur latéral ; k : force (0 = pas de turbo) */
+    update(dt, heads, side, k) {
+      trails.forEach((tr, j) => {
+        tr.pts.forEach(p => { p.age += dt; });
+        while (tr.pts.length && tr.pts[tr.pts.length - 1].age > life) tr.pts.pop();
+        const head = heads[j], last = tr.pts[0];
+        if (k > 0.02 && (!last || last.p.distanceTo(head) > 0.1)) { tr.pts.unshift({ p: head.clone(), side: side.clone(), age: 0, k }); if (tr.pts.length > N) tr.pts.pop(); }
+        else if (last && k > 0.02) { last.p.copy(head); last.side.copy(side); last.age = 0; last.k = k; }
+        const pos = tr.g.attributes.position.array, aT = tr.g.attributes.aT.array, aA = tr.g.attributes.aA.array;
+        for (let i = 0; i < N; i++) {
+          const p = tr.pts[Math.min(i, tr.pts.length - 1)];
+          if (!p) { aA[i * 2] = aA[i * 2 + 1] = 0; continue; }
+          const t = Math.min(1, p.age / life), w = width * (1 - 0.5 * t);
+          v.copy(p.p).addScaledVector(p.side, w / 2); pos.set([v.x, v.y, v.z], i * 6);
+          v.copy(p.p).addScaledVector(p.side, -w / 2); pos.set([v.x, v.y, v.z], i * 6 + 3);
+          const a = i < tr.pts.length ? p.k * (1 - t) : 0;
+          aT[i * 2] = aT[i * 2 + 1] = t; aA[i * 2] = aA[i * 2 + 1] = a;
+        }
+        tr.g.attributes.position.needsUpdate = tr.g.attributes.aT.needsUpdate = tr.g.attributes.aA.needsUpdate = true;
+      });
+    },
+  };
+}
