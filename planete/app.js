@@ -1048,6 +1048,7 @@ const tuneHooks = {
     GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur;
     LUPIN.uLupS.value = T.lupins.taille; LUPIN.uLupH.value = T.lupins.hauteur; LUPIN.uLupWind.value = T.lupins.vent; LUPIN.uFlorD.value = T.lupins.fleurs; LUPIN.uFlorS.value = T.lupins.tailleFleurs; planet.setLupinDensity(T.lupins.densite);
     planet.setGrassDensity(T.herbe.densite);
+    planet.setPathSoft(T.chemins.adoucissement || 0);
     TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons;
     planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * T.arbres.densite); });
     GLEAF.uLeafS.value = T.feuilles.taille; groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
@@ -1061,6 +1062,8 @@ const tuneHooks = {
     else { S.weatherMode = T.ambiance.meteo; S.weather = T.ambiance.meteo; }
   },
   recolorGrass() { planet.recolorGrass(TUNE.herbe.base, TUNE.herbe.pointe); },
+  recolorPaths() { planet.recolorPaths(TUNE.chemins.couleur, TUNE.chemins.bord); },
+  previewPaths() { planet.previewPaths(TUNE.chemins.largeur, TUNE.chemins.courbure); },
   recolorTrees() { const A = TUNE.arbres; planet.recolorTrees([A.jaune, A.olive, A.orange, A.rouge, A.rose, A.sapin]); },
   recolorLupins() { const L = TUNE.lupins; planet.recolorLupins([L.violet, L.mauve, L.rose, L.bleu, L.blanc]); },
 };

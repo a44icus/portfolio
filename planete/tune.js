@@ -14,6 +14,7 @@ export const DEFAULTS = {
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
   eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
   sable: { couleur: '#fee09f', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
+  chemins: { couleur: '#f3bf86', bord: '#9f5f3c', largeur: 1.15, courbure: 0.35, adoucissement: 0.33 },
   herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
   arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
     jaune: '#c9b52e', olive: '#63bb69', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#feecf2' },
@@ -107,6 +108,16 @@ export async function toggleTunePanel(hooks) {
   ch(fS.add(TUNE.sable, 'paillettes', 0, 1, 0.005).name('Paillettes (densité)'));
   ch(fS.add(TUNE.sable, 'eclatPaillettes', 0, 6, 0.05).name('Paillettes (éclat)'));
 
+  const fChem = gui.addFolder('Chemins');
+  ch(fChem.addColor(TUNE.chemins, 'couleur').name('Couleur'), () => hooks.recolorPaths());
+  ch(fChem.addColor(TUNE.chemins, 'bord').name('Couleur des bords'), () => hooks.recolorPaths());
+  ch(fChem.add(TUNE.chemins, 'adoucissement', 0, 1, 0.01).name('Adoucissement des bords'));
+  // largeur et courbure : le chemin se redessine en direct ; le relief, les ponts et les lanternes suivent au rechargement
+  let pvT = 0; const pathNote = () => { cancelAnimationFrame(pvT); pvT = requestAnimationFrame(() => hooks.previewPaths && hooks.previewPaths()); applyBtn.name('↻ Appliquer au relief et au décor (recharge)'); applyBtn.domElement.parentElement.style.color = '#d9ff4a'; };
+  ch(fChem.add(TUNE.chemins, 'largeur', 0.5, 2.5, 0.05).name('Largeur'), pathNote);
+  ch(fChem.add(TUNE.chemins, 'courbure', 0, 2.5, 0.05).name('Courbure max'), pathNote);
+  const applyBtn = fChem.add({ go() { save(); location.reload(); } }, 'go').name('↻ Recharger (largeur, courbure)');
+
   const fH = gui.addFolder('Herbe');
   ch(fH.addColor(TUNE.herbe, 'base').name('Couleur : base'), () => hooks.recolorGrass());
   ch(fH.addColor(TUNE.herbe, 'pointe').name('Couleur : pointe'), () => hooks.recolorGrass());
@@ -193,7 +204,7 @@ export async function toggleTunePanel(hooks) {
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(TUNE, null, 2)], { type: 'application/json' }));
       a.download = 'reglages-planete.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     },
-    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); hooks.recolorLupins(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
+    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); hooks.recolorLupins(); hooks.recolorPaths && hooks.recolorPaths(); hooks.previewPaths && hooks.previewPaths(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
   };
   gui.add(actions, 'copier').name('📋 Copier les réglages');
   gui.add(actions, 'telecharger').name('⬇ Télécharger (JSON)');

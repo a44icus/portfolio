@@ -10,6 +10,7 @@
    ============================================================================ */
 import * as THREE from 'three';
 import { LOOK, UPSIDE_GLSL, UPSIDE_UNIFORMS } from './look.js';
+import { TUNE } from './tune.js';
 
 export const SEA_R = 32;      // rayon de la mer dans la scène
 export const PAV_R = 2.6;     // rayon de l'esplanade d'une zone (scène)
@@ -90,7 +91,9 @@ const tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
 const EARTH = new THREE.Color('#f59a46');
 /** Couverture d'herbe : des plaques franches, de la terre nue entre elles. */
 const grassPatch = d => noise.fbm(d.x * 14 + 4, d.y * 14, d.z * 14, 3);
-const PATH_COL = new THREE.Color('#f39a4c'), PATH_EDGE = new THREE.Color('#d4703a'), RUT = new THREE.Color('#c25f30');
+// chemins : couleur, bords plus foncés, largeur et courbure viennent des réglages (la couleur se change en direct, le reste au rechargement)
+const PATH_COL = new THREE.Color(TUNE.chemins.couleur), PATH_EDGE = new THREE.Color(TUNE.chemins.bord), RUT = PATH_COL.clone().multiplyScalar(0.88);
+const PATH_W = TUNE.chemins.largeur, PATH_CURVE = TUNE.chemins.courbure;
 function colorAt(d, h, steep, out, path = 0, rut = 0) {
   const above = h - R;
   const tone = noise.fbm(d.x * 6 + 9, d.y * 6, d.z * 6, 3) * 0.5 + 0.5;
@@ -103,7 +106,7 @@ function colorAt(d, h, steep, out, path = 0, rut = 0) {
   if (above < 0) out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.7), Math.min(1, -above / 6)); // fond marin
   out.lerp(COL.rock, smoothstep(0.95, 1.25, steep));                                        // roche des falaises
   out.lerp(COL.snow, smoothstep(0.72, 0.9, (above + tone * 4) / MAX_H) * (1 - smoothstep(0.8, 1.2, steep))); // neige des sommets
-  if (path > 0 && above > 0.4) out.lerp(tmpC2.copy(PATH_EDGE).lerp(PATH_COL, smoothstep(0.35, 0.8, path)).multiplyScalar(0.92 + tone * 0.16), smoothstep(0, 0.35, path)); // routes de terre
+  if (path > 0 && above > 0.4) out.lerp(tmpC2.copy(PATH_EDGE).lerp(PATH_COL, smoothstep(0.4, 0.8, path)).multiplyScalar(0.92 + tone * 0.16), smoothstep(0, 0.22, path)); // routes de terre
   if (rut > 0 && above > 0.4) out.lerp(RUT, rut * 0.55);                                  // ornières
   return out;
 }
@@ -312,7 +315,7 @@ export function buildPlanet(anchors, quality = 'high') {
   const heightP = (x, y, z) => plaza(x, y, z, rawHeight(x, y, z));
 
   /* ---------- routes de terre entre les zones, ponts en bois au-dessus de l'eau ---------- */
-  const ROAD_W = 0.8 / SEA_R, STEP = 0.25 / SEA_R, MAX_BRIDGE = 16 / SEA_R;
+  const ROAD_W = 0.8 * PATH_W / SEA_R, STEP = 0.25 / SEA_R, MAX_BRIDGE = 16 / SEA_R;
   /** Valeur d'un tableau échantillonné le long d'une route, à l'abscisse angulaire th. */
   function sample(arr, e, th) { const f = Math.max(0, Math.min(e.M, th / e.len * e.M)), i = Math.min(e.M - 1, Math.floor(f)), t = f - i; return arr[i] + (arr[i + 1] - arr[i]) * t; }
   function makeRoad(a, b) {
@@ -321,15 +324,44 @@ export function buildPlanet(anchors, quality = 'high') {
     const M = Math.max(8, Math.ceil(len / STEP)), prof = new Float32Array(M + 1), wet = new Float32Array(M + 1), off = new Float32Array(M + 1), land = new Float32Array(M + 1);
     const phase = Math.abs(a.x * 13.1 + b.y * 7.7) % 6.28;
     const e = { a, b, u, n, len, M, prof, wet, off, land };
-    const p = new THREE.Vector3();
+    const p = new THREE.Vector3(), dS = len / M;
+    // tracé : une route courte ondule à peine ; plus elle est longue, plus elle serpente (grandes courbes, et une ondulation plus fine par-dessus)
+    const Lu = len * SEA_R, long = Math.min(1, Math.max(0, (Lu - 14) / 22));
+    const ampRaw = (1.1 + 1.9 * long) / SEA_R, k1 = 7 - 4 * long, k2 = k1 * 0.45;
+    const base = new Float32Array(M + 1), baseRaw = new Float32Array(M + 1);
     for (let i = 0; i <= M; i++) {
-      const th = i / M * len;
-      off[i] = Math.sin(th * SEA_R / 7 + phase) * 1.1 / SEA_R * Math.sin(Math.PI * i / M);   // la route serpente doucement
-      p.copy(a).multiplyScalar(Math.cos(th)).addScaledVector(u, Math.sin(th)).addScaledVector(n, off[i]).normalize();
-      const h = heightP(p.x, p.y, p.z);
-      wet[i] = h < R + 0.4 ? 1 : 0;
-      prof[i] = Math.max(h, R + 1);
+      const th = i * dS, env = Math.min(1, i / (M * 0.12), (M - i) / (M * 0.12)), envS = env * env * (3 - 2 * env);
+      baseRaw[i] = (Math.sin(th * SEA_R / k1 + phase) + 0.35 * long * Math.sin(th * SEA_R / k2 + phase * 1.7)) * ampRaw * envS;
+      base[i] = baseRaw[i] * PATH_CURVE;
     }
+    const sample2 = () => {   // relief, eau et profil sous le tracé actuel
+      for (let i = 0; i <= M; i++) {
+        const th = i * dS;
+        p.copy(a).multiplyScalar(Math.cos(th)).addScaledVector(u, Math.sin(th)).addScaledVector(n, off[i]).normalize();
+        const h = heightP(p.x, p.y, p.z);
+        wet[i] = h < R + 0.4 ? 1 : 0;
+        prof[i] = Math.max(h, R + 1);
+      }
+    };
+    // les ponts restent droits : là où le tracé franchit l'eau (et sur les rampes de part et d'autre), la route se redresse sur la ligne droite.
+    // On recommence tant que le tracé redressé fait apparaître de nouvelles traversées.
+    const calm = new Float32Array(M + 1).fill(1), ramp = Math.round(3.5 / SEA_R / dS), pad = Math.round(3.2 / SEA_R / dS);
+    for (let pass = 0; pass < 4; pass++) {
+      for (let i = 0; i <= M; i++) off[i] = base[i] * calm[i];
+      sample2();
+      let changed = false;
+      for (let i = 0; i <= M; i++) if (wet[i]) for (let k = Math.max(0, i - pad - ramp); k <= Math.min(M, i + pad + ramp); k++) {
+        const dist = Math.abs(k - i), c = dist <= pad ? 0 : (dist - pad) / ramp;
+        if (c < calm[k] - 1e-3) { calm[k] = c; changed = true; }
+      }
+      if (!changed) break;
+    }
+    const calmS = new Float32Array(M + 1);
+    for (let i = 0; i <= M; i++) { const c = calm[i]; calmS[i] = c * c * (3 - 2 * c); off[i] = base[i] * calmS[i]; }
+    sample2();
+    e.maxOff = 0; for (let i = 0; i <= M; i++) e.maxOff = Math.max(e.maxOff, Math.abs(off[i]));
+    // aperçu en direct (réglages) : le dessin du chemin peut suivre une autre courbure sans toucher au relief
+    e.baseRaw = baseRaw; e.calmS = calmS; e.offP = off.slice(); e.maxOffP = e.maxOff;
     // passages sur l'eau
     const runs = []; let water = 0, maxRun = 0, run = 0;
     for (let i = 0; i <= M; i++) {
@@ -337,9 +369,9 @@ export function buildPlanet(anchors, quality = 'high') {
       else if (run) { runs[runs.length - 1].i1 = i - 1; maxRun = Math.max(maxRun, run); run = 0; }
     }
     maxRun = Math.max(maxRun, run);
-    e.runs = runs; e.water = water * len / M; e.maxRun = maxRun * len / M;
+    e.runs = runs; e.water = water * dS; e.maxRun = maxRun * dS;
     // profil lissé : pentes douces, en déblai dans les collines et en remblai dans les creux
-    const tmp = new Float32Array(M + 1), Wn = Math.max(2, Math.round(3 / SEA_R / (len / M)));
+    const tmp = new Float32Array(M + 1), Wn = Math.max(2, Math.round(3 / SEA_R / dS));
     for (let pass = 0; pass < 4; pass++) {
       for (let i = 0; i <= M; i++) { let sum = 0, c = 0; for (let k = Math.max(0, i - Wn); k <= Math.min(M, i + Wn); k++) { sum += prof[k]; c++; } tmp[i] = sum / c; }
       tmp[0] = prof[0]; tmp[M] = prof[M];
@@ -350,24 +382,37 @@ export function buildPlanet(anchors, quality = 'high') {
     e.groundAt = th => sample(prof, e, th) * S;
     return e;
   }
-  // toutes les paires proches ; on garde un réseau qui relie les zones au moindre coût (l'eau coûte plus cher)
-  const cands = [];
-  for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) {
-    if (Math.acos(Math.min(1, sites[i].dir.dot(sites[j].dir))) > 1.25) continue;
+  // le réseau : une grande boucle qui passe par toutes les zones (le circuit le moins coûteux ; l'eau et les longs ponts coûtent cher,
+  // deux traversées d'eau côte à côte sont pénalisées pour que les ponts ne se chevauchent pas)
+  const wetPts = e => { const out = []; for (const r of e.runs) for (let i = r.i0; i <= r.i1; i += 2) out.push(e.point(i / e.M * e.len)); return out; };
+  const clash = (a, b) => { const A = a._wp || (a._wp = wetPts(a)), B = b._wp || (b._wp = wetPts(b)), c = Math.cos(4 / SEA_R); if (!A.length || !B.length) return false; for (const p of A) for (const q of B) if (p.dot(q) > c) return true; return false; };
+  const NZ = sites.length, road = [];
+  for (let i = 0; i < NZ; i++) { road[i] = []; for (let j = 0; j < NZ; j++) road[i][j] = null; }
+  for (let i = 0; i < NZ; i++) for (let j = i + 1; j < NZ; j++) {
     const e = makeRoad(sites[i].dir, sites[j].dir); e.i = i; e.j = j;
-    if (e.maxRun > MAX_BRIDGE || e.water > e.len * 0.45) continue;
-    e.cost = e.len + e.water * 1.5; cands.push(e);
+    e.cost = e.len * (1 + Math.max(0, e.len - 1.3) * 3) + e.water * 3 + e.maxRun * 2 + (e.maxRun > MAX_BRIDGE * 1.4 ? 10 : 0);
+    road[i][j] = road[j][i] = e;
   }
-  cands.sort((x, y) => x.cost - y.cost);
-  const parent = sites.map((_, k) => k), find = k => (parent[k] === k ? k : (parent[k] = find(parent[k])));
-  const edges = [], extra = [];
-  for (const e of cands) { const ra = find(e.i), rb = find(e.j); if (ra !== rb) { parent[ra] = rb; edges.push(e); } else extra.push(e); }
-  // quelques boucles, mais jamais deux traversées d'eau côte à côte (sinon deux ponts se chevauchent : on n'en garde qu'un)
-  const wetPts = e => { const out = []; for (const r of e.runs) for (let i = r.i0; i <= r.i1; i++) out.push(e.point(i / e.M * e.len)); return out; };
-  const clash = (a, b) => { const A = wetPts(a), B = wetPts(b), c = Math.cos(4 / SEA_R); if (!A.length || !B.length) return false; for (const p of A) for (const q of B) if (p.dot(q) > c) return true; return false; };
-  for (let k = edges.length - 1; k > 0; k--) for (let j = 0; j < k; j++) if (clash(edges[k], edges[j]) && edges.length > sites.length - 1) { edges.splice(k, 1); break; }
-  let loops = 0;
-  for (const e of extra) { if (loops >= 2 || e.len * SEA_R >= 26) continue; if (edges.some(f => clash(e, f))) continue; edges.push(e); loops++; }
+  let bestTour = null, bestCost = Infinity;
+  const perm = [], used = new Array(NZ).fill(false);
+  (function search(depth, cost) {
+    if (cost >= bestCost) return;
+    if (depth === NZ) {
+      const close = road[perm[NZ - 1]][perm[0]], tour = perm.map((v, k) => road[v][perm[(k + 1) % NZ]]);
+      let c = cost + close.cost;
+      for (let x = 0; x < tour.length; x++) for (let y = x + 1; y < tour.length; y++) if (tour[x].water && tour[y].water && clash(tour[x], tour[y])) c += 2;
+      if (c < bestCost) { bestCost = c; bestTour = tour; }
+      return;
+    }
+    for (let v = 1; v < NZ; v++) {
+      if (used[v]) continue;
+      if (depth === NZ - 1 && v < perm[1]) continue;   // chaque circuit une seule fois (pas son sens inverse)
+      used[v] = true; perm.push(v);
+      search(depth + 1, cost + road[perm[depth - 1]][v].cost);
+      perm.pop(); used[v] = false;
+    }
+  })((perm.push(0), used[0] = true, 1), 0);
+  const edges = bestTour.slice();
 
   // ponts : chaque passage sur l'eau, prolongé d'un peu de terre de chaque côté
   const bridges = [];
@@ -397,7 +442,7 @@ export function buildPlanet(anchors, quality = 'high') {
     RT.e = null; RT.d = 1e9;
     for (const e of edges) {
       const dn = x * e.n.x + y * e.n.y + z * e.n.z;
-      if (Math.abs(dn) > ROAD_W * 3.2 + 1.2 / SEA_R) continue;
+      if (Math.abs(dn) > ROAD_W * 3.2 + e.maxOff + 0.2 / SEA_R) continue;   // (la route peut s'écarter de la ligne droite de e.maxOff)
       const th = Math.atan2(x * e.u.x + y * e.u.y + z * e.u.z, x * e.a.x + y * e.a.y + z * e.a.z);
       if (th < 0 || th > e.len) continue;
       const d = Math.abs(dn - sample(e.off, e, th));
@@ -417,14 +462,29 @@ export function buildPlanet(anchors, quality = 'high') {
   }
   const heightDir = d => heightB(d.x, d.y, d.z) * S;              // en unités de la scène
   const ROAD = { rut: 0 };
+  // le dessin des chemins (couleur au sol, détection « sur la route ») suit la largeur et la courbure de l'aperçu ; le relief garde celles du chargement
+  let ROAD_WP = ROAD_W;
+  const RTP = { e: null, d: 0, th: 0 };
+  function roadAtP(x, y, z) {
+    RTP.e = null; RTP.d = 1e9;
+    for (const e of edges) {
+      const dn = x * e.n.x + y * e.n.y + z * e.n.z;
+      if (Math.abs(dn) > ROAD_WP * 3.2 + e.maxOffP + 0.2 / SEA_R) continue;
+      const th = Math.atan2(x * e.u.x + y * e.u.y + z * e.u.z, x * e.a.x + y * e.a.y + z * e.a.z);
+      if (th < 0 || th > e.len) continue;
+      const d = Math.abs(dn - sample(e.offP, e, th));
+      if (d < RTP.d) { RTP.d = d; RTP.e = e; RTP.th = th; }
+    }
+    return RTP;
+  }
   /** 1 sur la chaussée, 0 en dehors ; ROAD.rut : les deux ornières. */
   function pathAt(x, y, z) {
     ROAD.rut = 0;
-    const r = roadAt(x, y, z);
+    const r = roadAtP(x, y, z);
     if (!r.e) return 0;
-    const d = r.d + noise.noise(x * 44 + 3, y * 44, z * 44) * ROAD_W * 0.12;
-    const k = 1 - smoothstep(ROAD_W * 0.8, ROAD_W * 1.12, d);
-    ROAD.rut = k * (1 - smoothstep(0.05, 0.14, Math.abs(d / ROAD_W - 0.42)));
+    const d = r.d + noise.noise(x * 44 + 3, y * 44, z * 44) * ROAD_WP * 0.05;
+    const k = 1 - smoothstep(ROAD_WP * 0.55, ROAD_WP * 1.3, d);   // bord assez large pour couvrir 2 ou 3 sommets du sol : une bordure continue, pas des taches
+    ROAD.rut = k * (1 - smoothstep(0.05, 0.14, Math.abs(d / ROAD_WP - 0.42)));
     return k;
   }
   const pathDir = d => pathAt(d.x, d.y, d.z);
@@ -435,7 +495,7 @@ export function buildPlanet(anchors, quality = 'high') {
     BI.b = null; let best = 2 / SEA_R;
     for (const b of bridges) {
       const e = b.e, dn = dir.dot(e.n);
-      if (Math.abs(dn) > best + 0.6 / SEA_R) continue;
+      if (Math.abs(dn) > best + e.maxOff + 0.1 / SEA_R) continue;
       const th = Math.atan2(dir.dot(e.u), dir.dot(e.a));
       if (th < b.t0 || th > b.t1) continue;
       const lat = dn - sample(e.off, e, th);
@@ -455,12 +515,24 @@ export function buildPlanet(anchors, quality = 'high') {
   /* ---------- sol et mer, maillés ensemble (la profondeur de l'eau vient du relief) ---------- */
   const n = quality === 'low' ? 160 : 224, side = n + 3, group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  // chemins dessinés au pixel : chaque sommet connaît sa distance au milieu de la route (aRoad.x, en unités) et sa nuance (aRoad.y) ;
+  // le bord du chemin devient une ligne nette (en interpolant une distance, et non une couleur, on n'a plus de dents de scie)
+  const PATHU = { uPathCol: { value: PATH_COL }, uPathEdge: { value: PATH_EDGE }, uRut: { value: RUT }, uRoadW: { value: ROAD_W * SEA_R }, uPathSoft: { value: TUNE.chemins.adoucissement || 0 } };
   // sable pailleté : de minuscules éclats qui scintillent selon l'angle de vue, seulement sur le sable et les routes de terre
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uTime = waterUniforms.uTime; Object.assign(sh.uniforms, SAND, TILT);
-    sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = '#define GLIT_K ' + (quality === 'low' ? '0.6' : '1.0') + '\n' + GLITTER_GLSL + 'uniform float uTime;\nuniform float uGlitS;\nuniform float uGlitSI;\nuniform float uGlitDay;\nuniform vec3 uSand;\nuniform float uSandMix;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-      diffuseColor.rgb = mix(diffuseColor.rgb, uSand, uSandMix * smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r));`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    sh.uniforms.uTime = waterUniforms.uTime; Object.assign(sh.uniforms, SAND, TILT, PATHU);
+    sh.vertexShader = 'attribute vec2 aRoad;\nvarying vec2 vRoad;\nvarying vec3 vWPos;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vRoad = aRoad;');
+    sh.fragmentShader = '#define GLIT_K ' + (quality === 'low' ? '0.6' : '1.0') + '\n' + GLITTER_GLSL + 'uniform float uPathSoft;\nuniform vec3 uPathCol;\nuniform vec3 uPathEdge;\nuniform vec3 uRut;\nuniform float uRoadW;\nvarying vec2 vRoad;\nuniform float uTime;\nuniform float uGlitS;\nuniform float uGlitSI;\nuniform float uGlitDay;\nuniform vec3 uSand;\nuniform float uSandMix;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb = mix(diffuseColor.rgb, uSand, uSandMix * smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r));
+      {   // le chemin : milieu clair, bords plus foncés, deux ornières ; un bord net (largeur de transition d'environ un pixel)
+        float pd = vRoad.x, aa = max(fwidth(pd), 0.004), sf = uPathSoft * uRoadW;   // sf : adoucissement des bords (réglage)
+        float pk = 1.0 - smoothstep(uRoadW * 0.92 - aa - sf * 0.55, uRoadW * 0.92 + aa + sf * 0.45, pd);
+        float edge = smoothstep(uRoadW * 0.72 - aa - sf * 0.35, uRoadW * 0.72 + aa + sf * 0.35, pd);
+        vec3 pc = mix(uPathCol, uPathEdge, edge) * vRoad.y;
+        float rut = 1.0 - smoothstep(0.035, 0.075, abs(pd / uRoadW - 0.42));
+        pc = mix(pc, uRut, rut * 0.5 * (1.0 - edge));
+        diffuseColor.rgb = mix(diffuseColor.rgb, pc, pk);
+      }`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       {
         float sand = smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r);
         // une paillette = un point fixe du sol, dessiné sur un seul pixel, qui scintille sur place
@@ -517,6 +589,7 @@ export function buildPlanet(anchors, quality = 'high') {
       flowers.push([gm.clone(), fc]);
     }
   }
+  const pathVerts = [], pathFaces = [], tmpC3 = new THREE.Color();
   for (let f = 0; f < 6; f++) {
     const pos = new Float32Array(side * side * 3), dirs = new Float32Array(side * side * 3), hb = new Float32Array(side * side);
     for (let j = 0; j < side; j++) for (let i = 0; i < side; i++) {
@@ -526,7 +599,7 @@ export function buildPlanet(anchors, quality = 'high') {
       pos[k] = d.x * h * S; pos[k + 1] = d.y * h * S; pos[k + 2] = d.z * h * S; dirs[k] = d.x; dirs[k + 1] = d.y; dirs[k + 2] = d.z;
     }
     const cnt = (n + 1) * (n + 1);
-    const vp = new Float32Array(cnt * 3), vn = new Float32Array(cnt * 3), vc = new Float32Array(cnt * 3);
+    const vp = new Float32Array(cnt * 3), vn = new Float32Array(cnt * 3), vc = new Float32Array(cnt * 3), vroad = new Float32Array(cnt * 2);
     const wp = new Float32Array(cnt * 3), wd = new Float32Array(cnt);
     const at = (i, j, out) => { const k = (j * side + i) * 3; return out.set(pos[k], pos[k + 1], pos[k + 2]); };
     for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
@@ -536,13 +609,18 @@ export function buildPlanet(anchors, quality = 'high') {
       nn.crossVectors(a, b).normalize(); d.set(dirs[k], dirs[k + 1], dirs[k + 2]); if (nn.dot(d) < 0) nn.negate();
       vn[v] = nn.x; vn[v + 1] = nn.y; vn[v + 2] = nn.z;
       const cos = Math.min(1, Math.max(0.05, nn.dot(d))), steep = Math.sqrt(1 - cos * cos) / cos;
-      const pk = pathAt(d.x, d.y, d.z);
-      colorAt(d, hb[g], steep, tmpC, pk, ROAD.rut);
+      const pk = pathAt(d.x, d.y, d.z), rut0 = ROAD.rut;
+      colorAt(d, hb[g], steep, tmpC, 0, 0);   // couleur du sol sans le chemin (le chemin est dessiné par le shader)
+      { const rr = roadAtP(d.x, d.y, d.z), k2 = (j * (n + 1) + i) * 2; vroad[k2] = rr.e && hb[g] - R > 0.4 ? rr.d * SEA_R : 99; vroad[k2 + 1] = 0.92 + (noise.fbm(d.x * 6 + 9, d.y * 6, d.z * 6, 3) * 0.5 + 0.5) * 0.16; }
+      // sommet près d'une route : on garde de quoi redessiner le chemin en direct (couleur sans chemin, nuance), quelles que soient largeur et courbure
+      if (hb[g] - R > 0.4 && edges.some(e => { const dn = d.dot(e.n); if (Math.abs(dn) > 10 / SEA_R) return false; const th = Math.atan2(d.dot(e.u), d.dot(e.a)); return th > -0.05 && th < e.len + 0.05; })) {
+        pathVerts.push({ f: pathFaces.length, k2: (j * (n + 1) + i) * 2, r: tmpC.r, g: tmpC.g, b: tmpC.b, tone: vroad[(j * (n + 1) + i) * 2 + 1], d: d.clone(), depth: R - hb[g] });
+      }
       grassAt(d, hb[g], steep, pk, a, b);
       vc[v] = tmpC.r; vc[v + 1] = tmpC.g; vc[v + 2] = tmpC.b;
       wp[v] = d.x * WR; wp[v + 1] = d.y * WR; wp[v + 2] = d.z * WR;
       wd[v / 3] = R - hb[g];
-      mapSplat(d, R - hb[g], tmpC);
+      mapSplat(d, R - hb[g], pk > 0 && hb[g] - R > 0.4 ? pathMix(tmpC3.copy(tmpC), pk, rut0, vroad[(j * (n + 1) + i) * 2 + 1]) : tmpC);   // la mini-carte, elle, garde le chemin dans ses couleurs
     }
     const index = new Uint32Array(n * n * 6), wIndex = []; let w = 0;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
@@ -551,7 +629,7 @@ export function buildPlanet(anchors, quality = 'high') {
       if (Math.max(wd[v00], wd[v10], wd[v01], wd[v11]) >= -1.5) wIndex.push(v00, v10, v11, v00, v11, v01);   // pas d'eau en pleine terre
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(vp, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(vn, 3)); geo.setAttribute('color', new THREE.BufferAttribute(vc, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(vp, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(vn, 3)); geo.setAttribute('color', new THREE.BufferAttribute(vc, 3)); geo.setAttribute('aRoad', new THREE.BufferAttribute(vroad, 2)); pathFaces.push(geo.attributes.aRoad);
     geo.setIndex(new THREE.BufferAttribute(index, 1)); geo.computeBoundingSphere();
     const gmesh = new THREE.Mesh(geo, mat); gmesh.receiveShadow = true; group.add(gmesh);
     for (let v = 0; v < cnt; v++) wd[v] = Math.max(-3, Math.min(30, wd[v]));
@@ -946,14 +1024,28 @@ export function buildPlanet(anchors, quality = 'high') {
 
   /* ---------- nuages arrondis ---------- */
   const clouds = new THREE.Group();
-  const puff = new THREE.IcosahedronGeometry(1, 3), cloudMat = new THREE.MeshStandardMaterial({ color: '#fff1ea', roughness: 1, transparent: true, opacity: 0.92, emissive: '#ffd9c8', emissiveIntensity: 0.18 });
+  // aspect coton : comme les feuillages, chaque boule est un bouquet de petites cartes, ici des flocons de coton ronds et duveteux
+  const cottonTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    let sd = 11; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+    const blob = (cx, cy, rad) => { const g = x.createRadialGradient(cx - rad * 0.25, cy - rad * 0.3, rad * 0.1, cx, cy, rad); g.addColorStop(0, '#ffffff'); g.addColorStop(0.75, '#fdfaff'); g.addColorStop(1, '#f1ebf8'); x.fillStyle = g; x.beginPath(); x.arc(cx, cy, rad, 0, Math.PI * 2); x.fill(); };
+    for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2 + r(), d = 22 + r() * 10; blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 14 + r() * 8); }   // couronne de petites bosses
+    blob(64, 64, 34);   // cœur
+    for (let i = 0; i < 6; i++) blob(46 + r() * 36, 46 + r() * 36, 12 + r() * 9);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const puff = leafCluster(64, 1, 0.82, 0.42);
+  { const c = puff.attributes.color; for (let i = 0; i < c.count; i++) { const v = 0.8 + 0.28 * (c.getX(i) - 0.5) / 0.7; c.setXYZ(i, v, v, v); } }   // dessous à peine ombré : un coton bien blanc
+  const cloudMat = new THREE.MeshStandardMaterial({ color: '#fff1ea', map: cottonTex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, vertexColors: true, roughness: 1, emissive: '#ffd9c8', emissiveIntensity: 0.22 });
   const puffs = [];
   for (let c = 0; c < 60; c++) {
     d.set(rng() * 2 - 1, (rng() * 2 - 1) * 0.8, rng() * 2 - 1).normalize(); orient(d);
     const t1 = new THREE.Vector3(1, 0, 0).applyQuaternion(quat), t2 = new THREE.Vector3(0, 0, 1).applyQuaternion(quat), alt = SEA_R + MAX_H * S + 1.4 + rng() * 1.2;
-    for (let p = 0, np = 4 + Math.floor(rng() * 4); p < np; p++) {
-      const s = 0.5 + rng() * 0.5;
-      m4.compose(ps.copy(d).multiplyScalar(alt).addScaledVector(t1, (rng() - 0.5) * 2.6).addScaledVector(t2, (rng() - 0.5) * 1.4), quat, sc.set(s * 1.25, s * 0.6, s));
+    // une touffe de coton : des boules de tailles variées, les plus grosses au milieu et un peu plus haut, plus petites sur les bords
+    for (let p = 0, np = 9 + Math.floor(rng() * 6); p < np; p++) {
+      const ox = (rng() - 0.5) * 2.8, oz = (rng() - 0.5) * 1.5, mid = 1 - Math.min(1, Math.hypot(ox / 1.4, oz / 0.75));
+      const s = 0.32 + rng() * 0.25 + mid * 0.38, up = mid * 0.35 + rng() * 0.12;
+      m4.compose(ps.copy(d).multiplyScalar(alt + up).addScaledVector(t1, ox).addScaledVector(t2, oz), quat, sc.set(s * 1.1, s * 0.82, s));
       puffs.push(m4.clone());
     }
   }
@@ -966,6 +1058,23 @@ export function buildPlanet(anchors, quality = 'high') {
   function sandAt(dir) { const above = heightB(dir.x, dir.y, dir.z) - R; if (above < -0.25 || pathDir(dir) > 0.2) return 0; return 1 - smoothstep(0.8, 2.2, above); }
   function animate() {}
 
+  /** Redessine les chemins sur les sommets proches des routes (couleur, bords, ornières) et sur la mini-carte. */
+  function repaintPaths() {
+    const c = new THREE.Color();
+    for (const pv of pathVerts) {
+      const rr = roadAtP(pv.d.x, pv.d.y, pv.d.z); pathFaces[pv.f].array[pv.k2] = rr.e ? rr.d * SEA_R : 99;   // distance au chemin (le shader dessine)
+      const pk = pathAt(pv.d.x, pv.d.y, pv.d.z), rut = ROAD.rut;
+      c.setRGB(pv.r, pv.g, pv.b); if (pk > 0) pathMix(c, pk, rut, pv.tone);
+      mapSplat(pv.d, pv.depth, c);
+    }
+    for (const a2 of pathFaces) a2.needsUpdate = true;
+  }
+  /** Couleur de chemin posée sur une couleur de sol (pour la mini-carte). */
+  function pathMix(c, pk, rut, toneMul) {
+    c.lerp(tmpC2.copy(PATH_EDGE).lerp(PATH_COL, smoothstep(0.4, 0.8, pk)).multiplyScalar(toneMul), smoothstep(0, 0.22, pk));
+    if (rut > 0) c.lerp(RUT, rut * 0.55);
+    return c;
+  }
   return { groundMesh, waterMesh, waterUniforms, decor, clouds, pavilions, groundRadius, isWet, sandAt, heightDir, animate, seaR: SWIM, waterR: WR, maxRelief: MAX_H * S, edges, bridges, bridgeR, bridgeAt, pathDir, onPlaza, crushGrass, crushLupins, map: MAP, treeDirs, trunkSpots, barkM, treeMeshes, bushMesh, updatePads,
     /** Nénuphars (pour la faune) : home (direction), off (décalage poussé par la vague) ; padR : rayon de leur surface. */
     pads: padState, padR: (R - 0.3) * S + 0.012,
@@ -974,6 +1083,16 @@ export function buildPlanet(anchors, quality = 'high') {
     /** Herbe : densité (0 à 1), tuile par tuile (l'ordre mélangé éclaircit partout pareil). */
     setGrassDensity(k) { for (const P of grassParts) P.mesh.count = Math.floor(P.n * k); },
     cullDecor,
+    /** Adoucissement des bords des chemins (0 : net, 1 : très fondu), en direct. */
+    setPathSoft(v) { PATHU.uPathSoft.value = v; },
+    /** Repeint les chemins en direct (couleur du milieu, couleur des bords) ; la mini-carte suit. */
+    recolorPaths(col, edge) { PATH_COL.set(col); PATH_EDGE.set(edge); RUT.copy(PATH_COL).multiplyScalar(0.88); repaintPaths(); },   // (le sol suit par les uniformes, la mini-carte est repeinte)
+    /** Aperçu en direct de la largeur et de la courbure : le chemin est redessiné au sol et sur la mini-carte (le relief suit au rechargement). */
+    previewPaths(width, curve) {
+      ROAD_WP = 0.8 * width / SEA_R; PATHU.uRoadW.value = 0.8 * width;
+      for (const e of edges) { e.maxOffP = 0; for (let i = 0; i <= e.M; i++) { e.offP[i] = e.baseRaw[i] * curve * e.calmS[i]; e.maxOffP = Math.max(e.maxOffP, Math.abs(e.offP[i])); } }
+      repaintPaths();
+    },
     /** Lupins : une couleur par famille, chaque fleur garde sa nuance. */
     recolorLupins(hexes) {
       if (!lupParts.length) return; const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
