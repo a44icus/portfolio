@@ -15,7 +15,28 @@ export const LOOK = {
   uShadowTint: { value: new THREE.Vector3(0.58, 0.3, 0.82) },  // ombres violet-magenta
   uLitTint: { value: new THREE.Vector3(1.12, 0.98, 0.82) },    // lumière chaude, orangée
   uStylize: { value: 1 },
+  // monde à l'envers : progression (0 à 1), point de départ de la vague (direction), rayon atteint (radians), repère de la caméra
+  uUpK: { value: 0 }, uUpO: { value: new THREE.Vector3(0, 1, 0) }, uUpR: { value: 0 }, uViewInv: { value: new THREE.Matrix4() },
 };
+/** Monde à l'envers : la vague part d'un point de la planète et gagne tout le décor (gris-bleu, lianes sombres, liseré rouge sur le front). */
+export const UPSIDE_GLSL = /* glsl */ `
+  vec3 upsideColor(vec3 col, vec3 wp) {
+    if (uUpK < 0.001) return col;
+    float dU = acos(clamp(dot(normalize(wp), uUpO), -1.0, 1.0));
+    float kU = uUpK * (1.0 - smoothstep(uUpR - 0.3, uUpR, dU));
+    if (kU > 0.001) {
+      float lU = dot(col, vec3(0.299, 0.587, 0.114));
+      vec3 cU = mix(vec3(lU), col, 0.45) * 0.62;   // les vraies couleurs, éteintes (l'étalonnage final fait le reste)
+      vec3 q = wp * 2.3;   // lianes : fines veines sombres et rougeâtres qui courent sur tout
+      float vn = abs(sin(q.x * 3.1 + sin(q.y * 2.7) * 1.7) + sin(q.z * 2.9 + sin(q.x * 3.3) * 1.5));
+      cU = mix(cU, cU * 0.25, (1.0 - smoothstep(0.0, 0.1, vn)) * 0.8);
+      col = mix(col, cU, kU);
+    }
+    float eU = uUpK * smoothstep(uUpR - 0.22, uUpR - 0.02, dU) * (1.0 - smoothstep(uUpR - 0.02, uUpR, dU)) * (1.0 - step(3.2, uUpR));
+    return col + vec3(1.0, 0.15, 0.12) * eU * 0.5;
+  }
+`;
+export const UPSIDE_UNIFORMS = 'uniform float uUpK;\nuniform vec3 uUpO;\nuniform float uUpR;\nuniform mat4 uViewInv;\n';
 const RAMP = /* glsl */ `
   {
     float al = max(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 0.025);
@@ -25,6 +46,7 @@ const RAMP = /* glsl */ `
     outgoingLight = mix(outgoingLight, shade + totalEmissiveRadiance, uStylize);
   }
   #include <opaque_fragment>`;
+const RAMP_UP = RAMP.replace('#include <opaque_fragment>', 'outgoingLight = upsideColor(outgoingLight, (uViewInv * vec4(-vViewPosition, 1.0)).xyz);\n  #include <opaque_fragment>');
 
 /** Donne le rendu « illustration » à un matériau standard : la lumière choisit entre une teinte d'ombre et une teinte éclairée. */
 export function stylize(m) {
@@ -34,9 +56,10 @@ export function stylize(m) {
   m.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
     Object.assign(sh.uniforms, LOOK);
-    sh.fragmentShader = 'uniform vec3 uShadowTint;\nuniform vec3 uLitTint;\nuniform float uStylize;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', RAMP);
+    const up = !m.userData.noUpside;   // (la voiture du joueur et le portail gardent leurs couleurs)
+    sh.fragmentShader = 'uniform vec3 uShadowTint;\nuniform vec3 uLitTint;\nuniform float uStylize;\n' + (up ? UPSIDE_UNIFORMS + UPSIDE_GLSL : '') + sh.fragmentShader.replace('#include <opaque_fragment>', up ? RAMP_UP : RAMP);
   };
-  m.customProgramCacheKey = () => prevKey() + '|look';
+  m.customProgramCacheKey = () => prevKey() + (m.userData.noUpside ? '|look' : '|look-up');
   m.needsUpdate = true;
 }
 export function stylizeTree(root, { cast, receive } = {}) {
@@ -65,16 +88,32 @@ const TiltShift = {
 };
 /** Étalonnage : couleurs plus franches, ombres poussées vers le violet, hautes lumières vers l'orangé. */
 const Grade = {
-  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.18 } },
+  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.18 }, uUp: { value: 0 }, uTime: { value: 0 } },
   vertexShader: TiltShift.vertexShader,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uSat; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uSat; uniform float uUp; uniform float uTime; varying vec2 vUv;
+    float grainH(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
       c.rgb = mix(vec3(l), c.rgb, uSat);
       float sh = 1.0 - smoothstep(0.0, 0.35, l), hi = smoothstep(0.35, 1.2, l);
-      c.rgb += vec3(0.035, -0.01, 0.05) * sh + vec3(0.04, 0.012, -0.03) * hi;
+      c.rgb += vec3(0.035, -0.01, 0.05) * sh * (1.0 - uUp) + vec3(0.04, 0.012, -0.03) * hi * (1.0 - uUp);
+      if (uUp > 0.001) {
+        // monde à l'envers, étalonnage « cinéma » : les vraies couleurs, désaturées (surtout les lumières, qui virent au blanc),
+        // posées sur un noir bleuté (#151a20) qui remonte vers un bleu nuit (#15263a) dans les tons moyens
+        float lu = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+        float red = smoothstep(2.5, 6.0, c.r / max(max(c.g, c.b), 0.02)) * smoothstep(0.25, 0.9, c.r);   // les rouges vifs (néon, feux, portail) gardent leur couleur
+        vec3 des = mix(vec3(lu), c.rgb, mix(0.45, 1.0, red));
+        vec3 blk = vec3(0.0075, 0.0103, 0.0144), nav = vec3(0.0075, 0.019, 0.042);
+        vec3 tint = mix(blk, nav, smoothstep(0.0, 0.25, lu));
+        vec3 g = des * vec3(0.8, 0.92, 1.08) * 0.78 + tint * 2.1;
+        // grain de film léger, plus visible dans les tons moyens ; vignette douce
+        float n = grainH(floor(gl_FragCoord.xy) + fract(uTime * 7.31) * 113.0) - 0.5;
+        g *= 1.0 + n * 0.22 * (1.0 - smoothstep(0.6, 1.6, lu));
+        vec2 q = vUv - 0.5; g *= 1.0 - 0.55 * dot(q, q);
+        c.rgb = mix(c.rgb, g, uUp);
+      }
       gl_FragColor = vec4(max(c.rgb, 0.0), c.a);
     }`,
 };

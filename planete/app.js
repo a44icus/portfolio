@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, makeBiplane, buildZones, PAINT } from './props.js';
+import { makeUpside } from './upside.js';
+import { VAN_LEN } from './van.js';
 import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, makeTireTracks, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
 import { makeFauna } from './fauna.js';
@@ -195,7 +197,11 @@ function overPlane(e) {   // l'avion est petit à l'écran : on accepte un clic 
   return plScr.z < 1 && plane.position.dot(camera.position) > 0 && Math.hypot(e.clientX - sx, e.clientY - sy) < 44;
 }
 canvas.addEventListener('pointerup', e => {
-  if (mode !== 'orbit' || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  // clic sur le van caché : on en prend le volant, et le monde bascule
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  if (!upside.on && upside.hitVan(ndc, camera)) { enterUpside(); return; }
+  if (mode !== 'orbit') return;
   if (PL.follow) { stopFollow(); return; }
   // clic sur l'avion (ou tout près : il est petit à l'écran) : on le suit
   if (overPlane(e)) { startFollow(); canvas.style.cursor = ''; return; }
@@ -313,7 +319,12 @@ $('#lb').addEventListener('click', () => $('#lb').classList.remove('on'));
 const avatar = makeCar();
 avatar.visible = false; scene.add(avatar);
 let zones = null;
+avatar.traverse(o => { if (o.isMesh) [].concat(o.material).forEach(m => { m.userData.noUpside = true; }); });   // la voiture garde ses couleurs dans le monde à l'envers
 stylizeTree(avatar, { cast: true, receive: true });
+// clin d'œil : le van WSQK caché dans la nature, porte du monde à l'envers
+const upside = makeUpside({ planet, scene, sections: SECTIONS, quality, R: SEA_R });
+stylizeTree(upside.van, { cast: true, receive: true }); stylizeTree(upside.fence);
+let nearVan = false, upHour = 12;
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
 const zonesReady = buildZones(planet, SECTIONS).then(z => { zones = z; z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
@@ -367,7 +378,66 @@ addEventListener('keydown', e => { if ((e.key === 'h' || e.key === 'H') && !(e.t
 let hasLanded = false;
 /** Au bout de 15 s sans avoir atterri, le bouton « Atterrir » vient au centre de l'écran. */
 function nudgeLanding() { if (!hasLanded && mode === 'orbit') { document.body.classList.add('nudge'); walkBtn.textContent = 'Atterrir et prendre le volant'; } }
+/* ---------- monde à l'envers ---------- */
+// les objets renversables s'envolent lentement et flottent à des hauteurs variées, en tournant doucement sur eux-mêmes ;
+// le van peut les percuter : ils partent en flottant, tournoient, puis reviennent lentement à leur place
+let lev = null; const levQ = new THREE.Quaternion(), levU = new THREE.Vector3(), levR = new THREE.Vector3(), levD = new THREE.Vector3();
+function levitate(t, dt) {
+  if (!zones) return;
+  if (upside.on) {
+    if (!lev) lev = zones.bodies.list.map(b => ({ b, p: b.mesh.position.clone(), q: b.mesh.quaternion.clone(), h: 0.35 + Math.random() * 1.9, d: Math.random() * 5, r: 6 + Math.random() * 6,
+      ph: Math.random() * 6.28, ax: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), w: (0.06 + Math.random() * 0.16) * (Math.random() < 0.5 ? -1 : 1), t0: t,
+      off: new THREE.Vector3(), vel: new THREE.Vector3(), rq: new THREE.Quaternion(), av: new THREE.Vector3(), cool: 0 }));
+    const van = avatar.userData.vanOn && mode === 'walk', sp = Math.abs(P.speed), vUp = levD.copy(avatar.position).normalize().clone();
+    for (const o of lev) {
+      const k = Math.max(0, Math.min(1, (t - o.t0 - o.d) / o.r)), e = k * k * (3 - 2 * k);
+      levU.copy(o.p).normalize();
+      // dérive après un choc : un ressort très doux ramène l'objet
+      if (o.vel.lengthSq() > 1e-6 || o.off.lengthSq() > 1e-6) {
+        o.vel.addScaledVector(o.off, -0.35 * dt).multiplyScalar(Math.exp(-dt * 0.7)); o.off.addScaledVector(o.vel, dt);
+        const lift = e * o.h + o.off.dot(levU); if (lift < 0.15) o.off.addScaledVector(levU, 0.15 - lift);   // jamais sous le sol
+      }
+      if (o.av.lengthSq() > 1e-6) { const a = o.av.length(); o.rq.premultiply(levQ.setFromAxisAngle(levR.copy(o.av).divideScalar(a), a * dt)); o.av.multiplyScalar(Math.exp(-dt * 0.45)); }
+      o.b.mesh.position.copy(o.p).addScaledVector(levU, e * (o.h + Math.sin(t * 0.55 + o.ph) * 0.12)).add(o.off);
+      o.b.mesh.quaternion.copy(o.rq).multiply(o.q).multiply(levQ.setFromAxisAngle(o.ax, e * ((t - o.t0 - o.d) * o.w + Math.sin(t * 0.4 + o.ph) * 0.25)));
+      // choc avec le van (une capsule le long de la caisse, à hauteur de la carrosserie)
+      if ((o.cool -= dt) > 0 || !van || sp < 0.4) continue;
+      const rel = levR.copy(o.b.mesh.position).sub(avatar.position), hgt = rel.dot(vUp);
+      if (hgt < -0.3 || hgt > 1.25) continue;
+      rel.addScaledVector(vUp, -hgt); const along = Math.max(-0.8, Math.min(0.8, rel.dot(P.fwd))); rel.addScaledVector(P.fwd, -along);
+      const dist = rel.length(); if (dist > o.b.r + 0.42) continue;
+      if (dist > 1e-4) rel.divideScalar(dist); else rel.copy(P.mv);
+      rel.addScaledVector(P.mv, Math.sign(P.speed) * 0.8).normalize();
+      o.vel.addScaledVector(rel, sp * 0.95).addScaledVector(vUp, sp * 0.35);
+      o.av.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(1 + sp * 0.7);
+      o.cool = 0.4; P.speed *= 0.85; audio.impact(Math.min(4, sp * 0.6), 0, 'bois');
+    }
+  } else if (lev) { for (const o of lev) { o.b.mesh.position.copy(o.p); o.b.mesh.quaternion.copy(o.q); } lev = null; }
+}
+// les trois quarts des arbres disparaissent dans le monde à l'envers
+const setTreeShare = k => planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * TUNE.arbres.densite * k); });
+function enterUpside() {
+  if (mode !== 'walk') setWalk(true);
+  if (PL.on) stopPlane();
+  upHour = ambience.state.hour;
+  const s = upside.enter();
+  avatar.userData.setVan(true); setTreeShare(0.25);
+  P.dir.copy(s.dir); P.fwd.copy(s.fwd); P.mv.copy(s.fwd); camF.copy(s.fwd);
+  P.r = driveR(P.dir); P.vr = 0; P.speed = 0; P.ground = true; P.ax = P.az = P.wx = P.wz = 0; P.recover = null;
+  nearVan = false; promptEl.classList.remove('on');
+  audio.start(); audio.impact(1.5, 0, 'lourd');
+}
+/** Retour à la réalité : la Jeep revient, l'heure aussi ; on ressort juste derrière le portail (sauf en quittant le sol). */
+function exitUpside(here = true) {
+  if (!upside.on) return;
+  upside.reset(here);
+  avatar.userData.setVan(false); setTreeShare(1);
+  ambience.state.hour = upHour; ambience.state.target = null;
+  audio.radio(0.016, false, 0);
+  if (here) { P.dir.copy(upside.gateDir).addScaledVector(P.fwd, 1.4 / SEA_R).normalize(); P.r = driveR(P.dir); P.speed = Math.min(Math.abs(P.speed), 2); P.vr = 0; }
+}
 function setWalk(on) {
+  if (!on && upside.on) exitUpside(false);   // décoller ou ouvrir le menu des zones fait aussi revenir à la réalité
   if (on) {
     // atterrit devant la zone la plus proche du regard
     camDir.copy(camera.position).normalize();
@@ -391,11 +461,12 @@ function setWalk(on) {
   setHint();
 }
 walkBtn.addEventListener('click', () => setWalk(mode !== 'walk'));
-promptEl.addEventListener('click', () => { if (near) openIsland(near.id); });
+promptEl.addEventListener('click', () => { if (nearVan) enterUpside(); else if (near) openIsland(near.id); });
 
 addEventListener('keydown', e => {
   if (mode !== 'walk' || panel.classList.contains('on')) return;
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+  if (e.code === 'KeyE' && nearVan) { enterUpside(); return; }
   if (e.code === 'KeyE' && near) { openIsland(near.id); return; }
   if (e.code === 'KeyR') { recoverCar(); return; }
   keys.add(e.code);
@@ -417,7 +488,7 @@ addEventListener('blur', () => keys.clear());
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => bb?.addEventListener(ev, () => { boostTouch = false; }));
 }
 
-const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vector3(), basis = new THREE.Matrix4();
+const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpC = new THREE.Vector3(), fq = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vector3(), basis = new THREE.Matrix4();
 const camF = new THREE.Vector3(), nUp = new THREE.Vector3(), tiltQ = new THREE.Quaternion(), ZONE_COS = Math.cos(1.15 / SEA_R);
 function groundAt(dir, along, side) { return driveR(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
@@ -430,14 +501,16 @@ function stepWalk(dt) {
   const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch || gpad.boost) && throttle > 0;
 
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
-  const onWater = planet.heightDir(P.dir) < WATER_R - 0.03 && P.r < WATER_R + 0.2;
-  P.hover = Math.max(0, Math.min(1, P.hover + (onWater ? 1 : -1) * dt / 0.55));
+  // le van WSQK ne se transforme pas : dans le monde à l'envers l'eau est une nappe noire figée, il roule dessus et glisse comme sur la glace
+  const wet = planet.heightDir(P.dir) < WATER_R - 0.03 && P.r < WATER_R + 0.2, vanOn = avatar.userData.vanOn;
+  const onWater = wet && !vanOn, onIce = wet && vanOn;
+  P.hover = Math.max(0, Math.min(1, P.hover + (onWater ? 1 : -1) * dt / (vanOn ? 0.15 : 0.55)));
   P.t += dt;
   const hv = P.hover;
   P.boost += ((boostOn ? 1 : 0) - P.boost) * (1 - Math.exp(-dt * 6));   // turbo : plus vite, plus nerveux
-  const vmax = (CAR.vitesse - 0.7 * hv) * (1 + CAR.turbo * P.boost);
+  const vmax = (CAR.vitesse - 0.7 * hv) * (1 + CAR.turbo * P.boost) * (onIce ? 0.8 : 1);
   if (throttle && !(throttle > 0 && P.speed >= vmax)) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 - 9 * hv : (CAR.acceleration - 2 * hv) * (1 + 0.9 * P.boost)) * dt * (P.ground ? 1 : 0.5);
-  else if (!throttle) P.speed *= Math.exp(-dt * (P.ground ? 2.2 - 1.6 * hv : 0.15));   // en l'air, l'élan se conserve
+  else if (!throttle) P.speed *= Math.exp(-dt * (P.ground ? (onIce ? 0.5 : 2.2 - 1.6 * hv) : 0.15));   // en l'air, l'élan se conserve
   if (P.speed > vmax) P.speed -= (P.speed - vmax) * (1 - Math.exp(-dt * 3));   // le turbo relâché : on ralentit en douceur
   P.speed = Math.max(-vmax * 0.5, P.speed);
   P.steer += (steerIn - P.steer) * (1 - Math.exp(-dt * 10));
@@ -447,7 +520,7 @@ function stepWalk(dt) {
   if (Math.abs(P.speed) > 0.05 || hv > 0.5 || !P.ground) P.fwd.applyAxisAngle(up, -P.steer * CAR.braquage * dt * turn * (1 - 0.3 * P.boost));
   right.crossVectors(up, P.fwd).normalize();
   // direction du mouvement : collée au capot sur terre, en retard sur l'eau (dérive)
-  P.mv.lerp(P.fwd, 1 - Math.exp(-dt * (30 - 28.6 * hv))); P.mv.addScaledVector(up, -P.mv.dot(up)).normalize();
+  P.mv.lerp(P.fwd, 1 - Math.exp(-dt * (onIce ? 2.2 : 30 - 28.6 * hv))); P.mv.addScaledVector(up, -P.mv.dot(up)).normalize();
   const rPrev = P.r;
   if (P.speed) {
     const axis = tmpA.crossVectors(P.dir, P.mv).normalize();
@@ -463,6 +536,19 @@ function stepWalk(dt) {
         P.fwd.lerp(tg.multiplyScalar(Math.sign(P.speed || 1)), 0.2).normalize(); P.mv.copy(P.fwd);
         P.speed *= 0.97;
       } else if (Math.abs(latCur) > 1.05 && Math.abs(nb.lat) <= 1.05) { next.copy(P.dir); P.speed *= -0.3; }
+    }
+    // le van WSQK ne va pas sur l'eau : des barrières en bois entourent les berges (les ponts restent ouverts)
+    if (avatar.userData.vanOn) {
+      // le bout du van (avant ou arrière selon le sens) et ses deux coins : contre une barrière, ou au bord de l'eau là où il n'y en a pas
+      const sg = Math.sign(P.speed), sideV = tmpC.crossVectors(next, P.mv).normalize();
+      let hit = false;
+      for (const lat of [0, -0.38, 0.38]) {
+        const q = fq.copy(next).addScaledVector(P.mv, sg * 1.08 / SEA_R).addScaledVector(sideV, lat / SEA_R).normalize();
+        if (upside.fenceHit(q.multiplyScalar(planet.heightDir(q) + 0.2))) { hit = true; break; }
+      }
+      const nose = fq.copy(next).addScaledVector(P.mv, sg * 1.25 / SEA_R).normalize();
+      if (!hit && planet.heightDir(nose) < WATER_R + 0.02 && upside.bigWater(nose)) { const nbv = planet.bridgeAt(nose); hit = !(nbv && Math.abs(nbv.lat) < 1.1 && P.r > nbv.top - 0.5); }   // (les flaques se traversent)
+      if (hit) { next.copy(P.dir); if (Math.abs(P.speed) > 1.5) audio.impact(Math.abs(P.speed) * 0.5, 0, 'bois'); P.speed *= -0.25; }
     }
     const gNext = driveR(next);
     if (gNext - P.r <= 0.42) {   // les pentes passent, une falaise non
@@ -840,6 +926,16 @@ function drawMinimap() {
     c.beginPath(); c.arc(x, y, 6.5 * DPR2, 0, Math.PI * 2); c.fillStyle = z.color; c.fill(); c.lineWidth = 2 * DPR2; c.strokeStyle = '#fff'; c.stroke();
     c.fillStyle = '#140a24'; c.font = '800 ' + Math.round(7.5 * DPR2) + 'px Manrope, Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(z.label[0], x, y + 0.5 * DPR2);
   }));
+  // le van WSQK : petit van bleu avec son antenne (absent dans le monde à l'envers, où c'est la radio qui guide)
+  if (!upside.on) pin(upside.home.dir, (x, y) => {
+    const s = DPR2;
+    c.fillStyle = '#fff'; c.beginPath(); c.roundRect(x - 8.5 * s, y - 6 * s, 17 * s, 11 * s, 3 * s); c.fill();
+    c.fillStyle = '#2d6fd6'; c.beginPath(); c.roundRect(x - 7 * s, y - 4.5 * s, 14 * s, 8 * s, 2 * s); c.fill();
+    c.fillStyle = '#e7dcc0'; c.fillRect(x + 3 * s, y - 4.5 * s, 4 * s, 8 * s);
+    c.fillStyle = '#d9303f'; c.fillRect(x - 6 * s, y - 1 * s, 8.5 * s, 1.6 * s);
+    c.strokeStyle = '#fff'; c.lineWidth = 1.4 * s; c.beginPath(); c.moveTo(x - 2 * s, y - 6 * s); c.lineTo(x - 2 * s, y - 10 * s); c.moveTo(x - 5 * s, y - 10 * s); c.lineTo(x + 1 * s, y - 10 * s); c.stroke();
+    c.fillStyle = '#1a1d26'; for (const dx of [-4, 4]) { c.beginPath(); c.arc(x + dx * s, y + 4 * s, 2 * s, 0, Math.PI * 2); c.fill(); }
+  });
   // nord
   { const a = Math.atan2(POLE.dot(mmRt), POLE.dot(mmF)), x = half + Math.sin(a) * edge, y = half - Math.cos(a) * edge;
     c.fillStyle = 'rgba(20,10,36,.85)'; c.beginPath(); c.arc(x, y, 7 * DPR2, 0, Math.PI * 2); c.fill();
@@ -992,7 +1088,8 @@ function frame(now) {
     if (PL.follow) followCamera(dt); else if (PL.cam) planeCamera(); else controls.update();
   } else stepWalk(dt);
   updatePlane(dt);
-  if (zones) zones.update(dt, t, mode === 'walk' ? carBody : null);
+  if (zones) zones.update(dt, t, mode === 'walk' && !upside.on ? carBody : null);
+  levitate(t, dt);
   fauna.update(dt, t, mode === 'walk', avatar.position, Math.abs(P.speed), ambience.night);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   if (mode === 'walk') {
@@ -1027,6 +1124,20 @@ function frame(now) {
   spray.mesh.visible = mode === 'walk';
   trails.group.visible = mode === 'walk';
   ambience.update(dt, t, mode, avatar.position, camera);
+  // van caché : on ne le traverse pas, et tout près une invite propose d'y monter
+  nearVan = false;
+  if (mode === 'walk' && !upside.on) {
+    // boîte du van (dans son repère), élargie de la demi-taille de la voiture
+    const v = upside.van, loc = v.worldToLocal(tmpA.copy(avatar.position)), HX = VAN_LEN.half + 0.42, Z0 = -VAN_LEN.rear - 0.6, Z1 = VAN_LEN.front + 0.6;
+    if (Math.abs(loc.x) < HX + 1.0 && loc.z > Z0 - 1.0 && loc.z < Z1 + 1.0) { nearVan = true; promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + 'Monter dans le van'; }
+    if (Math.abs(loc.x) < HX && loc.z > Z0 && loc.z < Z1) {
+      const px = HX - Math.abs(loc.x), pz = Math.min(loc.z - Z0, Z1 - loc.z);
+      if (px < pz) loc.x = Math.sign(loc.x || 1) * HX; else loc.z = loc.z - Z0 < Z1 - loc.z ? Z0 : Z1;
+      P.dir.copy(v.localToWorld(loc)).normalize(); P.speed *= 0.3;
+    }
+  }
+  if (upside.update({ dt, t, car: avatar.position, fwd: P.fwd, avatar, camera, sun, hemi, amb: ambL, skyU, fog: scene.fog, renderer, post, waterUniforms: planet.waterUniforms, audio, trails: trails.uniforms, ambience })) exitUpside(true);
+  fauna.group.visible = !(upside.on && upside.k > 0.3);   // les animaux se cachent
   // son : voiture, aéroglisseur, ambiance
   if (audio.started) {
     if ((waterProbe -= dt) <= 0) {   // de l'eau à proximité ? (pour les vagues)
@@ -1044,7 +1155,7 @@ function frame(now) {
   // en voiture : focale longue et flou de maquette ; en orbite : vue normale
   const wantFov = mode === 'walk' ? TUNE.camera.focale + 7 * P.boost : 42;
   if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
-  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou : 0, 1 - Math.exp(-dt * 3)), 0.5);
+  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou * (upside.on ? 0.3 : 1) : 0, 1 - Math.exp(-dt * 3)), 0.5);   // monde à l'envers : peu de flou, pour voir les éclairs
   TILT.uTiltA.value = post.tilt > 0.02 ? post.tilt : 0;
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   pollGamepad(dt);
@@ -1091,7 +1202,7 @@ sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { P, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera },
+  dbg: { P, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, get zones() { return zones; } },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },

@@ -9,6 +9,7 @@ import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { leafCluster, LEAF_MAT, fadeNearCamera, SEA_R } from './world.js';
+import { makeVan, VAN_WHEEL_Z } from './van.js';
 
 const FONT_URL = new URL('./vendor/three/fonts/helvetiker_bold.typeface.json', import.meta.url).href;   // servie par le site (pas de CDN)
 const Y = new THREE.Vector3(0, 1, 0);
@@ -256,8 +257,8 @@ export function makeCar() {
   function pose(k, spin = 0, wy = null, bodyY = 0, pitch = 0, roll = 0, flame = 0, t = 0) {
     const e = k * k * (3 - 2 * k), pop = Math.max(0, Math.min(1, (k - 0.35) / 0.65)), over = pop < 1 ? pop + Math.sin(pop * Math.PI) * 0.25 : 1;
     skirt.visible = k > 0.01; skirt.scale.set(0.8 + 0.2 * e, Math.max(0.02, e), 0.8 + 0.2 * e);
-    fan.visible = pop > 0.01; fan.scale.setScalar(Math.max(0.01, over));
-    spare.visible = e < 0.6; spare.scale.setScalar(Math.max(0.01, 1 - e * 1.6));
+    fan.visible = !vanOn && pop > 0.01; fan.scale.setScalar(Math.max(0.01, over));
+    spare.visible = !vanOn && e < 0.6; spare.scale.setScalar(Math.max(0.01, 1 - e * 1.6));
     blades.rotation.z = spin;
     flames.forEach((fl, i) => {
       const kf = flame * (1 - e), flick = 0.75 + 0.2 * Math.sin(t * 47 + i * 2.1) + 0.12 * Math.sin(t * 91 + i * 5.3);
@@ -272,8 +273,20 @@ export function makeCar() {
       w.pivot.visible = e < 0.98;
     });
   }
+  // le van WSQK, monté sur la même caisse et les mêmes roues (on le conduit dans le monde à l'envers)
+  const jeepParts = body.children.filter(o => o !== skirt && o !== fan && o !== spare && !flames.includes(o));
+  const van = makeVan({ wheels: false }); van.visible = false; body.add(van);
+  wheels.forEach(w => { w.jeep = w.w.children.slice(); w.vw = van.userData.wheelPart(); w.vw.visible = false; w.w.add(w.vw); w.along0 = w.along; });
+  const flameZ = flames.map(f => f.position.z);
+  let vanOn = false;
+  function setVan(on) {
+    vanOn = on; van.visible = on; jeepParts.forEach(o => { o.visible = !on; });
+    // le van est plus long : roues écartées (la suspension et les traces suivent), échappements au bout du pare-chocs
+    wheels.forEach(w => { w.jeep.forEach(m => { m.visible = !on; }); w.vw.visible = on; w.along = on ? (w.front ? VAN_WHEEL_Z.front : VAN_WHEEL_Z.rear) : w.along0; w.pivot.position.z = w.along; });
+    flames.forEach((f, i) => { f.position.z = on ? -1.06 : flameZ[i]; });
+  }
   pose(0);
-  car.userData = { body, wheels, pose, flames };   // flames : sortie des échappements, d'où partent les traînées du turbo
+  car.userData = { body, wheels, pose, flames, van, setVan, get vanOn() { return vanOn; } };   // flames : sortie des échappements, d'où partent les traînées du turbo
   return car;
 }
 

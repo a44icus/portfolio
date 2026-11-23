@@ -178,15 +178,15 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
       rainU.uOpacity.value = Math.min(1, W.rain) * 0.55 * (0.5 + 0.5 * dayK + 0.3);
     }
     // lampadaires, flaques de lumière, phares
-    const lampK = Math.min(1.4, out.lamp + dark * 0.5);
+    const force = S.forceLamp || 0, lampK = Math.max(Math.min(1.4, out.lamp + dark * 0.5), force * 1.4);   // monde à l'envers : tout s'allume
     glows.forEach(m => { m.emissiveIntensity = m.userData.glow * (0.65 + lampK * 0.9); });
     if ((poolTimer -= dt) <= 0 && lamps.length) {
       poolTimer = 0.35;
       const ranked = lamps.map(o => { o.localToWorld(lampPos.set(0, 0.84, 0)); return [lampPos.distanceToSquared(car), lampPos.clone()]; }).sort((a, b) => a[0] - b[0]);
       pools.forEach((l, i) => { if (ranked[i]) l.position.copy(ranked[i][1]); });
     }
-    pools.forEach(l => { l.intensity = walk ? lampK * 7 : 0; });
-    head.intensity = walk ? lampK * 40 : 0;
+    pools.forEach(l => { l.intensity = walk ? lampK * (7 + 5 * force) : 0; l.color.set(force > 0.5 ? '#e6edf7' : '#ffb35c'); l.distance = 5.5 + 3.5 * force; });
+    head.intensity = walk ? lampK * 40 : 0; head.position.z = avatar.userData.vanOn ? 1.05 : 0.62; head.distance = avatar.userData.vanOn ? 18 : 14;
     // barre de réglages : multiplicateurs et teintes imposées
     { const L = TUNE.lumiere;
       sun.intensity *= L.soleil; hemi.intensity *= L.ciel; amb.intensity *= L.ambiante; renderer.toneMappingExposure *= L.exposition; post.bloom.strength *= TUNE.post.bloom;

@@ -205,8 +205,47 @@ export function makeAudio() {
     }
   }
 
+  /* ---------- monde à l'envers : radio qui grésille, drone grave, arpège de synthé années 80 ---------- */
+  let rad = null;
+  function radio(dt, on, signal) {
+    if (!ctx || (!rad && !on)) return;
+    if (!rad) {
+      const st = noiseSrc(), bp = filt('bandpass', 1900, 0.9), gs = gainNode(0); st.connect(bp); bp.connect(gs); gs.connect(bus.effets);
+      const lp = filt('lowpass', 240, 1.2), gd = gainNode(0); lp.connect(gd); gd.connect(bus.ambiance); gd.connect(reverb);
+      for (const f of [55, 55.6, 82.4]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); }
+      // la musique du monde à l'envers passe « par la radio » : un filtre qui s'ouvre quand on capte bien la fréquence
+      const mlp = filt('lowpass', 900, 0.8), mg = gainNode(0); mlp.connect(mg); mg.connect(bus.musique);
+      rad = { gs, gd, mlp, mg, buf: null, loading: false, next: 0, srcs: [] };
+    }
+    set(rad.gs.gain, on ? 0.01 + 0.1 * (1 - signal) : 0, 0.2);   // grésillement : fort quand on s'éloigne de la fréquence
+    set(rad.gd.gain, on ? 0.06 : 0, 0.8);
+    if (mus) set(mus.out.gain, on ? 0 : 1, 0.6);                   // la musique habituelle se tait
+    set(rad.mg.gain, on ? 0.9 : 0, on ? 0.8 : 0.5);
+    set(rad.mlp.frequency, 700 + 17000 * signal * signal, 0.25);
+    if (!on) {
+      if (rad.srcs.length) { const t = ctx.currentTime + 2; rad.srcs.forEach(s => { try { s.stop(t); } catch (e) { /* déjà arrêtée */ } }); rad.srcs = []; }
+      rad.next = 0; return;
+    }
+    if (!rad.buf) {
+      if (!rad.loading) { rad.loading = true; fetch('audio/upside.mp3').then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a)).then(b => { rad.buf = b; }).catch(() => { rad.loading = false; }); }
+      return;
+    }
+    // lecture en boucle : chaque reprise démarre 3 s avant la fin de la précédente, en fondu enchaîné
+    const now = ctx.currentTime, X = 3, dur = rad.buf.duration;
+    if (!rad.next || rad.next < now - 0.5) rad.next = now + 0.05;
+    if (rad.next - now < 0.6) {
+      const t = rad.next, s = ctx.createBufferSource(), g = gainNode(0); s.buffer = rad.buf; s.connect(g); g.connect(rad.mlp);
+      const first = !rad.srcs.length;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + (first ? 1.2 : X));
+      g.gain.setValueAtTime(1, t + dur - X); g.gain.linearRampToValueAtTime(0, t + dur);
+      s.start(t); s.stop(t + dur + 0.05);
+      rad.srcs.push(s); s.onended = () => { rad.srcs = rad.srcs.filter(x => x !== s); };
+      rad.next = t + dur - X;
+    }
+  }
+
   return {
-    start, applyVolumes, impact, thunder, click: (v, f) => ctx && click(v, f),
+    start, applyVolumes, impact, thunder, radio: (dt, on, sig) => radio(dt, on, sig), click: (v, f) => ctx && click(v, f),
     get started() { return S.started; },
     update(dt, car, ambi) { if (!ctx) return; updateCar(dt, car); updateAmbience(dt, ambi); },
   };

@@ -9,6 +9,7 @@
    Un pavillon par section, posé sur une esplanade aplanie en pleine terre.
    ============================================================================ */
 import * as THREE from 'three';
+import { LOOK, UPSIDE_GLSL, UPSIDE_UNIFORMS } from './look.js';
 
 export const SEA_R = 32;      // rayon de la mer dans la scène
 export const PAV_R = 2.6;     // rayon de l'esplanade d'une zone (scène)
@@ -177,6 +178,8 @@ function waterMaterial(uniforms) {
       ${WAVES_GLSL}
       ${GLITTER_GLSL}
       ${FNOISE_GLSL}
+      ${UPSIDE_UNIFORMS}
+      ${UPSIDE_GLSL}
       void main() {
         vec3 p = vWorld / uScale;
         vec3 N = normalize(vWorld);
@@ -229,6 +232,7 @@ function waterMaterial(uniforms) {
         float shoreK = smoothstep(0.0, 1.3, d);
         float alpha = mix(0.0, 0.97, shoreK);
         alpha = clamp(alpha + fres * 0.2 * shoreK + foam * 0.85, 0.0, 1.0);
+        col = upsideColor(col * (1.0 - 0.55 * uUpK * step(cos(uUpR), dot(normalize(vWorld), uUpO))), vWorld);   // monde à l'envers : eau noire
         gl_FragColor = vec4(col, alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -470,7 +474,7 @@ export function buildPlanet(anchors, quality = 'high') {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
     uShallow: { value: new THREE.Color('#34bdb0') }, uTeal: { value: new THREE.Color('#38b5bf') }, uFoam: { value: 1 }, uGlitW: { value: 0.05 }, uGlitWI: { value: 0.7 }, uGlitDay: { value: 1 }, uFoamEdge: { value: 1 }, uFoamLine: { value: 1 }, uFoamGap: { value: 1 }, uFoamLen: { value: 0.5 },
-    uDeep: { value: new THREE.Color('#0b4766') }, ...TILT,
+    uDeep: { value: new THREE.Color('#0b4766') }, ...TILT, uUpK: LOOK.uUpK, uUpO: LOOK.uUpO, uUpR: LOOK.uUpR, uViewInv: LOOK.uViewInv,
   };
   const wMat = waterMaterial(waterUniforms), water = new THREE.Group();
   const d = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), nn = new THREE.Vector3(), q = new THREE.Vector3();
