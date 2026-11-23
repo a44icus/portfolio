@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { LOOK, UPSIDE_GLSL, UPSIDE_UNIFORMS } from './look.js';
 import { TUNE } from './tune.js';
-import { loadClouds, makeCloudMaterials, makeCloudNoise } from './clouds.js';
+import { loadClouds, makeCloudMaterials, makeCloudNoise, cloudBox } from './clouds.js';
 
 export const SEA_R = 32;      // rayon de la mer dans la scène
 export const PAV_R = 2.6;     // rayon de l'esplanade d'une zone (scène)
@@ -1030,15 +1030,15 @@ export function buildPlanet(anchors, quality = 'high') {
     const low = quality === 'low', CP = loadClouds();
     // sur téléphone : moins de pas de calcul
     const forQuality = q => (low ? { ...q, pas: Math.round(q.pas * 0.6), pasLumiere: Math.min(q.pasLumiere, 2) } : q);
-    const vol = makeCloudMaterials(makeCloudNoise(low ? 48 : 64), forQuality(CP)), box = new THREE.BoxGeometry(2, 2, 2), yaw = new THREE.Quaternion();
+    const vol = makeCloudMaterials(makeCloudNoise(low ? 48 : 64), forQuality(CP)), yaw = new THREE.Quaternion();
     const POOL = 160;   // réserve : le réglage « nombre » choisit combien sont visibles (sur téléphone, deux tiers)
     for (let c = 0; c < POOL; c++) {
       d.set(rng() * 2 - 1, (rng() * 2 - 1) * 0.8, rng() * 2 - 1).normalize();
       const alt = SEA_R + MAX_H * S + 1.6 + rng() * 1.2;
-      const m = new THREE.Mesh(box, vol.front);
+      const m = new THREE.Mesh(cloudBox([rng() * 7, rng() * 7, rng() * 7]), vol.front);
       m.position.copy(d).multiplyScalar(alt);
       m.quaternion.copy(orient(d)).multiply(yaw.setFromAxisAngle(Y, rng() * Math.PI * 2));
-      m.userData.r = rng() * 2 - 1; m.userData.sx = 1.05 + rng() * 0.3;   // tirage propre à ce nuage : sa taille suit « taille » et « variation de taille »
+      m.userData.r = rng() * 2 - 1; m.userData.sx = 1.05 + rng() * 0.3; m.userData.v = 0.35 + 0.65 * rng();   // tirage propre à ce nuage : taille (« taille », « variation de taille ») et part de la vitesse de rotation (le réglage est la plus rapide)
       m.renderOrder = 2;
       clouds.add(m);
     }

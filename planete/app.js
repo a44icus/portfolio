@@ -1044,6 +1044,7 @@ function locateAnimal(kind) {
   P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = wet ? 1 : 0; P.vr = 0; camF.copy(P.fwd);
   return `📍 ${kind} ${locateIdx[kind] + 1} / ${r.n}`;
 }
+const cloudQ = new THREE.Quaternion(), cloudAxis = new THREE.Vector3(0, 1, 0);
 const tuneHooks = {
   locate: locateAnimal,
   clouds: planet.clouds.userData.volume,
@@ -1197,7 +1198,12 @@ function frame(now) {
   if (!paceFrame(now || performance.now())) { requestAnimationFrame(frame); return; }
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   planet.waterUniforms.uTime.value = t;
-  if (!reduce) { const CV = planet.clouds.userData.volume; planet.clouds.rotation.y += dt * (CV ? CV.params.rotation ?? 0.025 : 0.025); planet.animate(t); }   // les nuages tournent autour de la planète (réglage « rotation », indépendant du vent)
+  if (!reduce) {
+    // les nuages tournent autour de la planète, chacun à sa vitesse : le réglage « rotation » est la vitesse du plus rapide
+    const CV = planet.clouds.userData.volume, rot = CV ? CV.params.rotation ?? 0.025 : 0.025;
+    for (const m of planet.clouds.children) { cloudQ.setFromAxisAngle(cloudAxis, dt * rot * (m.userData.v ?? 1)); m.position.applyQuaternion(cloudQ); m.quaternion.premultiply(cloudQ); }
+    planet.animate(t);
+  }
   // à pied : ciel bleu autour de la caméra, étoiles effacées
   skyU.uMix.value = THREE.MathUtils.lerp(skyU.uMix.value, mode === 'walk' ? 1 : 0, 1 - Math.exp(-dt * 2.5));
   sky.position.copy(camera.position); skyU.uUp.value.copy(camera.position).normalize(); sky.visible = skyU.uMix.value > 0.01;
@@ -1252,7 +1258,6 @@ function frame(now) {
       if (!V.sunBase) V.sunBase = V.u.uSunCol.value.clone();
       V.u.uTime.value = t;
       V.u.uSunWorld.value.copy(planet.waterUniforms.uSun.value);
-      planet.clouds.updateMatrixWorld(); V.u.uFrame.value.copy(planet.clouds.matrixWorld).invert();   // le bruit suit chaque nuage, quelle que soit la rotation du groupe
       V.u.uSunCol.value.copy(V.sunBase).lerp(sun.color, 0.5).multiplyScalar(Math.min(1.4, sun.intensity / 2.8));
       for (const m of planet.clouds.children) V.pickSide(m, camera);
     } }
