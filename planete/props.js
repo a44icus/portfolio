@@ -471,14 +471,16 @@ export async function buildZones(planet, sections) {
     return lamp;
   }
   function signBoard(text, w = 0.9, h = 0.2, arrow = 0) {
-    const tex = canvasTex((g, W, H) => {
+    const face = a => new THREE.MeshStandardMaterial({ roughness: 0.8, map: canvasTex((g, W, H) => {
       g.fillStyle = WOOD; g.fillRect(0, 0, W, H);
       g.globalAlpha = 0.15; for (let y = 14; y < H; y += 20) { g.fillStyle = '#000'; g.fillRect(0, y, W, 3); } g.globalAlpha = 1;
       g.fillStyle = '#fff8ea'; g.font = '800 40px Manrope, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText((arrow < 0 ? '← ' : '') + text + (arrow > 0 ? ' →' : ''), W / 2, H / 2 + 2, W - 24);
-    }, 512, 112);
-    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
-    return new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), [woodM, woodM, woodM, woodM, face, woodM]);
+      const str = (a < 0 ? '← ' : '') + text + (a > 0 ? ' →' : '');
+      g.font = '900 46px Manrope, Arial, sans-serif'; g.lineJoin = 'round'; g.lineWidth = 9; g.strokeStyle = '#3a1608'; g.strokeText(str, W / 2, H / 2 + 2, W - 24);   // contour sombre : lisible de loin
+      g.fillText(str, W / 2, H / 2 + 2, W - 24);
+    }, 512, 112) });
+    // lisible des deux côtés : vue de dos, la flèche s'inverse (elle montre toujours la bonne direction)
+    return new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), [woodM, woodM, woodM, woodM, face(arrow), face(-arrow)]);
   }
   /** Lacet (repère de l'objet) pour regarder vers une direction donnée. */
   function yawToward(dir, target) {
@@ -701,16 +703,29 @@ export async function buildZones(planet, sections) {
         if (dry(d2)) { const bench = makeBench(); group.add(bench); bodies.add(bench, d2, yawToward(d2, e.point(th + 0.9 / SEA_R, 0)), { r: 0.36, lie: 0.12 }); }
       }
     }
-    // panneau indicateur au milieu de la route
-    const mid = e.point(e.len / 2, 1.5);
-    if (dry(mid) && e.len * SEA_R > 7) {
-      const post = new THREE.Group();
-      post.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.2, 8).translate(0, 0.6, 0), woodD));
-      const toA = signBoard(labelOf(e.a), 0.9, 0.2, -1); toA.position.y = 1.0; post.add(toA);
-      const toB = signBoard(labelOf(e.b), 0.9, 0.2, 1); toB.position.y = 0.74; post.add(toB);
-      group.add(post);
-      // les flèches suivent la route : l'axe x du panneau pointe vers B
-      bodies.add(post, mid, yawToward(mid, e.point(e.len / 2 + 1 / SEA_R, 1.5)) - Math.PI / 2, { r: 0.25, lie: 0.06 });
+    // panneau indicateur sur le bas-côté : un endroit bien dégagé (loin des ponts, de l'eau et des arbres), vers le milieu de la route
+    if (e.len * SEA_R > 7) {
+      let best = null, bs = -1e9;
+      for (let k = 0.3; k <= 0.701; k += 0.05) for (const side of [-1.55, 1.55]) {
+        const th = e.len * k, d = e.point(th, side);
+        if (!dry(d) || planet.onPlaza && planet.onPlaza(d, 0.8 / SEA_R)) continue;
+        let sc = -Math.abs(k - 0.5) * 4;
+        const bi = planet.bridgeAt && planet.bridgeAt(d); if (bi) continue;                                           // pas contre un pont
+        for (const a of [0, 1.6, 3.2, 4.8]) { const q = d.clone().add(new THREE.Vector3(Math.cos(a), Math.sin(a), Math.cos(a * 1.7)).projectOnPlane(d).normalize().multiplyScalar(2.2 / SEA_R)).normalize(); if (planet.isWet(q)) sc -= 3; }   // ni au bord de l'eau
+        for (const t of planet.treeDirs) if (t.dot(d) > Math.cos(1.6 / SEA_R)) sc -= 1.5;                              // ni dans les arbres
+        if (sc > bs) { bs = sc; best = { d, th, side }; }
+      }
+      if (best) {
+        const { d: at, th, side } = best, post = new THREE.Group();
+        post.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.45, 8).translate(0, 0.72, 0), woodD));
+        // les panonceaux partent sur le côté du poteau (ils ne le traversent plus), chacun du côté de sa flèche
+        const toA = signBoard(labelOf(e.a), 0.9, 0.2, -1); toA.position.set(-(0.45 + 0.065), 1.28, 0); post.add(toA);
+        const toB = signBoard(labelOf(e.b), 0.9, 0.2, 1); toB.position.set(0.45 + 0.065, 1.02, 0); post.add(toB);
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.1, 8), woodD); cap.position.y = 1.5; post.add(cap);
+        group.add(post);
+        // les flèches suivent la route : l'axe x du panneau pointe vers B
+        bodies.add(post, at, yawToward(at, e.point(th + 1 / SEA_R, side)) - Math.PI / 2, { r: 0.25, lie: 0.06 });
+      }
     }
   }
 

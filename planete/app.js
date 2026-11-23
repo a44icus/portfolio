@@ -351,7 +351,8 @@ const lupPts = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
 const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; } };
 const keys = new Set();
 let camZoom = 1;
-const setZoom = z => { camZoom = Math.max(0.55, Math.min(2.6, z)); };
+const setZoom = z => { camZoom = Math.max(0.55, Math.min(2.6, z)); zoomAuto = null; };   // un zoom choisi à la main annule le zoom automatique sur les zones
+let zoomAuto = null, zoneStill = 0;   // zoom d'avant l'arrêt sur une zone (pour y revenir en repartant)
 addEventListener('wheel', e => { if (mode === 'walk') setZoom(camZoom * Math.exp(Math.sign(e.deltaY) * 0.12)); }, { passive: true });
 { // pincer à deux doigts sur l'écran
   let d0 = 0, z0 = 1;
@@ -737,6 +738,10 @@ function stepWalk(dt) {
   // dans un cercle de zone ?
   let best = null, bd = -1; SECTIONS.forEach(s => { const d = s.dir.dot(P.dir); if (d > bd) { bd = d; best = s; } });
   const close = bd > ZONE_COS ? best : null;
+  // arrêté sur une zone : la caméra se rapproche au plus près ; en repartant, elle revient au zoom d'avant
+  zoneStill = close && Math.abs(P.speed) < 0.35 && P.ground ? zoneStill + dt : 0;
+  if (zoneStill > 0.6 && camZoom > 0.56) { if (zoomAuto === null) zoomAuto = camZoom; camZoom += (0.55 - camZoom) * (1 - Math.exp(-dt * 2)); }
+  else if (zoomAuto !== null && (!close || Math.abs(P.speed) > 1.2)) { camZoom += (zoomAuto - camZoom) * (1 - Math.exp(-dt * 2.5)); if (Math.abs(camZoom - zoomAuto) < 0.01) { camZoom = zoomAuto; zoomAuto = null; } }
   if (close !== near) {
     near = close;
     promptEl.classList.toggle('on', !!near);
