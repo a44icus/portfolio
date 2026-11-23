@@ -186,7 +186,7 @@ function updateLabels() {
 /* clic direct sur une île */
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let downAt = null;
-canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; if (aim) { aim.ptrX = e.clientX; aim.angle0 = aim.angle; chargeAim(); } });
 canvas.addEventListener('pointerleave', () => tipOn(false));
 // bulle qui suit la souris au-dessus d'un objet cliquable
 const hoverTip = document.createElement('div');
@@ -195,6 +195,11 @@ document.body.appendChild(hoverTip);
 const tipOn = on => { hoverTip.style.opacity = on ? '1' : '0'; };
 canvas.addEventListener('pointermove', e => {
   if (PL.follow && downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) stopFollow();
+  if (aim) {   // visée : glisser à gauche / à droite tourne le tir
+    if (e.pointerType === 'mouse' && !e.buttons) aim.angle = Math.max(-0.6, Math.min(0.6, (e.clientX / innerWidth - 0.5) * 1.6 * aim.sign));
+    else if (e.buttons && aim.ptrX != null) aim.angle = Math.max(-0.6, Math.min(0.6, aim.angle0 + (e.clientX - aim.ptrX) / innerWidth * 1.6 * aim.sign));
+    canvas.style.cursor = 'crosshair'; tipOn(false); return;
+  }
   if (!e.buttons && e.pointerType === 'mouse') {   // la main signale ce qu'on peut cliquer (l'avion, les panneaux, les objets des zones)
     const walk = mode === 'walk' && !upside.on && !egg; ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     const it = walk ? interactiveAt(ndc) : null;
@@ -214,13 +219,14 @@ function overPlane(e) {   // l'avion est petit à l'écran : on accepte un clic 
   return plScr.z < 1 && plane.position.dot(camera.position) > 0 && Math.hypot(e.clientX - sx, e.clientY - sy) < 44;
 }
 canvas.addEventListener('pointerup', e => {
+  if (aim) { releaseAim(); downAt = null; canvas.style.cursor = ''; return; }
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
   // clic sur le van caché : on en prend le volant, et le monde bascule
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   // en balade : clic sur un panneau fléché → la caméra se met en face ; nouveau clic → retour derrière la voiture
   if (mode === 'walk' && !upside.on && !egg) {
     if (signView) { exitSign(); return; }
-    const it = interactiveAt(ndc); if (it) { audio.start(); it.go(); tipOn(false); canvas.style.cursor = ''; return; }
+    const it = interactiveAt(ndc); if (it) { useIt(it); tipOn(false); canvas.style.cursor = ''; return; }
     const sp = signpostAt(ndc); if (sp) { signView = { post: sp, side: 0 }; return; }
   }
   if (!upside.on && !egg && upside.hitVan(ndc, camera)) { enterUpside(); return; }
@@ -384,8 +390,89 @@ function showPhoto(url) {
   setTimeout(() => { a.style.opacity = '0'; a.style.transform = 'translateY(30px) rotate(-8deg) scale(.8)'; setTimeout(() => a.remove(), 700); }, 8000);
   audio.started && audio.impact(1.2, 0, 'bois');
 }
+/* bulle au-dessus d'un objet : choix (retardateur…) ou compte à rebours */
+const bubble = document.createElement('div');
+bubble.style.cssText = 'position:fixed;left:0;top:0;z-index:26;display:none;gap:6px;padding:6px;border-radius:14px;background:rgba(20,20,40,.88);box-shadow:0 8px 24px rgba(0,0,0,.3);font:800 13px/1 Manrope, Arial, sans-serif;color:#fff;white-space:nowrap;transform:translate(-50%,-100%)';
+document.body.appendChild(bubble);
+let bubbleIt = null, bubbleMode = '';
+function openChoices(it) {
+  bubbleIt = it; bubbleMode = 'choices'; bubble.innerHTML = '';
+  if (it.choicesTitle !== false) { const t = document.createElement('span'); t.textContent = 'Retardateur'; t.style.cssText = 'align-self:center;padding:0 6px 0 4px;opacity:.75;font-weight:700'; bubble.appendChild(t); }
+  it.choices.forEach((c, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = c.label; b.title = (touch ? '' : 'Touche ' + (i + 1));
+    b.style.cssText = 'border:0;border-radius:10px;padding:8px 12px;background:#fff;color:#1a1a40;font:inherit;cursor:pointer';
+    b.addEventListener('click', e => { e.stopPropagation(); closeBubble(); audio.start(); c.go(); });
+    bubble.appendChild(b);
+  });
+  bubble.style.display = 'flex';
+}
+function closeBubble() { bubbleIt = null; bubbleMode = ''; bubble.style.display = 'none'; }
+const bubbleV = new THREE.Vector3();
+function updateBubble() {
+  if (!zones || mode !== 'walk') { if (bubbleIt) closeBubble(); return; }
+  if (bubbleMode === 'choices') {
+    const it = bubbleIt;
+    if ((it.ready && !it.ready()) || it.body.mesh.position.distanceTo(avatar.position) > it.r + 2.5) { closeBubble(); return; }
+  } else {   // un objet qui décompte (retardateur) montre son état
+    const it = zones.interactives.find(i => i.status && i.body.mesh.position.distanceTo(avatar.position) < 25);
+    if (!it) { if (bubbleMode === 'status') closeBubble(); return; }
+    if (bubbleIt !== it || bubble.textContent !== it.status) { bubbleIt = it; bubbleMode = 'status'; bubble.textContent = it.status; bubble.style.display = 'flex'; bubble.style.padding = '8px 12px'; }
+  }
+  const it = bubbleIt; if (!it) return;
+  bubbleV.copy(it.body.mesh.position).addScaledVector(it.body.dir, 1.25).project(camera);
+  if (bubbleV.z > 1) { bubble.style.visibility = 'hidden'; return; }
+  bubble.style.visibility = ''; if (bubbleMode === 'choices') bubble.style.padding = '6px';
+  bubble.style.left = ((bubbleV.x + 1) / 2 * innerWidth) + 'px'; bubble.style.top = ((1 - bubbleV.y) / 2 * innerHeight - 8) + 'px';
+}
+
+/* visée au marteau : angle à la souris (ou ←/→), puissance en maintenant le clic (ou Espace / E) */
+const aimUI = document.createElement('div');
+aimUI.style.cssText = 'position:fixed;left:50%;bottom:calc(max(18px, env(safe-area-inset-bottom)) + 150px);transform:translateX(-50%);z-index:26;display:none;flex-direction:column;align-items:center;gap:8px;pointer-events:none;font:700 12px/1.3 Manrope, Arial, sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);text-align:center';
+aimUI.innerHTML = '<div style="width:min(70vw,320px);height:16px;border-radius:999px;background:rgba(20,20,40,.75);box-shadow:0 0 0 2px rgba(255,255,255,.8);overflow:hidden"><i style="display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#ffd23a,#ff8a3a,#ff3a3a)"></i></div><span></span>';
+document.body.appendChild(aimUI);
+const aimBar = aimUI.querySelector('i'), aimHelp = aimUI.querySelector('span');
+let aim = null;
+function startAim(it) {
+  if (aim) return;
+  aim = { it, angle: 0, power: 0, charging: false, t: 0, sign: 1 };
+  it.aimStart(); closeBubble();
+  aimHelp.innerHTML = touch ? 'Glissez pour viser · maintenez le doigt pour doser la puissance, relâchez pour frapper' : 'Souris ou ←/→ : viser · maintenir clic, Espace ou E : puissance · relâcher : frapper · Échap : annuler';
+  aimUI.style.display = 'flex'; promptEl.classList.remove('on');
+}
+function endAim(fire) {
+  if (!aim) return;
+  if (fire) aim.it.aimFire(); else aim.it.aimCancel();
+  aim = null; aimUI.style.display = 'none';
+}
+function chargeAim() { if (aim && !aim.charging) { aim.charging = true; aim.t = 0; } }
+function releaseAim() { if (aim && aim.charging) endAim(true); }
+function stepAim(dt) {
+  if (!aim) return;
+  if (mode !== 'walk' || upside.on || egg || aim.it.body.mesh.position.distanceTo(avatar.position) > 6) { endAim(false); return; }
+  const kk = c => keys.has(c);
+  aim.sign = aim.it.aimScreenSign(camera);
+  const turn = (kk('ArrowRight') || kk('KeyD') ? 1 : 0) - (kk('ArrowLeft') || kk('KeyA') ? 1 : 0);
+  if (turn) aim.angle = Math.max(-0.6, Math.min(0.6, aim.angle + turn * aim.sign * dt * 0.8));
+  if (aim.charging) { aim.t += dt; aim.power = 0.5 - 0.5 * Math.cos(aim.t * 2.6); }   // la jauge va et vient : on relâche au bon moment
+  else aim.power = 0;
+  aimBar.style.width = (aim.power * 100).toFixed(1) + '%';
+  aim.it.aimSet(aim.angle, aim.power);
+}
+/** Se servir d'un objet : bulle de choix, visée, ou action directe. */
+function useIt(it) {
+  audio.start();
+  if (it.choices) { if (bubbleIt === it && bubbleMode === 'choices') closeBubble(); else openChoices(it); return; }
+  if (it.aimStart && (!it.aimReady || it.aimReady())) { startAim(it); return; }
+  it.go();
+}
+addEventListener('keydown', e => {
+  if (bubbleMode === 'choices' && bubbleIt) { const n = +e.key; if (n >= 1 && n <= bubbleIt.choices.length) { const c = bubbleIt.choices[n - 1]; closeBubble(); audio.start(); c.go(); } if (e.key === 'Escape') closeBubble(); }
+}, true);
 const zonesReady = buildZones(planet, SECTIONS).then(z => { zones = z;
-  Object.assign(z.hooks, { toast: (t, ms) => zoneToast(t, ms), sfx: k => { if (audio.started) audio.sfx(k); }, open: id => openIsland(id), data: () => DATA, img: (u, o) => IMG(u, o), photo: () => { wantShot = true; } }); z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
+  Object.assign(z.hooks, { toast: (t, ms) => zoneToast(t, ms), sfx: k => { if (audio.started) audio.sfx(k); }, open: id => openIsland(id), data: () => DATA, img: (u, o) => IMG(u, o), photo: () => { wantShot = true; }, flash: k => {
+    const fl = document.createElement('div'); fl.style.cssText = 'position:fixed;inset:0;z-index:44;pointer-events:none;background:radial-gradient(circle,rgba(200,235,255,.9),rgba(120,180,255,.35));opacity:' + (0.25 + k * 0.6) + ';transition:opacity .45s ease';
+    document.body.appendChild(fl); requestAnimationFrame(() => requestAnimationFrame(() => { fl.style.opacity = '0'; })); setTimeout(() => fl.remove(), 600);
+  } }); z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
@@ -564,19 +651,20 @@ function quitEgg() {
 }
 $('#quitBtn')?.addEventListener('click', e => { e.stopPropagation(); quitEgg(); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && (upside.on || egg)) quitEgg(); });
-promptEl.addEventListener('click', () => { if (nearProp) nearProp.go(); else if (near) openIsland(near.id); });
+promptEl.addEventListener('click', () => { if (nearProp) useIt(nearProp); else if (near) openIsland(near.id); });
 
 const DRIVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 addEventListener('keydown', e => {
   if (mode === 'walk' && panel.classList.contains('on') && DRIVE_KEYS.includes(e.code)) closePanel();   // la voiture repart : la fiche se ferme
   if (mode !== 'walk' || panel.classList.contains('on')) return;
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-  if (e.code === 'KeyE' && nearProp) { nearProp.go(); return; }
+  if (aim) { if (e.code === 'Escape') endAim(false); else if ((e.code === 'Space' || e.code === 'KeyE') && !e.repeat) chargeAim(); else keys.add(e.code); return; }
+  if (e.code === 'KeyE' && nearProp) { useIt(nearProp); return; }
   if (e.code === 'KeyE' && near) { openIsland(near.id); return; }
   if (e.code === 'KeyR') { recoverCar(); return; }
   keys.add(e.code);
 });
-addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('keyup', e => { keys.delete(e.code); if (aim && (e.code === 'Space' || e.code === 'KeyE')) releaseAim(); });
 addEventListener('blur', () => keys.clear());
 
 // joystick tactile
@@ -600,7 +688,7 @@ const camF = new THREE.Vector3(), nUp = new THREE.Vector3(), tiltQ = new THREE.Q
 function groundAt(dir, along, side) { return driveR(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
   const k = c => keys.has(c);
-  const busy = panel.classList.contains('on') || (P.tumble && P.ground) || P.flipped || !!P.recover;   // en l'air on garde la main ; couchée au sol, non   // sur le toit : on ne conduit plus
+  const busy = panel.classList.contains('on') || !!aim || (P.tumble && P.ground) || P.flipped || !!P.recover;   // en l'air on garde la main ; couchée au sol, non   // sur le toit : on ne conduit plus
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y + gpad.y));
   P.throttle = throttle;
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x + gpad.x));
@@ -1341,7 +1429,8 @@ function frame(now) {
     }
   }
   // objets des zones : la boule, la fusée, l'appareil photo… tout près, une invite propose de s'en servir
-  if (mode === 'walk' && !upside.on && !egg && !nearProp && zones) {
+  stepAim(dt); updateBubble();
+  if (mode === 'walk' && !upside.on && !egg && !nearProp && zones && !aim) {
     let bd = 1e9;
     for (const it of zones.interactives) {
       const dd = it.body.mesh.position.distanceTo(avatar.position);
@@ -1349,7 +1438,8 @@ function frame(now) {
     }
     if (nearProp) { promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + nearProp.prompt; }
   }
-  if (wasNear && !nearProp) { if (near) promptEl.textContent = (touch ? 'Ouvrir · ' : 'E · Ouvrir ') + near.label; else promptEl.classList.remove('on'); }
+  if (aim) promptEl.classList.remove('on');
+  else if (wasNear && !nearProp) { if (near) promptEl.textContent = (touch ? 'Ouvrir · ' : 'E · Ouvrir ') + near.label; else promptEl.classList.remove('on'); }
   nearVan = nearProp === PARKED[0];
   if (upside.update({ dt, t, car: avatar.position, fwd: P.fwd, avatar, camera, sun, hemi, amb: ambL, skyU, fog: scene.fog, renderer, post, waterUniforms: planet.waterUniforms, audio, trails: trails.uniforms, ambience })) exitUpside(true);
   { const kd = c => keys.has(c);   // commandes brutes (le parcours de profil fait sa propre conduite)

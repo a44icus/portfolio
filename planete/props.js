@@ -493,7 +493,7 @@ export async function buildZones(planet, sections) {
   const yawToPoint = (dir, target) => yawToward(dir, target);
 
   /* ---------- objets interactifs : effets, crochets fournis par le jeu ---------- */
-  const H = { toast() {}, sfx() {}, open() {}, data: () => ({}), img: u => u, photo() {} };   // remplis par app.js
+  const H = { toast() {}, sfx() {}, open() {}, data: () => ({}), img: u => u, photo() {}, flash() {} };   // remplis par app.js
   const interactives = [];
   const interact = it => { interactives.push(it); return it; };
   const keepPart = m => { m.userData.part = true; return m; };   // pièce animée : jamais fusionnée
@@ -524,32 +524,95 @@ export async function buildZones(planet, sections) {
   /* ---------- un objet propre à chaque zone ---------- */
   const lathe = (pts, m) => new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 16), m);
   const THEMES = {
-    profil({ add }) {   // une partie de quilles : on lance la boule
+    profil({ add }) {   // une partie de quilles : on frappe la boule avec un marteau de dieu nordique (angle et puissance au choix)
       const white = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: 0.4 }), red = new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.4 });
-      const rows = [[0], [-0.5, 0.5], [-1, 0, 1], [-1.5, -0.5, 0.5, 1.5]], pins = [];
+      const rows = [[0], [-0.5, 0.5], [-1, 0, 1], [-1.5, -0.5, 0.5, 1.5]], pins = [], PS = 1.3;
       rows.forEach((row, r) => row.forEach(c => {
         const pin = new THREE.Group();
-        pin.add(lathe([[0, 0], [0.05, 0.01], [0.07, 0.1], [0.05, 0.2], [0.03, 0.26], [0.045, 0.32], [0.035, 0.37], [0, 0.38]], white));
-        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 12), red); band.position.y = 0.255; pin.add(band);
-        pins.push(add(pin, -2.1 + c * 0.2, -0.7 - r * 0.18, { r: 0.07, lie: 0.06, tip: 0.45 }));
+        pin.add(lathe([[0, 0], [0.05, 0.01], [0.07, 0.1], [0.05, 0.2], [0.03, 0.26], [0.045, 0.32], [0.035, 0.37], [0, 0.38]].map(([x, y]) => [x * PS, y * PS]), white));
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.032 * PS, 0.032 * PS, 0.03 * PS, 12), red); band.position.y = 0.255 * PS; pin.add(band);
+        pins.push(add(pin, -2.1 + c * 0.26, -0.75 - r * 0.23, { r: 0.09, lie: 0.08, tip: 0.45 }));
       }));
-      const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14).translate(0, 0.13, 0), new THREE.MeshStandardMaterial({ color: '#3d5afe', roughness: 0.25 }));
-      const ball = add(ballMesh, -2.1, 0.6, { r: 0.13, topple: false, heavy: true, drag: 0.9 });
+      const BR = 0.17;
+      const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BR, 24, 16).translate(0, BR, 0), new THREE.MeshStandardMaterial({ color: '#3d5afe', roughness: 0.25 }));
+      for (const [x, y] of [[-0.035, 0.03], [0.035, 0.03], [0, -0.03]]) { const hole = new THREE.Mesh(new THREE.CircleGeometry(0.018, 10), new THREE.MeshBasicMaterial({ color: '#10163a' })); hole.position.set(x, BR + y, BR * 0.985); ballMesh.add(hole); }
+      const ball = add(ballMesh, -2.1, 0.75, { r: BR, topple: false, heavy: true, drag: 0.9 });
       const all = [ball, ...pins], messy = () => all.some(b => b.moved);
       const regroup = () => all.forEach(b => { if (b.moved && !b.ret) b.lastHit = bodies.time - 31; });   // le retour automatique, tout de suite
-      let game = null;
-      interact({
-        body: ball, r: 1.7, extra: pins.map(p => p.mesh),
-        get prompt() { return messy() ? 'Replacer les quilles' : 'Lancer la boule'; },
-        ready: () => !game && !all.some(b => b.ret),
-        go() {
-          if (messy()) { regroup(); H.sfx('pipe'); return; }
+
+      // le marteau : origine au bout du manche (la main), la tête en bas, face de frappe vers +z
+      const hammer = new THREE.Group(); hammer.visible = false; group.add(hammer);
+      const steel = new THREE.MeshStandardMaterial({ color: '#9aa3b2', roughness: 0.35, metalness: 0.8 }), leather = new THREE.MeshStandardMaterial({ color: '#5a3520', roughness: 0.8 });
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.34), steel); head.position.y = -0.5; hammer.add(head);
+      for (const z of [-0.17, 0.17]) { const rim = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.03), steel); rim.position.set(0, -0.5, z); hammer.add(rim); }
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.42, 10).translate(0, -0.21, 0), leather); hammer.add(handle);
+      const strap = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.008, 6, 14), leather); strap.position.y = 0.03; hammer.add(strap);
+      const glowM = new THREE.MeshBasicMaterial({ color: '#9fd8ff', transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+      const aura = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.4), glowM); aura.position.y = -0.5; hammer.add(aura);
+      // flèche de visée posée au sol
+      const arrowShape = new THREE.Shape(); arrowShape.moveTo(-0.05, 0); arrowShape.lineTo(0.05, 0); arrowShape.lineTo(0.05, 0.75); arrowShape.lineTo(0.13, 0.75); arrowShape.lineTo(0, 1); arrowShape.lineTo(-0.13, 0.75); arrowShape.lineTo(-0.05, 0.75); arrowShape.closePath();
+      const arrowM = new THREE.MeshBasicMaterial({ color: '#ffd23a', transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      const arrow = new THREE.Mesh(new THREE.ShapeGeometry(arrowShape).rotateX(Math.PI / 2), arrowM); arrow.visible = false; arrow.renderOrder = 3; group.add(arrow);
+
+      const aimQ = new THREE.Quaternion(), aimM = new THREE.Matrix4(), fwdV = new THREE.Vector3(), rightV = new THREE.Vector3(), centerV = new THREE.Vector3(), swingQ = new THREE.Quaternion();
+      let aim = null, game = null;
+      const aimDir = angle => {   // direction de tir : vers le centre des quilles, tournée de « angle »
+        const up = ball.dir;
+        fwdV.copy(aim.base).addScaledVector(up, -aim.base.dot(up)).normalize().applyAxisAngle(up, angle);
+        rightV.crossVectors(up, fwdV).normalize();
+        aimQ.setFromRotationMatrix(aimM.makeBasis(rightV, up, fwdV));
+        return fwdV;
+      };
+      const placeHammer = theta => {   // theta > 0 : marteau levé en arrière
+        const up = ball.dir; centerV.copy(ball.mesh.position).addScaledVector(up, BR);
+        hammer.position.copy(centerV).addScaledVector(fwdV, -(BR + 0.17)).addScaledVector(up, 0.5);
+        hammer.quaternion.copy(aimQ).multiply(swingQ.setFromAxisAngle(new THREE.Vector3(-1, 0, 0), -theta));
+      };
+      const it = interact({
+        body: ball, r: 1.8, extra: pins.map(p => p.mesh),
+        get prompt() { return messy() ? 'Replacer les quilles' : 'Frapper la boule'; },
+        ready: () => !game && !aim?.fire && !all.some(b => b.ret),
+        aimReady: () => !messy(),
+        go() { if (messy()) { regroup(); H.sfx('pipe'); } },
+        aimStart() {
           const c = new THREE.Vector3(); pins.forEach(p => c.add(p.mesh.position)); c.divideScalar(pins.length);
-          const d = c.sub(ball.mesh.position); d.addScaledVector(ball.dir, -d.dot(ball.dir)).normalize().applyAxisAngle(ball.dir, (Math.random() - 0.5) * 0.16);
-          ball.vel.copy(d).multiplyScalar(4.2); ball.awake = ball.moved = true; ball.lastHit = bodies.time;
-          H.sfx('spin'); game = { t: 0, scored: false };
+          aim = { base: c.sub(ball.mesh.position).normalize(), angle: 0, power: 0, fire: null };
+          hammer.visible = arrow.visible = true; glowM.opacity = 0; H.sfx('power');
         },
-        update(dt) {
+        aimSet(angle, power) { if (!aim || aim.fire) return; aim.angle = angle; aim.power = power; },
+        aimFire() { if (!aim || aim.fire) return; aim.fire = { t: 0, theta: 0.9 + aim.power * 1.1, hit: false }; },
+        aimCancel() { aim = null; hammer.visible = arrow.visible = false; },
+        get aiming() { return !!aim && !aim.fire; },
+        aimScreenSign(camera) {   // +1 si la droite du tir est à droite de l'écran
+          if (!aim) return 1; aimDir(aim.angle);
+          const x0 = centerV.copy(ball.mesh.position).project(camera).x, x1 = centerV.copy(ball.mesh.position).add(rightV).project(camera).x;
+          return x1 >= x0 ? 1 : -1;
+        },
+        update(dt, t) {
+          if (aim) {
+            const f = aimDir(aim.angle), up = ball.dir;
+            if (!aim.fire) {
+              placeHammer(0.9 + aim.power * 1.1 + Math.sin(t * 3) * 0.04);
+              glowM.opacity = aim.power * 0.6 * (0.7 + 0.3 * Math.sin(t * 30));
+              arrow.position.copy(ball.mesh.position).addScaledVector(up, 0.03).addScaledVector(f, BR + 0.05);
+              arrow.quaternion.copy(aimQ); arrow.scale.set(1, 1, 0.5 + aim.power * 1.6);
+              arrowM.color.setHSL(0.15 - aim.power * 0.15, 1, 0.55);
+            } else {
+              const F = aim.fire; F.t += dt;
+              const k = Math.min(1, F.t / 0.14), theta = F.theta + (-0.25 - F.theta) * k * k;
+              placeHammer(theta); arrow.visible = false;
+              if (!F.hit && theta <= 0) {
+                F.hit = true; const speed = 2 + aim.power * 6;
+                ball.vel.copy(f).multiplyScalar(speed); ball.awake = ball.moved = true; ball.lastHit = bodies.time;
+                centerV.copy(ball.mesh.position).addScaledVector(up, BR);
+                for (let i = 0; i < 6 + aim.power * 16; i++) puff(centerV, randDir(up, 6).multiplyScalar(1 + aim.power * 2), i % 3 ? '#cfe9ff' : '#ffffff', 0.03, 0.5, 1.5);
+                H.sfx(aim.power > 0.6 ? 'boom' : 'bump'); H.flash && H.flash(aim.power);
+                game = { t: 0, scored: false };
+              }
+              if (F.t > 0.9) { glowM.opacity = Math.max(0, glowM.opacity - dt * 3); }
+              if (F.t > 1.1) { hammer.visible = false; aim = null; }
+            }
+          }
           if (!game) return;
           game.t += dt;
           if (game.t > 3 && !game.scored) {
@@ -560,24 +623,37 @@ export async function buildZones(planet, sections) {
         },
       });
     },
-    photos({ add, color }) {   // un appareil photo sur trépied : il prend la photo de la scène
+    photos({ add, color }) {   // un appareil photo sur trépied, avec retardateur
       const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: '#2b2b40', roughness: 0.5 });
-      for (let k = 0; k < 3; k++) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.7, 6).translate(0, 0.35, 0), dark); leg.rotation.set(0.28 * Math.cos(k * 2.1), 0, 0.28 * Math.sin(k * 2.1)); g.add(leg); }
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.14), new THREE.MeshStandardMaterial({ color, roughness: 0.4 })); body.position.y = 0.78; g.add(body);
-      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 16).rotateX(Math.PI / 2), dark); lens.position.set(0, 0.78, 0.12); g.add(lens);
+      // pieds : articulés en haut, écartés au sol
+      for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2, leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.014, 0.72, 6).translate(0, -0.36, 0), dark); leg.position.y = 0.7; leg.rotation.set(0.32 * Math.cos(a), 0, -0.32 * Math.sin(a)); g.add(leg); }
+      const headT = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.05, 10), dark); headT.position.y = 0.69; g.add(headT);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.14), new THREE.MeshStandardMaterial({ color, roughness: 0.4 })); body.position.y = 0.81; g.add(body);
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 16).rotateX(Math.PI / 2), dark); lens.position.set(0, 0.81, 0.12); g.add(lens);
       const flashM = new THREE.MeshStandardMaterial({ color: '#f4f4f4', emissive: '#ffffff', emissiveIntensity: 0, roughness: 0.2 });
-      const flash = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.05), flashM)); flash.position.set(-0.08, 0.905, 0.02); g.add(flash);
-      const btn = keepPart(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.025, 10), new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.4 }))); btn.position.set(0.09, 0.89, 0); g.add(btn);
+      const flash = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.05), flashM)); flash.position.set(-0.08, 0.935, 0.02); g.add(flash);
+      const btn = keepPart(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.025, 10), new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.4 }))); btn.position.set(0.09, 0.92, 0); g.add(btn);
+      const ledM = new THREE.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#ff2a2a', emissiveIntensity: 0, roughness: 0.3 });
+      const led = keepPart(new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), ledM)); led.position.set(0.11, 0.86, 0.072); g.add(led);
       const cam = add(g, 2.4, -1.3, { r: 0.2, lie: 0.08 });
-      let shot = -1;
+      let wait = -1, shot = -1, lastSec = 0;
+      const start = d => { if (wait >= 0 || shot >= 0) return; wait = d; lastSec = Math.ceil(d); H.sfx('jump'); };
       interact({
-        body: cam, r: 1.7, prompt: 'Prendre une photo', ready: () => idle(cam) && shot < 0,
-        go() { shot = 0; H.sfx('jump'); },
+        body: cam, r: 1.8, prompt: 'Prendre une photo', ready: () => idle(cam) && wait < 0 && shot < 0,
+        choices: [{ label: '1 s', go: () => start(1) }, { label: '10 s', go: () => start(10) }, { label: '20 s', go: () => start(20) }],
+        go() { start(1); },
+        get status() { return wait >= 0 ? '⏱ ' + Math.ceil(wait) : ''; },
         update(dt) {
+          if (wait >= 0) {
+            wait -= dt;
+            const fast = wait < 3; ledM.emissiveIntensity = (Math.sin((wait) * Math.PI * (fast ? 8 : 2)) > 0) ? 3 : 0.2;
+            const sec = Math.ceil(wait); if (sec !== lastSec && sec > 0) { lastSec = sec; if (sec <= 3) H.sfx('jump'); }
+            if (wait <= 0) { wait = -1; shot = 0; ledM.emissiveIntensity = 0; }
+          }
           if (shot < 0) return;
           shot += dt;
-          btn.position.y = 0.89 - (shot < 0.25 ? 0.012 : 0);
-          if (shot > 0.25 && shot - dt <= 0.25) { H.photo(); }
+          btn.position.y = 0.92 - (shot < 0.25 ? 0.012 : 0);
+          if (shot > 0.25 && shot - dt <= 0.25) H.photo();
           flashM.emissiveIntensity = shot > 0.25 ? Math.max(0, 14 * (1 - (shot - 0.25) / 0.35)) : 0;
           if (shot > 1.2) { shot = -1; flashM.emissiveIntensity = 0; }
         },
@@ -617,20 +693,25 @@ export async function buildZones(planet, sections) {
       });
     },
     parcours({ add }) {   // un poteau à flèches qui tourne : chaque tour montre une étape du parcours
-      const g = new THREE.Group(), boards = [];
+      const g = new THREE.Group(), pivots = [];
       g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.4, 8).translate(0, 0.7, 0), woodD));
-      [['Hier', -1, 1.25, 0.4], ['Aujourd’hui', 1, 1.0, -0.3], ['Demain', 1, 0.75, 0.9]].forEach(([t, ar, y, rot]) => { const b = signBoard(t, 0.8, 0.18, ar); b.position.y = y; b.rotation.y = rot; b.userData.rot = rot; g.add(b); boards.push(b); });
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.1, 8), woodD); cap.position.y = 1.45; g.add(cap);
+      // chaque panonceau part sur le côté du poteau (du côté de sa flèche) et tourne autour de lui
+      [['Hier', -1, 1.25, 0.4], ['Aujourd’hui', 1, 1.0, -0.3], ['Demain', 1, 0.75, 0.9]].forEach(([t, ar, y, rot]) => {
+        const pv = new THREE.Group(); pv.position.y = y; pv.rotation.y = rot; pv.userData.rot = rot; g.add(pv);
+        const b = signBoard(t, 0.8, 0.18, ar); b.position.x = ar * (0.4 + 0.065); pv.add(b); pivots.push(pv);
+      });
       const post = add(g, 2.4, -1.3, { r: 0.25, lie: 0.06 });
       let spin = -1, step = 0;
       interact({
-        body: post, r: 1.7, prompt: 'Faire tourner le poteau', ready: () => idle(post) && spin < 0,
+        body: post, r: 1.8, prompt: 'Faire tourner le poteau', ready: () => idle(post) && spin < 0,
         go() { spin = 0; H.sfx('spin'); },
         update(dt) {
           if (spin < 0) return;
           spin += dt; const k = Math.min(1, spin / 1.6), e = 1 - Math.pow(1 - k, 3);
-          boards.forEach((b, i) => { b.rotation.y = b.userData.rot + e * Math.PI * 2 * [3, -2, 2][i]; });
+          pivots.forEach((pv, i) => { pv.rotation.y = pv.userData.rot + e * Math.PI * 2 * [3, -2, 2][i]; });
           if (k >= 1) {
-            spin = -1; boards.forEach(b => { b.rotation.y = b.userData.rot; });
+            spin = -1; pivots.forEach(pv => { pv.rotation.y = pv.userData.rot; });
             const list = H.data().parcours || [];
             if (list.length) { const r = list[step++ % list.length]; H.toast((r.period ? r.period + ' · ' : '') + r.title, 2600); }
             else H.toast('Quinze ans de route… et ça continue', 2000);
