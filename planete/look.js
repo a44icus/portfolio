@@ -118,7 +118,9 @@ const Grade = {
         // nuit de pleine lune (E.T.) : tout bascule dans un bleu froid et brumeux ; les lumières vives gardent un peu de leur couleur
         float lu = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
         vec3 blue = lu * vec3(0.55, 0.8, 1.42) + vec3(0.006, 0.012, 0.03);
-        vec3 m = mix(blue, c.rgb, 0.18 + 0.45 * smoothstep(0.9, 2.5, lu));
+        float mx = max(c.r, max(c.g, c.b)), sat = (mx - min(c.r, min(c.g, c.b))) / max(mx, 0.001);
+        float keep = 0.18 + 0.45 * smoothstep(0.9, 2.5, lu) + 0.75 * smoothstep(0.62, 0.9, sat) * smoothstep(0.45, 0.9, mx);   // les petites touches vives et lumineuses (bonbons) gardent leur couleur
+        vec3 m = mix(blue, c.rgb, min(keep, 0.95));
         vec2 q = vUv - 0.5; m *= 1.0 - 0.45 * dot(q, q);
         c.rgb = mix(c.rgb, m, uMoon);
       }

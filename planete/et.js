@@ -15,7 +15,7 @@ import { LOOK } from './look.js';
 
 const FLY_V = 1.7, FLY_MIN = 2.3, FLY_MAX = 10.5, NR = 8;   // vitesse de vol, altitude mini / maxi au-dessus du sol, nombre d'anneaux
 
-const MOON_S = 3, MOON_H = 4.6;   // la lune est centrée derrière le vélo à cet endroit du vol (abscisse, altitude), puis reste en arrière
+const MOON_S = 3, MOON_H = 4.6, CAM_D = 16;   // la lune est centrée derrière le vélo à cet endroit du vol (abscisse, altitude), puis reste en arrière
 
 export function makeET({ planet, scene, sections, quality, R }) {
   const low = quality === 'low';
@@ -102,6 +102,14 @@ export function makeET({ planet, scene, sections, quality, R }) {
     return { g: root, body: g, h: halo, pos: new THREE.Vector3(), done: false, gone: 0, spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), ph: Math.random() * 6 };
   }
   const rings = []; for (let i = 0; i < NR; i++) rings.push(floater(i));
+  // Smarties : petites lentilles de chocolat enrobées, couleurs vives et brillantes
+  const SM_COLS = ['#e8202a', '#ff7a12', '#ffd21a', '#2ab84a', '#2a6ae8', '#ff5ab0', '#8a3ae8', '#7a4220'].map(c => new THREE.Color(c));
+  const SMAX = 160, smarties = [];
+  const smMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.14, 16, 10).scale(1, 0.42, 1), std('#ffffff', { roughness: 0.18, metalness: 0.05 }), SMAX);
+  smMesh.material.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 1.3;'); };   // leur couleur brille un peu : elle traverse le clair de lune bleuté
+  smMesh.material.customProgramCacheKey = () => 'smarties';
+  smMesh.frustumCulled = false; smMesh.visible = false; smMesh.castShadow = true; for (let i = 0; i < SMAX; i++) smMesh.setColorAt(i, SM_COLS[i % 8]); smMesh.count = 0; scene.add(smMesh);   // (couleurs par instance créées d'emblée : le shader est compilé au chargement)
+  const smQ = new THREE.Quaternion(), smE = new THREE.Euler(), smS = new THREE.Vector3();
   const site = { dir: new THREE.Vector3() };
 
   /* ---------- fourgons et projecteurs qui fouillent le ciel ---------- */
@@ -136,8 +144,8 @@ export function makeET({ planet, scene, sections, quality, R }) {
 
   /* ---------- panneau et effets ---------- */
   const hud = makeHud('etHud', 'background:rgba(8,14,34,.7); border:1px solid rgba(160,200,255,.35); color:#eef3ff;',
-    '<span style="color:#ff5a5a;font-size:1.05rem">♥</span><span class="ct rg">✦ 0 / ' + NR + '</span><span class="ct ds"></span><small>Prends de l\'élan vers la rampe lumineuse</small>');
-  const rgEl = hud.querySelector('.rg'), dsEl = hud.querySelector('.ds'), hint = hud.querySelector('small');
+    '<span style="color:#ff5a5a;font-size:1.05rem">♥</span><span class="ct rg">✦ 0 / ' + NR + '</span><span class="ct sm" style="color:#ffd21a">● 0</span><span class="ct ds"></span><small>Prends de l\'élan vers la rampe lumineuse</small>');
+  const rgEl = hud.querySelector('.rg'), dsEl = hud.querySelector('.ds'), smEl = hud.querySelector('.sm'), hint = hud.querySelector('small');
   const flash = makeFlash('radial-gradient(circle, #fff 0%, #e8f0ff 50%, #9ab8ff 100%)');
   const toast = makeToast('color:#fff; text-shadow:0 0 18px rgba(140,180,255,.9), 0 3px 0 rgba(0,0,0,.35);');
 
@@ -190,6 +198,20 @@ export function makeET({ planet, scene, sections, quality, R }) {
     });
     // le vaisseau attend, au-dessus de la clairière
     ship.visible = true; rainbow.visible = false; ship.userData.cone.material.opacity = 0.12; ship.position.copy(site.dir).multiplyScalar(groundR(site.dir) + 3.4); ship.quaternion.setFromUnitVectors(Y, site.dir);
+    // Smarties dans la forêt (autour du vélo et sur le chemin de la rampe) et en arcs entre les objets, le long du vol
+    smarties.length = 0; S.sm = 0;
+    for (let i = 0, tries = 0; i < 46 && tries < 3000; tries++) {
+      const a = Math.random() * Math.PI * 2, dist = 1.5 + Math.random() * 13, d = offset(home.dir, a, dist);
+      if (!K.dry(d, 0.9) || K.treesWithin(d, 0.45) > 0) continue;
+      smarties.push({ p: d.clone().multiplyScalar(planet.heightDir(d) + 0.22), air: false, alive: true, c: SM_COLS[i % SM_COLS.length], ph: Math.random() * 6 }); i++;
+    }
+    for (let k = 1; k < 7; k++) { const d = offset(home.dir, best, k); smarties.push({ p: d.clone().multiplyScalar(planet.heightDir(d) + 0.22), air: false, alive: true, c: SM_COLS[k % SM_COLS.length], ph: k }); }
+    const ss = [3].concat(rings.map(r => r.s)), hs = [4.4].concat(rings.map(r => r.alt));
+    for (let i = 0; i < ss.length - 1; i++) for (let j = 1; j <= 5; j++) {
+      const f = j / 6, s2 = ss[i] + (ss[i + 1] - ss[i]) * f, h2 = hs[i] + (hs[i + 1] - hs[i]) * f + Math.sin(f * Math.PI) * 1.1;
+      smarties.push({ p: arcPt(s2, h2, new THREE.Vector3()), air: true, alive: true, c: SM_COLS[(i * 5 + j) % SM_COLS.length], ph: j });
+    }
+    smMesh.visible = true; smEl.textContent = '● 0';
     prop.visible = false; candyMesh.visible = false; moon.visible = true; moonHalo.material.opacity = 0; mist.visible = true; mistMat.opacity = 0; S.mistInit = false;
     rgEl.textContent = '✦ 0 / ' + NR; dsEl.textContent = ''; hint.textContent = "Prends de l'élan vers la rampe lumineuse";
     document.body.classList.add('egg'); hud.classList.add('on'); flash();
@@ -201,6 +223,7 @@ export function makeET({ planet, scene, sections, quality, R }) {
     prop.visible = true; candyMesh.visible = true; moon.visible = false; ship.visible = false; rainbow.visible = false; ramp.visible = false; mist.visible = false;
     rings.forEach(r => { r.g.visible = false; }); lights.forEach(l => { l.g.visible = false; });
     hideTrees(false); if (planet.clouds) planet.clouds.visible = true;
+    smMesh.visible = false; smMesh.count = 0; smarties.length = 0;
     if (ctxRef) {
       if (ctxRef.ambience) ctxRef.ambience.state.forceHour = null;
       if (S.sh0) { LOOK.uShadowTint.value.copy(S.sh0); LOOK.uLitTint.value.copy(S.lit0); } S.sh0 = null;
@@ -266,6 +289,17 @@ export function makeET({ planet, scene, sections, quality, R }) {
       if (moonDir.lengthSq() < 0.5) moonDir.copy(want); else moonDir.lerp(want, 1 - Math.exp(-dt * 0.8)).normalize();
     }
     const r = S.phase === 'ground' ? groundPhase(ctx, dt, t, bike, input, up) : S.cine >= 0 ? cinematic(ctx, dt, t, bike) : flyPhase(ctx, dt, t, bike, input);
+    // Smarties : ils tournent sur eux-mêmes ; on les ramasse en passant (au sol avec le vélo, en vol avec le vélo volant)
+    { const bc = tmp.copy(ctx.avatar.position).addScaledVector(tmp3.copy(ctx.avatar.position).normalize(), 0.45); let n = 0;
+      for (const c of smarties) {
+        if (!c.alive) continue;
+        const rel = tmp2.copy(c.p).sub(bc); if (c.air && S.phase !== 'ground') rel.addScaledVector(ARC.N, -rel.dot(ARC.N));
+        if (S.cine < 0 && rel.length() < (c.air ? 0.65 : 0.75)) { c.alive = false; S.sm++; smEl.textContent = '● ' + S.sm; ctx.audio.sfx('coin'); continue; }
+        if (n >= SMAX) continue;
+        const u = tmp3.copy(c.p).normalize(); smQ.setFromUnitVectors(Y, u).multiply(q2.setFromEuler(smE.set(0.5 * Math.sin(t + c.ph), t * 2.2 + c.ph, 1.2)));
+        m4.compose(tmp2.copy(c.p).addScaledVector(u, Math.sin(t * 2 + c.ph) * 0.06), smQ, smS.setScalar(c.air ? 1.3 : 1)); smMesh.setMatrixAt(n, m4); smMesh.setColorAt(n, c.c); n++;
+      }
+      smMesh.count = n; smMesh.instanceMatrix.needsUpdate = true; if (smMesh.instanceColor) smMesh.instanceColor.needsUpdate = true; }
     moon.position.copy(ctx.camera.position).addScaledVector(moonDir, 400); moon.scale.setScalar(S.phase === 'ground' ? 190 : 150); moon.quaternion.copy(ctx.camera.quaternion);
     moon.material.opacity = k; moonHalo.material.opacity = 0.32 * k;
     return r;
@@ -316,14 +350,14 @@ export function makeET({ planet, scene, sections, quality, R }) {
     // caméra de profil : en avance dans le sens du vol, elle suit la hauteur en douceur ; la lune derrière, centrée sur la bande où l'on vole
     const zoom = ctx.zoom || 1;
     cam2.s += (S.s + 0.3 - cam2.s) * (1 - Math.exp(-dt * 4)); cam2.h += (S.h - cam2.h) * (1 - Math.exp(-dt * 3));
-    const CU = arcDir(cam2.s); camPos.copy(arcPt(cam2.s, cam2.h, tmp)).addScaledVector(ARC.N, 11 * zoom);
+    const CU = arcDir(cam2.s); camPos.copy(arcPt(cam2.s, cam2.h, tmp)).addScaledVector(ARC.N, CAM_D * zoom);
     camLook.copy(arcPt(cam2.s, cam2.h + 0.55, tmp3));
     ctx.camera.position.lerp(camPos, 1 - Math.exp(-dt * (S.lift < 1 ? 2.5 : 6))); ctx.camera.up.copy(CU); ctx.camera.lookAt(camLook);
     { const cam = ctx.camera, fw = tmp.set(0, 0, -1).applyQuaternion(cam.quaternion), rt = tmp3.set(1, 0, 0).applyQuaternion(cam.quaternion), upv = cUp.set(0, 1, 0).applyQuaternion(cam.quaternion);
-      const ax = -Math.max(0, S.s - MOON_S) * 0.028, ay = Math.atan2(MOON_H - cam2.h - 0.55, 11);   // elle glisse vers la gauche à mesure qu'on avance, à hauteur fixe
+      const ax = -Math.max(0, S.s - MOON_S) * 0.028, ay = Math.atan2(MOON_H - cam2.h - 0.55, CAM_D);   // elle glisse vers la gauche à mesure qu'on avance, à hauteur fixe
       moonDir.copy(fw).addScaledVector(rt, Math.tan(ax)).addScaledVector(upv, Math.tan(ay)).normalize(); }
     // arrivée au vaisseau
-    if (S.s >= ARC.sSite - 1.2) { S.cine = 0; S.from = pos.clone(); ctx.audio.sfx('pick'); hint.textContent = 'Téléphone maison…'; toast(S.rings + ' / ' + NR + ' objets', 1600); }
+    if (S.s >= ARC.sSite - 1.2) { S.cine = 0; S.from = pos.clone(); ctx.audio.sfx('pick'); hint.textContent = 'Téléphone maison…'; toast(S.rings + ' / ' + NR + ' objets · ' + S.sm + ' Smarties', 1800); }
     return false;
   }
   /* la fin : le vélo monte dans la lumière du vaisseau, qui repart en laissant un arc-en-ciel */
@@ -335,10 +369,10 @@ export function makeET({ planet, scene, sections, quality, R }) {
     if (c > 1.8) { const s = c - 1.8; ship.position.copy(U).multiplyScalar(groundR(U) + 3.4 + s * s * 7); rainbow.visible = true; rainbow.material.uniforms.uK.value = Math.min(1, s * 1.5); ship.userData.cone.material.opacity = Math.max(0, 0.12 - s * 0.08); }
     const sun = ctx.sun; sun.target.position.copy(base); sun.position.copy(base).addScaledVector(ARC.N, -22).addScaledVector(U, 12); sun.target.updateMatrixWorld();
     cam2.s += (ARC.sSite - cam2.s) * (1 - Math.exp(-dt * 2)); cam2.h += (5 + Math.min(4, c) - cam2.h) * (1 - Math.exp(-dt * 1.5));
-    camPos.copy(arcPt(cam2.s, cam2.h, tmp)).addScaledVector(ARC.N, 13);
+    camPos.copy(arcPt(cam2.s, cam2.h, tmp)).addScaledVector(ARC.N, CAM_D + 2);
     ctx.camera.position.lerp(camPos, 1 - Math.exp(-dt * 3)); ctx.camera.up.copy(arcDir(cam2.s)); ctx.camera.lookAt(arcPt(cam2.s, cam2.h - 0.4, tmp3));
     { const cam = ctx.camera, fw = tmp.set(0, 0, -1).applyQuaternion(cam.quaternion), rt = tmp2.set(1, 0, 0).applyQuaternion(cam.quaternion), upv = cUp.set(0, 1, 0).applyQuaternion(cam.quaternion);
-      moonDir.copy(fw).addScaledVector(rt, Math.tan(-Math.max(0, ARC.sSite - MOON_S) * 0.028)).addScaledVector(upv, Math.tan(Math.atan2(MOON_H - cam2.h, 13))).normalize(); }
+      moonDir.copy(fw).addScaledVector(rt, Math.tan(-Math.max(0, ARC.sSite - MOON_S) * 0.028)).addScaledVector(upv, Math.tan(Math.atan2(MOON_H - cam2.h, CAM_D + 2))).normalize(); }
     if (c > 5.4) { S.lock = false; ctx.avatar.visible = true; return true; }
     return false;
   }

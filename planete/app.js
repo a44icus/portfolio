@@ -1201,6 +1201,7 @@ function frame(now) {
   if (mode === 'walk' && !upside.on && !egg) for (const it of PARKED) {
     // boîte de l'objet (dans son repère), élargie de la demi-taille de la voiture
     const v = it.obj, loc = v.worldToLocal(tmpA.copy(avatar.position)), HX = it.half + 0.42, Z0 = -it.rear - 0.6, Z1 = it.front + 0.6;
+    if (Math.abs(loc.y) > 3) continue;   // (sans ce test, l'axe vertical de l'objet traverse la planète : de l'autre côté du globe, on butait sur un mur invisible)
     if (Math.abs(loc.x) < HX + 1.0 && loc.z > Z0 - 1.0 && loc.z < Z1 + 1.0) { nearProp = it; promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + it.prompt; }
     if (Math.abs(loc.x) < HX && loc.z > Z0 && loc.z < Z1) {
       const px = HX - Math.abs(loc.x), pz = Math.min(loc.z - Z0, Z1 - loc.z);
