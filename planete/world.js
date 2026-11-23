@@ -139,7 +139,7 @@ const GLITTER_GLSL = `
     vec3 sp = (cell + 0.15 + 0.7 * o) / cellsPerUnit;
     vec3 N = normalize(wp), dv = wp - sp; dv -= N * dot(dv, N);
     float pw = max(length(fwidth(wp)), 1e-5);
-    float onPx = 1.0 - step(0.6 * pw, length(dv));
+    float onPx = 1.0 - smoothstep(0.25 * pw, 1.15 * pw, length(dv));   // un point rond aux bords adoucis (un pixel net devenait un petit carré sur téléphone)
     float tw = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * (2.0 + 3.0 * o.x) + h * 80.0), 3.0);
     // pas de paillette là où le flou de maquette agit : il recopiait ce point d'un pixel en petits cadres autour de lui
     float tk = uTiltA * smoothstep(uTiltB, uTiltB + 0.32, abs(gl_FragCoord.y / uScrH - uTiltF));
@@ -459,17 +459,17 @@ export function buildPlanet(anchors, quality = 'high') {
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = waterUniforms.uTime; Object.assign(sh.uniforms, SAND, TILT);
     sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = GLITTER_GLSL + 'uniform float uTime;\nuniform float uGlitS;\nuniform float uGlitSI;\nuniform float uGlitDay;\nuniform vec3 uSand;\nuniform float uSandMix;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = '#define GLIT_K ' + (quality === 'low' ? '0.6' : '1.0') + '\n' + GLITTER_GLSL + 'uniform float uTime;\nuniform float uGlitS;\nuniform float uGlitSI;\nuniform float uGlitDay;\nuniform vec3 uSand;\nuniform float uSandMix;\nvarying vec3 vWPos;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       diffuseColor.rgb = mix(diffuseColor.rgb, uSand, uSandMix * smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r));`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       {
         float sand = smoothstep(0.45, 0.75, vColor.r) * (1.0 - smoothstep(0.35, 0.55, vColor.g)) * step(vColor.b * 4.0, vColor.r);
         // une paillette = un point fixe du sol, dessiné sur un seul pixel, qui scintille sur place
         float far = 1.0 - smoothstep(8.0, 24.0, length(cameraPosition - vWPos));
-        float sp = glitter(vWPos, 7.0, uGlitS, uTime) * sand * far;
+        float sp = glitter(vWPos, 7.0, uGlitS, uTime) * sand * far * GLIT_K;
         totalEmissiveRadiance += vec3(1.0, 0.94, 0.82) * sp * uGlitSI * uGlitDay;
       }`);
   };
-  mat.customProgramCacheKey = () => 'ground-glitter';
+  mat.customProgramCacheKey = () => 'ground-glitter' + quality;
   const waterUniforms = {
     uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
     uSky: { value: new THREE.Color(STYLE.skyHorizon) }, uScale: { value: S },
@@ -491,7 +491,7 @@ export function buildPlanet(anchors, quality = 'high') {
   }
   const rng = (() => { let s = 0x9e3779b9; return () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0; return s / 4294967296; }; })();
   const onPlaza = (dd, extra = 0) => sites.some(s => dd.dot(s.dir) > Math.cos(A0 + extra));
-  const grassM = [], flowers = [], GRASS_KEEP = quality === 'low' ? 0.62 : 1;
+  const grassM = [], flowers = [], DENS = (224 / n) * (224 / n);   // téléphone : maillage plus lâche, plus de touffes par sommet (même herbe que sur ordinateur)
   const gq = new THREE.Quaternion(), gs = new THREE.Vector3(), gp = new THREE.Vector3(), gm = new THREE.Matrix4(), gy = new THREE.Quaternion(), gyaw = new THREE.Quaternion();
   /** Touffes d'herbe autour d'un sommet du sol (va, vb : vecteurs vers les sommets voisins, sur deux mailles). */
   function grassAt(dd, h, steep, pk, va, vb) {
@@ -503,14 +503,13 @@ export function buildPlanet(anchors, quality = 'high') {
     // hauteur : courte au bord des plaques, haute au cœur, avec des variations
     const tall = (0.7 + 0.55 * smoothstep(0.02, 0.16, patch)) * (0.88 + 0.24 * (noise.noise(dd.x * 40, dd.y * 40, dd.z * 40) * 0.5 + 0.5));
     gq.setFromUnitVectors(Y, dd);
-    if (rng() > GRASS_KEEP) return;
-    for (let k = 0, nt = 1 + (patch > 0.1 && quality !== 'low' ? 1 : 0); k < nt; k++) {
+    for (let k = 0, nt = Math.round((1 + (patch > 0.1 ? 1 : 0)) * DENS); k < nt; k++) {
       gp.copy(dd).multiplyScalar(h * S - 0.02).addScaledVector(va, (rng() - 0.5) * 0.55).addScaledVector(vb, (rng() - 0.5) * 0.55);
       const s = 0.3 + rng() * 0.12 + Math.max(0, patch) * 0.12;
       gm.compose(gp, gy.copy(gq).multiply(gyaw.setFromAxisAngle(Y, rng() * 6.283)), gs.set(s, s * tall * (0.85 + rng() * 0.35), s));
       grassM.push([gm.clone(), new THREE.Color(1, 1, 1).multiplyScalar(0.82 + rng() * 0.32)]);
     }
-    if (patch > 0.22 && rng() < 0.09) {
+    if (patch > 0.22 && rng() < 0.09 * DENS) {
       const li = Math.floor((noise.noise(dd.x * 14, dd.y * 14, dd.z * 14) * 0.5 + 0.5) * LUPIN_COLORS.length) % LUPIN_COLORS.length, lf = 0.9 + rng() * 0.2;
       const fc = new THREE.Color(LUPIN_COLORS[li]).multiplyScalar(lf); fc._g = li; fc._f = lf;
       const ls = 0.8 + rng() * 0.6;
@@ -649,14 +648,39 @@ export function buildPlanet(anchors, quality = 'high') {
     pair(v.wood, v.leaves, null, list.map(p => p[1]), list.map(p => [p[1], p[2]]));
   });
 
-  const lcells = new Map(); let lupAttr = null, lupMats = [];
-  const GC = 0.6, gcells = new Map(); let gpos = [], gattr = null, grassMesh = null, padMesh = null, bloomMesh = null, lupinSpikes = null, lupinStems = null; const padState = [];
+  const lcells = new Map(); let lupMats = [], lupParts = [], lupTint = [], grassParts = []; const lupOf = [], lupLoc = [], grassOf = [], grassLoc = [], touched = new Set();
+  /* ---------- tuiles : le décor dense (herbe, lupins) est découpé en morceaux de planète, chacun dessiné seulement s'il est en vue ---------- */
+  const cullChunks = [];
+  function cellOf(x, y, z, C) {
+    const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z); let f, u, v, m;
+    if (ax >= ay && ax >= az) { f = x > 0 ? 0 : 1; m = ax; u = y; v = z; } else if (ay >= az) { f = y > 0 ? 2 : 3; m = ay; u = x; v = z; } else { f = z > 0 ? 4 : 5; m = az; u = x; v = y; }
+    const i = Math.min(C - 1, Math.floor((u / m * 0.5 + 0.5) * C)), j = Math.min(C - 1, Math.floor((v / m * 0.5 + 0.5) * C));
+    return (f * C + i) * C + j;
+  }
+  function groupByCell(mats, C) { const g = new Map(); mats.forEach((m, i) => { const e = m.elements, k = cellOf(e[12], e[13], e[14], C); let a = g.get(k); if (!a) g.set(k, a = []); a.push(i); }); return [...g.values()]; }
+  function addChunk(meshes, mats) {
+    const c = new THREE.Vector3(); mats.forEach(m => { const e = m.elements; c.x += e[12]; c.y += e[13]; c.z += e[14]; }); c.normalize();
+    let cosR = 1; mats.forEach(m => { const e = m.elements; cosR = Math.min(cosR, (c.x * e[12] + c.y * e[13] + c.z * e[14]) / Math.hypot(e[12], e[13], e[14])); });
+    meshes.forEach(m => { m.frustumCulled = true; m.computeBoundingSphere(); });
+    cullChunks.push({ meshes, c, ang: Math.acos(Math.max(-1, Math.min(1, cosR))) });
+  }
+  const cullV = new THREE.Vector3();
+  /** Montre seulement les tuiles du côté de la caméra (avant l'horizon) et, en balade, assez proches. */
+  function cullDecor(camPos, near = 0) {
+    const dc = camPos.length(), cd = cullV.copy(camPos).divideScalar(dc), hor = Math.acos(Math.min(1, R * S * 0.96 / dc));
+    for (const ch of cullChunks) {
+      const a = Math.acos(Math.max(-1, Math.min(1, ch.c.dot(cd))));
+      const vis = a < hor + ch.ang + 0.04 && (!near || (a - ch.ang) * R * S < near);
+      for (const m of ch.meshes) m.visible = vis;
+    }
+  }
+  const GC = 0.6, gcells = new Map(); let gpos = [], grassMesh = null, padMesh = null, bloomMesh = null, lupinSpikes = null, lupinStems = null; const padState = [];
   const gkey = (x, y, z) => ((Math.floor(x / GC) + 512) * 1024 + (Math.floor(y / GC) + 512)) * 1024 + (Math.floor(z / GC) + 512);
   /** Couche les lupins touchés par le véhicule (points : roues et centre ; car : centre), à l'opposé de la voiture. */
   const lupR = new THREE.Matrix4(), lupV = new THREE.Vector3(), lupU = new THREE.Vector3();
   function crushLupins(points, radius, t, car) {
-    if (!lupAttr) return;
-    const arr = lupAttr.array, r2 = radius * radius; let lo = Infinity, hi = -1;
+    if (!lupParts.length) return;
+    const r2 = radius * radius; touched.clear();
     for (const p of points) {
       const cx = Math.floor(p.x / GC), cy = Math.floor(p.y / GC), cz = Math.floor(p.z / GC);
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
@@ -664,7 +688,8 @@ export function buildPlanet(anchors, quality = 'high') {
         for (const i of cell) {
           const e = lupMats[i].elements, dx = e[12] - p.x, dy = e[13] - p.y, dz = e[14] - p.z;
           if (dx * dx + dy * dy + dz * dz > r2) continue;
-          if (arr[i * 3] > 0 && t - arr[i * 3] < 3) continue;   // déjà couché
+          const P = lupParts[lupOf[i]], l = lupLoc[i], arr = P.attr.array;
+          if (arr[l * 3] > 0 && t - arr[l * 3] < 3) continue;   // déjà couché
           // direction de chute : à l'opposé du véhicule, exprimée dans le repère du lupin
           lupU.set(e[12], e[13], e[14]).normalize();
           lupV.set(e[12] - car.x, e[13] - car.y, e[14] - car.z); lupV.addScaledVector(lupU, -lupV.dot(lupU));
@@ -672,17 +697,17 @@ export function buildPlanet(anchors, quality = 'high') {
           lupR.extractRotation(lupMats[i]).transpose(); lupV.applyMatrix4(lupR); lupV.y = 0;
           if (lupV.lengthSq() < 1e-8) lupV.set(1, 0, 0);
           lupV.normalize();
-          arr[i * 3] = t; arr[i * 3 + 1] = lupV.x; arr[i * 3 + 2] = lupV.z;
-          if (i < lo) lo = i; if (i > hi) hi = i;
+          arr[l * 3] = t; arr[l * 3 + 1] = lupV.x; arr[l * 3 + 2] = lupV.z;
+          if (l < P.lo) P.lo = l; if (l > P.hi) P.hi = l; touched.add(P);
         }
       }
     }
-    if (hi >= 0) { lupAttr.clearUpdateRanges(); lupAttr.addUpdateRange(lo * 3, (hi - lo + 1) * 3); lupAttr.needsUpdate = true; }
+    for (const P of touched) { P.attr.clearUpdateRanges(); P.attr.addUpdateRange(P.lo * 3, (P.hi - P.lo + 1) * 3); P.attr.needsUpdate = true; P.lo = Infinity; P.hi = -1; }
   }
   /** Écrase l'herbe autour des points donnés (positions du monde), à l'instant t. */
   function crushGrass(points, radius, t) {
-    if (!gattr) return;
-    let lo = Infinity, hi = -1; const r2 = radius * radius, arr = gattr.array;
+    if (!grassParts.length) return;
+    const r2 = radius * radius; touched.clear();
     for (const p of points) {
       const cx = Math.floor(p.x / GC), cy = Math.floor(p.y / GC), cz = Math.floor(p.z / GC);
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
@@ -690,12 +715,13 @@ export function buildPlanet(anchors, quality = 'high') {
         for (const i of cell) {
           const q = gpos[i], dx = q[0] - p.x, dy = q[1] - p.y, dz = q[2] - p.z;
           if (dx * dx + dy * dy + dz * dz > r2) continue;
-          if (t - arr[i] < 1 && arr[i] > 0) continue;   // déjà écrasée à l'instant
-          arr[i] = t; if (i < lo) lo = i; if (i > hi) hi = i;
+          const P = grassParts[grassOf[i]], l = grassLoc[i], arr = P.attr.array;
+          if (t - arr[l] < 1 && arr[l] > 0) continue;   // déjà écrasée à l'instant
+          arr[l] = t; if (l < P.lo) P.lo = l; if (l > P.hi) P.hi = l; touched.add(P);
         }
       }
     }
-    if (hi >= 0) { gattr.clearUpdateRanges(); gattr.addUpdateRange(lo, hi - lo + 1); gattr.needsUpdate = true; }
+    for (const P of touched) { P.attr.clearUpdateRanges(); P.attr.addUpdateRange(P.lo, P.hi - P.lo + 1); P.attr.needsUpdate = true; P.lo = Infinity; P.hi = -1; }
   }
   // herbe : touffes de quatre brins effilés, du vert sombre au vert tendre, qui ondulent au vent
   {
@@ -706,7 +732,7 @@ export function buildPlanet(anchors, quality = 'high') {
       c.needsUpdate = true;
     };
     // touffe épaisse : des brins larges et pointus, disposés en étoile et penchés vers l'extérieur
-    const pos = [], col = [], nrm = [], NB = quality === 'low' ? 5 : 7, mid = base.clone().lerp(tip, 0.45);
+    const pos = [], col = [], nrm = [], NB = 7, mid = base.clone().lerp(tip, 0.45);
     for (let k = 0; k < NB; k++) {
       const ang = k / NB * Math.PI * 2 + Math.sin(k * 7.3) * 0.4, rx = Math.cos(ang), rz = Math.sin(ang), r0 = 0.04 + (k % 3) * 0.045;
       const ox = rx * r0, oz = rz * r0, w = 0.13 + (k % 2) * 0.035, lean = 0.14 + (k % 3) * 0.09, hgt = 0.85 + ((k * 5) % 7) * 0.08;
@@ -742,15 +768,21 @@ export function buildPlanet(anchors, quality = 'high') {
     };
     gmat.customProgramCacheKey = () => 'grass-wind';
     for (let i = grassM.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = grassM[i]; grassM[i] = grassM[j]; grassM[j] = t; }   // ordre mélangé : la densité éclaircit partout pareil
-    g.setAttribute('aCrush', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, grassM.length)), 1));
-    grassMesh = inst(g, gmat, grassM, { cast: false });
+    // découpée en tuiles : la caméra ne dessine que les morceaux de prairie en vue (chacun a son propre état « écrasé »)
+    grassParts = groupByCell(grassM.map(it => it[0]), 4).map((idx, pi) => {
+      const geo = new THREE.BufferGeometry(); for (const k of ['position', 'color', 'normal']) geo.setAttribute(k, g.attributes[k]);
+      const attr = new THREE.InstancedBufferAttribute(new Float32Array(idx.length), 1); attr.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aCrush', attr);
+      const mesh = inst(geo, gmat, idx.map(i => grassM[i]), { cast: false }); addChunk([mesh], idx.map(i => grassM[i][0]));
+      idx.forEach((i, l) => { grassOf[i] = pi; grassLoc[i] = l; });
+      return { mesh, attr, n: idx.length, lo: Infinity, hi: -1 };
+    });
+    grassMesh = grassParts[0] && grassParts[0].mesh;
     // grille spatiale des touffes, pour trouver vite celles qui sont sous les roues
     grassM.forEach((it, i) => {
       const e = it[0].elements, key = gkey(e[12], e[13], e[14]);
       let c = gcells.get(key); if (!c) gcells.set(key, c = []); c.push(i);
     });
     gpos = grassM.map(it => [it[0].elements[12], it[0].elements[13], it[0].elements[14]]);
-    gattr = g.attributes.aCrush;
   }
   // lupins : une tige fine, quelques feuilles en étoile au pied, et un épi de petites fleurs qui s'effile vers la pointe ; ils se balancent au vent
   {
@@ -764,10 +796,10 @@ export function buildPlanet(anchors, quality = 'high') {
       const y = 0.26 + r * 0.019, rad = 0.034 * (1 - r / 17), fr = 0.013 * (1 - r / 22);
       for (let k = 0; k < 6; k++) {
         const a = k / 6 * Math.PI * 2 + r * 0.55, x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-        floret(new THREE.SphereGeometry(fr, 5, 3).scale(1, 0.8, 1).translate(x, y, z), x, y, z, rng());
+        floret(new THREE.OctahedronGeometry(fr).scale(1, 0.8, 1).translate(x, y, z), x, y, z, rng());
       }
     }
-    floret(new THREE.SphereGeometry(0.008, 5, 3).translate(0, 0.26 + 16 * 0.019, 0), 0, 0.26 + 16 * 0.019, 0, 0);
+    floret(new THREE.OctahedronGeometry(0.008).translate(0, 0.26 + 16 * 0.019, 0), 0, 0.26 + 16 * 0.019, 0, 0);
     // couché au passage du véhicule : aCrush = (instant, direction locale x, z) ; il bascule à l'opposé de la voiture puis se redresse lentement
     const LUP_CRUSH = `
       { float cAge = uTime - aCrush.x;
@@ -786,11 +818,19 @@ export function buildPlanet(anchors, quality = 'high') {
     { const prev = stemM.onBeforeCompile; stemM.onBeforeCompile = (sh, r) => { prev(sh, r); sh.vertexShader = 'attribute vec3 aCrush;\n' + sh.vertexShader; }; }
     for (let i = flowers.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = flowers[i]; flowers[i] = flowers[j]; flowers[j] = t; }   // ordre mélangé : la densité éclaircit partout pareil
     const spikeGeo = mergeGeos(spike); spikeGeo.setAttribute('aCenter', new THREE.Float32BufferAttribute(cen, 3)); spikeGeo.setAttribute('aRank', new THREE.Float32BufferAttribute(rnk, 1));
-    lupinSpikes = inst(spikeGeo, spikeM, flowers, { cast: false }); lupinSpikes.userData.tint = flowers.map(f => [f[1]._g, f[1]._f]);
-    lupinStems = inst(mergeGeos(stem), stemM, flowers.map(f => f[0]), { color: false, cast: false });
-    // état « couché » partagé par l'épi et la tige, et grille pour retrouver vite les lupins proches du véhicule
-    lupAttr = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, flowers.length) * 3), 3); lupAttr.setUsage(THREE.DynamicDrawUsage);
-    spikeGeo.setAttribute('aCrush', lupAttr); lupinStems.geometry.setAttribute('aCrush', lupAttr);
+    // en tuiles, comme l'herbe ; l'état « couché » est partagé par l'épi et la tige de chaque tuile
+    const stemGeo = mergeGeos(stem);
+    lupTint = flowers.map(f => [f[1]._g, f[1]._f]);
+    lupParts = groupByCell(flowers.map(f => f[0]), 3).map((idx, pi) => {
+      const attr = new THREE.InstancedBufferAttribute(new Float32Array(idx.length * 3), 3); attr.setUsage(THREE.DynamicDrawUsage);
+      const sg = new THREE.BufferGeometry(); for (const k in spikeGeo.attributes) sg.setAttribute(k, spikeGeo.attributes[k]); if (spikeGeo.index) sg.setIndex(spikeGeo.index); sg.setAttribute('aCrush', attr);
+      const tg = new THREE.BufferGeometry(); for (const k in stemGeo.attributes) tg.setAttribute(k, stemGeo.attributes[k]); if (stemGeo.index) tg.setIndex(stemGeo.index); tg.setAttribute('aCrush', attr);
+      const spike = inst(sg, spikeM, idx.map(i => flowers[i]), { cast: false }), stemM2 = inst(tg, stemM, idx.map(i => flowers[i][0]), { color: false, cast: false });
+      addChunk([spike, stemM2], idx.map(i => flowers[i][0]));
+      idx.forEach((i, l) => { lupOf[i] = pi; lupLoc[i] = l; });
+      return { spike, stem: stemM2, attr, n: idx.length, lo: Infinity, hi: -1 };
+    });
+    lupinSpikes = lupParts[0] && lupParts[0].spike; lupinStems = lupParts[0] && lupParts[0].stem;
     lupMats = flowers.map(f => f[0]);
     lupMats.forEach((m, i) => { const e = m.elements, k = gkey(e[12], e[13], e[14]); let c = lcells.get(k); if (!c) lcells.set(k, c = []); c.push(i); });
   }
@@ -930,12 +970,15 @@ export function buildPlanet(anchors, quality = 'high') {
     /** Nénuphars (pour la faune) : home (direction), off (décalage poussé par la vague) ; padR : rayon de leur surface. */
     pads: padState, padR: (R - 0.3) * S + 0.012,
     /** Lupins : densité (0 à 1), tige et épi suivent. */
-    setLupinDensity(k) { if (lupinSpikes) lupinSpikes.count = lupinStems.count = Math.floor(lupinSpikes.instanceMatrix.count * k); },
+    setLupinDensity(k) { for (const P of lupParts) P.spike.count = P.stem.count = Math.floor(P.n * k); },
+    /** Herbe : densité (0 à 1), tuile par tuile (l'ordre mélangé éclaircit partout pareil). */
+    setGrassDensity(k) { for (const P of grassParts) P.mesh.count = Math.floor(P.n * k); },
+    cullDecor,
     /** Lupins : une couleur par famille, chaque fleur garde sa nuance. */
     recolorLupins(hexes) {
-      if (!lupinSpikes) return; const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
-      lupinSpikes.userData.tint.forEach(([g, f], i) => lupinSpikes.setColorAt(i, c.copy(G[g]).multiplyScalar(f)));
-      lupinSpikes.instanceColor.needsUpdate = true;
+      if (!lupParts.length) return; const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
+      lupTint.forEach(([g, f], i) => lupParts[lupOf[i]].spike.setColorAt(lupLoc[i], c.copy(G[g]).multiplyScalar(f)));
+      for (const P of lupParts) P.spike.instanceColor.needsUpdate = true;
     },
     /** Repeint les feuillages : une couleur par famille (jaune, olive, orange, rouge, rose, sapin), chaque arbre gardant sa nuance. */
     recolorTrees(hexes) {
@@ -1117,7 +1160,7 @@ function mergeGeos(geos) {
   for (const g of geos) {
     const p = g.attributes.position, nn = g.attributes.normal;
     for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nrm.push(nn.getX(i), nn.getY(i), nn.getZ(i)); }
-    const ix = g.index; for (let i = 0; i < ix.count; i++) idx.push(ix.getX(i) + off);
+    const ix = g.index; if (ix) for (let i = 0; i < ix.count; i++) idx.push(ix.getX(i) + off); else for (let i = 0; i < p.count; i++) idx.push(i + off);   // (les octaèdres ne sont pas indexés)
     off += p.count;
   }
   const g = new THREE.BufferGeometry();

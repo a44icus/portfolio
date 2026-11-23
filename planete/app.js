@@ -361,6 +361,7 @@ addEventListener('wheel', e => { if (mode === 'walk') setZoom(camZoom * Math.exp
   canvas.addEventListener('touchend', () => { d0 = 0; }, { passive: true });
 }
 const joy = { x: 0, y: 0 };
+let padUsed = false, padHintT = 0;   // a-t-on déjà touché au joystick ?
 // manette (API Gamepad) : stick gauche ou gâchettes pour conduire, A sauter, B/RB turbo, Y redresser, X ouvrir la zone, Start atterrir/décoller
 const gpad = { x: 0, y: 0, boost: false, jump: false, on: false, prev: [] };
 let near = null;
@@ -487,11 +488,14 @@ function setWalk(on) {
     stopPlane(); sunT.set(0, 0, 0);   // le soleil sera replacé de trois quarts derrière la voiture
     mode = 'walk'; controls.enabled = false; controls.autoRotate = false; camAnim = null; avatar.visible = true;
     hasLanded = true; document.body.classList.remove('nudge');
+    // téléphone : si le joystick n'a pas servi au bout de 5 s, on montre comment s'en servir
+    clearTimeout(padHintT); if (touch && !padUsed) padHintT = setTimeout(() => { if (mode === 'walk' && !padUsed) document.body.classList.add('pad-hint'); }, 5000);
     walkBtn.textContent = 'Décoller'; document.body.classList.add('walking'); closePanel();
   } else {
     mode = 'orbit';
     startPlane();   // la voiture devient biplan et s'envole ; la caméra la suit puis prend du recul
     if (reduce) { endPlaneCam(); camera.position.copy(P.dir).multiplyScalar(SEA_R + 50); controls.update(); }
+    clearTimeout(padHintT); document.body.classList.remove('pad-hint');
     walkBtn.textContent = 'Atterrir'; document.body.classList.remove('walking'); promptEl.classList.remove('on'); near = null;
   }
   setHint();
@@ -524,7 +528,7 @@ addEventListener('blur', () => keys.clear());
 {
   const pad = $('#pad'), knob = pad.querySelector('i'); let id = null;
   const move = e => { const r = pad.getBoundingClientRect(); let x = (e.clientX - r.left) / r.width * 2 - 1, y = (e.clientY - r.top) / r.height * 2 - 1; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } joy.x = x; joy.y = -y; knob.style.transform = 'translate(' + x * 34 + 'px,' + y * 34 + 'px)'; };
-  pad.addEventListener('pointerdown', e => { id = e.pointerId; pad.setPointerCapture(id); move(e); });
+  pad.addEventListener('pointerdown', e => { padUsed = true; document.body.classList.remove('pad-hint'); id = e.pointerId; try { pad.setPointerCapture(id); } catch (er) { /* rien */ } move(e); });
   pad.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
   const end = () => { id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
@@ -1038,7 +1042,7 @@ const tuneHooks = {
     W.uFoamEdge.value = T.eau.largeurLisere; W.uFoamLine.value = T.eau.epaisseurTraits; W.uFoamGap.value = T.eau.espacementTraits; W.uFoamLen.value = T.eau.longueurTraits;
     GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur;
     LUPIN.uLupS.value = T.lupins.taille; LUPIN.uLupH.value = T.lupins.hauteur; LUPIN.uLupWind.value = T.lupins.vent; LUPIN.uFlorD.value = T.lupins.fleurs; LUPIN.uFlorS.value = T.lupins.tailleFleurs; planet.setLupinDensity(T.lupins.densite);
-    if (planet.grassMesh) planet.grassMesh.count = Math.floor(planet.grassMesh.instanceMatrix.count * T.herbe.densite);
+    planet.setGrassDensity(T.herbe.densite);
     TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons;
     planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * T.arbres.densite); });
     GLEAF.uLeafS.value = T.feuilles.taille; groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
@@ -1240,6 +1244,7 @@ function frame(now) {
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   pollGamepad(dt);
   updateLabels();
+  planet.cullDecor(camera.position, mode === 'walk' ? 30 : 0);   // herbe et lupins : seulement les tuiles en vue
   post.render();
   requestAnimationFrame(frame);
 }
