@@ -68,16 +68,18 @@ export function makeAudio() {
   }
   function updateCar(dt, s) {
     if (!car) return;
-    const w = s.walk ? 1 : 0, hv = s.hover, land = 1 - hv;
+    const w = s.walk ? 1 : 0, hv = s.hover, land = 1 - hv, motor = s.bike ? 0 : 1;   // le vélo n'a pas de moteur
     const rpm = clamp01(Math.abs(s.speed) / 9) * 0.8 + Math.abs(s.throttle) * 0.2 + s.boost * 0.25 + (s.ground ? 0 : 0.15 * Math.abs(s.throttle));
     const f = 34 + rpm * 90;
     set(car.o1.frequency, f); set(car.o2.frequency, f * 0.5 * 1.01); set(car.o3.frequency, f * 0.5);
     set(car.lp.frequency, 260 + rpm * 900 + s.boost * 600);
-    set(car.eng.gain, w * land * (0.05 + 0.07 * rpm + 0.03 * Math.abs(s.throttle)));
+    set(car.eng.gain, motor * w * land * (0.05 + 0.07 * rpm + 0.03 * Math.abs(s.throttle)));
     const roll = s.ground ? clamp01(Math.abs(s.speed) / 7) : 0;
     set(car.skF.frequency, s.bridge ? 300 : 900 + roll * 600);
-    set(car.skG.gain, w * land * roll * (s.bridge ? 0.02 : s.road ? 0.025 : 0.045));
-    set(car.tbG.gain, w * land * s.boost * 0.06);
+    set(car.skG.gain, w * land * roll * (s.bridge ? 0.02 : s.road ? 0.025 : 0.045) * (s.bike ? 0.35 : 1));   // vélo : un léger crissement de gravier
+    set(car.tbG.gain, motor * w * land * s.boost * 0.06);
+    // vélo en roue libre : le cliquetis du moyeu
+    if (w && s.bike && Math.abs(s.speed) > 0.6 && Math.abs(s.throttle) < 0.2) { car.tick = (car.tick || 0) + Math.abs(s.speed) * dt * 9; while (car.tick >= 1) { car.tick -= 1; click(0.018, 2400 + Math.random() * 300, bus.vehicules); } }
     // aéroglisseur
     set(car.fanF.frequency, 380 + Math.abs(s.throttle) * 500 + Math.abs(s.speed) * 30);
     set(car.fanG.gain, w * hv * (0.05 + 0.05 * Math.abs(s.throttle)));

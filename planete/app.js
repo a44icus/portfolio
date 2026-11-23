@@ -670,13 +670,14 @@ function stepWalk(dt) {
   avatar.position.addScaledVector(up, bob * 0.035 * Math.sin(P.t * 2.6));
   const pitch = S2.pitch * (1 - hv) + bob * (0.03 * Math.sin(P.t * 2.3 + 1) - 0.05 * Math.max(0, throttle) * Math.min(1, Math.abs(P.speed) / 3));
   const roll = S2.roll * (1 - hv) + bob * (0.04 * Math.sin(P.t * 1.9) - P.steer * Math.min(1, Math.abs(P.speed) / 5) * 0.16);
-  avatar.userData.pose(hv, P.fan, S2.wy, S2.y, pitch, roll, P.boost, P.t);
+  const bmx = avatar.userData.ride === 'bmx', boostFx = bmx ? 0 : P.boost;   // le vélo n'a ni flammes ni traînée de turbo, ni traces de pneus
+  avatar.userData.pose(hv, P.fan, S2.wy, S2.y, pitch, roll, boostFx, P.t);
   // traînées du turbo : elles partent de la sortie des échappements, dans l'axe des flammes (suspensions, tangage et roulis compris)
   avatar.updateMatrixWorld(true);
   const fl = avatar.userData.flames;
   fl[0].localToWorld(trailHeads[0].set(0, 0, 0)); fl[1].localToWorld(trailHeads[1].set(0, 0, 0));
   trailSide.subVectors(trailHeads[1], trailHeads[0]).normalize();
-  trails.update(dt, trailHeads, trailSide, P.boost * (1 - hv) * (P.ground || P.airT < 0.2 ? 1 : 0.5));
+  trails.update(dt, trailHeads, trailSide, boostFx * (1 - hv) * (P.ground || P.airT < 0.2 ? 1 : 0.5));
   // nénuphars bousculés par la vague du véhicule
   planet.updatePads(dt, avatar.position, P.speed);
   // l'herbe se couche sous les pneus
@@ -702,7 +703,7 @@ function stepWalk(dt) {
       if (i > 1) return;
       avatar.localToWorld(trackPt.set(w.side * 0.37, 0, w.along));
       trackDir.copy(trackPt).normalize();
-      const sand = P.ground && hv < 0.5 && !onBridge && Math.abs(P.ax) < 0.4 && Math.abs(P.az) < 0.4 ? planet.sandAt(trackDir) : 0;
+      const sand = !bmx && P.ground && hv < 0.5 && !onBridge && Math.abs(P.ax) < 0.4 && Math.abs(P.az) < 0.4 ? planet.sandAt(trackDir) : 0;
       if (sand < 0.25) { trackOn[i] = false; return; }
       trackPt.copy(trackDir).multiplyScalar(Math.max(planet.heightDir(trackDir), WATER_R) + 0.025);
       if (!trackOn[i]) { trackLast[i].copy(trackPt); trackOn[i] = true; return; }
@@ -1227,7 +1228,7 @@ function frame(now) {
     }
     const bi = mode === 'walk' ? planet.bridgeAt(P.dir) : null;
     audio.update(dt,
-      { walk: mode === 'walk', speed: P.speed, throttle: P.throttle || 0, boost: P.boost, hover: P.hover, ground: P.ground, road: planet.pathDir(P.dir) > 0.5, bridge: !!(bi && P.r > bi.top - 0.3) },
+      { walk: mode === 'walk', bike: avatar.userData.ride === 'bmx', speed: P.speed, throttle: P.throttle || 0, boost: P.boost, hover: P.hover, ground: P.ground, road: planet.pathDir(P.dir) > 0.5, bridge: !!(bi && P.r > bi.top - 0.3) },
       { walk: mode === 'walk', night: ambience.night, rain: ambience.state.W.rain, wind: WIND.uWind.value, water: nearWater });
   }
   FADE.uFadeOn.value = mode === 'walk' ? 1 : 0; FADE.uFadeTarget.value.copy(avatar.position).addScaledVector(avatar.position.clone().normalize(), 0.35);
