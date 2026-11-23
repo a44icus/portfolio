@@ -1252,6 +1252,7 @@ function frame(now) {
       if (!V.sunBase) V.sunBase = V.u.uSunCol.value.clone();
       V.u.uTime.value = t;
       V.u.uSunWorld.value.copy(planet.waterUniforms.uSun.value);
+      planet.clouds.updateMatrixWorld(); V.u.uFrame.value.copy(planet.clouds.matrixWorld).invert();   // le bruit suit chaque nuage, quelle que soit la rotation du groupe
       V.u.uSunCol.value.copy(V.sunBase).lerp(sun.color, 0.5).multiplyScalar(Math.min(1.4, sun.intensity / 2.8));
       for (const m of planet.clouds.children) V.pickSide(m, camera);
     } }

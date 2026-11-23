@@ -102,11 +102,12 @@ export function makeCloudNoise(N = 64) {
 const SHAPE_ID = { sphere: 0, cumulus: 1, cube: 2, tore: 3, capsule: 4, nappe: 5 };
 const VERT = /* glsl */`
 uniform vec3 uSunWorld;
+uniform mat4 uFrame;   // inverse du repère du groupe de nuages : la graine ne bouge pas quand le groupe tourne
 varying vec3 vObj, vCam, vSun, vSeed;
 void main() {
   mat4 inv = inverse(modelMatrix);
   vObj = position; vCam = (inv * vec4(cameraPosition, 1.0)).xyz; vSun = normalize(mat3(inv) * uSunWorld);
-  vSeed = fract(modelMatrix[3].xyz * 0.1371) * 7.0;   // chaque nuage a son propre morceau de bruit
+  vSeed = fract((uFrame * vec4(modelMatrix[3].xyz, 1.0)).xyz * 0.1371) * 7.0;   // chaque nuage a son propre morceau de bruit
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 const FRAG = /* glsl */`
@@ -190,7 +191,7 @@ void main() {
  */
 export function makeCloudMaterials(noise, p) {
   const u = {
-    uNoise: { value: noise }, uSunWorld: { value: new THREE.Vector3(0, 1, 0) }, uWind: { value: new THREE.Vector3() },
+    uNoise: { value: noise }, uSunWorld: { value: new THREE.Vector3(0, 1, 0) }, uFrame: { value: new THREE.Matrix4() }, uWind: { value: new THREE.Vector3() },
     uCloudCol: { value: new THREE.Color() }, uSunCol: { value: new THREE.Color() }, uAmbTop: { value: new THREE.Color() }, uAmbBottom: { value: new THREE.Color() },
     uTime: { value: 0 }, uSoft: { value: 0.3 }, uCoverage: { value: 1 }, uDensity: { value: 1 }, uAbsorb: { value: 8 }, uScale: { value: 0.5 },
     uDetail: { value: 0.3 }, uDetailScale: { value: 2 }, uBoil: { value: 0 }, uSteps: { value: 64 }, uLightSteps: { value: 6 }, uLightDist: { value: 0.6 },
