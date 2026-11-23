@@ -228,13 +228,26 @@ export function makeAudio() {
     if (on) {
       if (!rad.voices) { rad.voices = []; for (let i = 1; i <= 5; i++) fetch('audio/st/v' + i + '.mp3').then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a)).then(b => { rad.voices[i - 1] = b; }).catch(() => {}); rad.vNext = ctx.currentTime + 9; }
       if (rad.voices.some(Boolean) && ctx.currentTime > rad.vNext && TUNE.son.actif) {
-        // tirage pondéré : le Démogorgon (v4) revient bien plus souvent ; les répliques ne se répètent pas d'affilée
-        const W = [1, 1, 1, 3.5, 1], pool = []; rad.voices.forEach((b, i) => { if (b && (i !== rad.vLast || i === 3)) pool.push([i, W[i]]); });
+        // tirage au hasard, sans répéter le même son d'affilée
+        const W = [1, 1, 1, 1, 1], pool = []; rad.voices.forEach((b, i) => { if (b && i !== rad.vLast) pool.push([i, W[i]]); });
         let x = Math.random() * pool.reduce((a, p) => a + p[1], 0), k = pool[0][0]; for (const [i, w] of pool) { if ((x -= w) <= 0) { k = i; break; } } rad.vLast = k;
         const b = rad.voices[k], src = ctx.createBufferSource(), g = gainNode(1.1); src.buffer = b; src.connect(g); g.connect(bus.effets); g.connect(reverb);
         src.start(); rad.vSrc = src; rad.vUntil = ctx.currentTime + b.duration; rad.vNext = rad.vUntil + 20 + Math.random() * 20;
       }
-    } else if (rad.vSrc) { try { rad.vSrc.stop(); } catch (e) { /* déjà finie */ } rad.vSrc = null; rad.vUntil = 0; if (rad.voices) rad.vNext = ctx.currentTime + 9; }
+      // en surcouche : le Démogorgon rugit toutes les 15 s environ, d'un côté ou de l'autre
+      const dg = rad.voices[3];
+      if (dg && TUNE.son.actif) {
+        if (!rad.dNext) rad.dNext = ctx.currentTime + 4;
+        if (ctx.currentTime > rad.dNext) {
+          const src = ctx.createBufferSource(), g = gainNode(0.8), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; src.buffer = dg; src.playbackRate.value = 0.92 + Math.random() * 0.16;
+          if (pan) { pan.pan.value = (Math.random() * 2 - 1) * 0.7; src.connect(pan); pan.connect(g); } else src.connect(g);
+          g.connect(bus.effets); g.connect(reverb); src.start(); rad.dSrc = src; rad.dNext = ctx.currentTime + 14 + Math.random() * 2;
+        }
+      }
+    } else {   // on quitte le monde à l'envers : répliques et Démogorgon se taisent
+      if (rad.dSrc) { try { rad.dSrc.stop(); } catch (e) { /* déjà fini */ } rad.dSrc = null; } rad.dNext = 0;
+      if (rad.vSrc) { try { rad.vSrc.stop(); } catch (e) { /* déjà finie */ } rad.vSrc = null; rad.vUntil = 0; if (rad.voices) rad.vNext = ctx.currentTime + 9; }
+    }
     if (!on) {
       if (rad.srcs.length) { const t = ctx.currentTime + 2; rad.srcs.forEach(s => { try { s.stop(t); } catch (e) { /* déjà arrêtée */ } }); rad.srcs = []; }
       rad.next = 0; return;
