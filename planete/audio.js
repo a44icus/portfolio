@@ -217,13 +217,24 @@ export function makeAudio() {
       for (const f of [55, 55.6, 82.4]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); }
       // la musique du monde à l'envers passe « par la radio » : un filtre qui s'ouvre quand on capte bien la fréquence
       const mlp = filt('lowpass', 900, 0.8), mg = gainNode(0); mlp.connect(mg); mg.connect(bus.musique);
-      rad = { gs, gd, mlp, mg, buf: null, loading: false, next: 0, srcs: [] };
+      rad = { gs, gd, mlp, mg, buf: null, loading: false, next: 0, srcs: [], voices: null, vNext: 0, vLast: -1, vUntil: 0 };
     }
     set(rad.gs.gain, on ? 0.01 + 0.1 * (1 - signal) : 0, 0.2);   // grésillement : fort quand on s'éloigne de la fréquence
     set(rad.gd.gain, on ? 0.06 : 0, 0.8);
     if (mus) set(mus.out.gain, on ? 0 : 1, 0.6);                   // la musique habituelle se tait
-    set(rad.mg.gain, on ? 0.9 : 0, on ? 0.8 : 0.5);
+    set(rad.mg.gain, on ? (ctx.currentTime < rad.vUntil ? 0.4 : 0.9) : 0, on ? 0.4 : 0.5);   // la musique s'efface un peu pendant une réplique
     set(rad.mlp.frequency, 700 + 17000 * signal * signal, 0.25);
+    // répliques et sons du monde à l'envers, au hasard par-dessus la musique (toutes les 20 à 40 s)
+    if (on) {
+      if (!rad.voices) { rad.voices = []; for (let i = 1; i <= 5; i++) fetch('audio/st/v' + i + '.mp3').then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a)).then(b => { rad.voices[i - 1] = b; }).catch(() => {}); rad.vNext = ctx.currentTime + 9; }
+      if (rad.voices.some(Boolean) && ctx.currentTime > rad.vNext && TUNE.son.actif) {
+        // tirage pondéré : le Démogorgon (v4) revient bien plus souvent ; les répliques ne se répètent pas d'affilée
+        const W = [1, 1, 1, 3.5, 1], pool = []; rad.voices.forEach((b, i) => { if (b && (i !== rad.vLast || i === 3)) pool.push([i, W[i]]); });
+        let x = Math.random() * pool.reduce((a, p) => a + p[1], 0), k = pool[0][0]; for (const [i, w] of pool) { if ((x -= w) <= 0) { k = i; break; } } rad.vLast = k;
+        const b = rad.voices[k], src = ctx.createBufferSource(), g = gainNode(1.1); src.buffer = b; src.connect(g); g.connect(bus.effets); g.connect(reverb);
+        src.start(); rad.vSrc = src; rad.vUntil = ctx.currentTime + b.duration; rad.vNext = rad.vUntil + 20 + Math.random() * 20;
+      }
+    } else if (rad.vSrc) { try { rad.vSrc.stop(); } catch (e) { /* déjà finie */ } rad.vSrc = null; rad.vUntil = 0; if (rad.voices) rad.vNext = ctx.currentTime + 9; }
     if (!on) {
       if (rad.srcs.length) { const t = ctx.currentTime + 2; rad.srcs.forEach(s => { try { s.stop(t); } catch (e) { /* déjà arrêtée */ } }); rad.srcs = []; }
       rad.next = 0; return;
