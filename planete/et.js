@@ -13,7 +13,7 @@ import { makeKit, makeHud, makeFlash, makeToast } from './eggkit.js';
 import { makeBMX, glowSprite } from './rides.js';
 import { LOOK } from './look.js';
 
-const FLY_V = 5.2, FLY_MIN = 2.3, FLY_MAX = 16, NR = 12;   // vitesse de vol, altitude mini / maxi au-dessus du sol, nombre d'anneaux
+const FLY_V = 5.2, FLY_MIN = 2.3, FLY_MAX = 10.5, NR = 12;   // vitesse de vol, altitude mini / maxi au-dessus du sol, nombre d'anneaux
 
 export function makeET({ planet, scene, sections, quality, R }) {
   const low = quality === 'low';
@@ -117,33 +117,49 @@ export function makeET({ planet, scene, sections, quality, R }) {
   const C = { hemi: new THREE.Color('#3a5a9a'), gnd: new THREE.Color('#0e1830'), zen: new THREE.Color('#040a20'), hor: new THREE.Color('#1e3866'), fog: new THREE.Color('#1c3058'), moon: new THREE.Color('#c4d6ff'), sh: new THREE.Vector3(0.32, 0.42, 0.72), lit: new THREE.Vector3(0.82, 0.92, 1.12) };
   const ray = new THREE.Raycaster();
 
+  // le vol suit un arc de grand cercle (rampe → vaisseau) ; on le regarde de profil, le vélo passe de gauche à droite devant la lune
+  const ARC = { A: new THREE.Vector3(), B: new THREE.Vector3(), N: new THREE.Vector3(), sSite: 60 };
+  const arcDir = (s, o = new THREE.Vector3()) => o.copy(ARC.A).multiplyScalar(Math.cos(s / R)).addScaledVector(ARC.B, Math.sin(s / R));
+  const arcTan = (s, o = new THREE.Vector3()) => o.copy(ARC.A).multiplyScalar(-Math.sin(s / R)).addScaledVector(ARC.B, Math.cos(s / R));
+  const arcPt = (s, h, o = new THREE.Vector3()) => { arcDir(s, o); return o.multiplyScalar(groundR(o) + h); };
+  let treeSave = [];
+  function hideTrees(on) {
+    if (on) {
+      const Z = new THREE.Matrix4().makeScale(0, 0, 0);
+      for (const t of planet.trunkSpots) {
+        const lat = t.d.dot(ARC.N) * R; if (lat < -1.5 || lat > 13) continue;
+        const s = Math.atan2(t.d.dot(ARC.B), t.d.dot(ARC.A)) * R; if (s < -6 || s > ARC.sSite + 12) continue;
+        const [w, l] = planet.treeMeshes[t.m]; if (t.i >= w.count) continue;
+        const a = new THREE.Matrix4(), b = new THREE.Matrix4(); w.getMatrixAt(t.i, a); l.getMatrixAt(t.i, b); treeSave.push([w, l, t.i, a, b]); w.setMatrixAt(t.i, Z); l.setMatrixAt(t.i, Z);
+      }
+    } else { for (const [w, l, i, a, b] of treeSave) { w.setMatrixAt(i, a); l.setMatrixAt(i, b); } treeSave = []; }
+    planet.treeMeshes.forEach(([w, l]) => { w.instanceMatrix.needsUpdate = true; l.instanceMatrix.needsUpdate = true; });
+  }
+
   function enter() {
-    Object.assign(S, { on: true, k: 0, phase: 'ground', h: 0, bank: 0, pitch: 0, rings: 0, next: 0, caught: 0, cine: -1, lock: false, heart: 0, lift: 0 });
+    Object.assign(S, { on: true, k: 0, phase: 'ground', h: 0, s: 0, bank: 0, pitch: 0, rings: 0, next: 0, caught: 0, cine: -1, lock: false, heart: 0, lift: 0, slow: 0 });
     // la rampe : droit devant, sur un passage dégagé
     let best = null, bs = -1;
     for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; let ok = 0; for (let d = 2; d <= 9; d += 1) { const p = offset(home.dir, a, d); if (K.dry(p, 0.9) && K.treesWithin(p, 0.9) === 0) ok++; else break; } if (ok > bs) { bs = ok; best = a; } }
     const rampDir = offset(home.dir, best, 7), toRamp = rampDir.clone().sub(home.dir).projectOnPlane(rampDir).normalize();
-    placeOn(ramp, rampDir, toRamp); ramp.visible = true; S.rampFwd = toRamp.clone();
-    // la clairière du vaisseau : loin, sur la terre ferme, sans arbre
-    site.dir.copy(findSpot(d => K.dry(d, 0.5) && K.farFromZones(d, 0.3) && K.treesWithin(d, 2.5) === 0 && angDist(d, home.dir) > 55 && angDist(d, home.dir) < 85, { tries: 6000, r: Math.random }) || offset(home.dir, best, 60));
-    // les anneaux : le long du grand cercle de la rampe à la clairière, qui serpentent et ondulent en hauteur
-    const A = rampDir.clone(), axis = new THREE.Vector3().crossVectors(A, site.dir).normalize(), tot = Math.acos(Math.min(1, A.dot(site.dir)));
+    placeOn(ramp, rampDir, toRamp); ramp.visible = true;
+    // l'arc du vol, et la clairière du vaisseau au bout (sur la terre ferme, sans arbre)
+    ARC.A.copy(rampDir); ARC.B.copy(toRamp); ARC.N.crossVectors(ARC.B, ARC.A).normalize();
+    ARC.sSite = 62; for (let s = 58; s < 95; s += 1) { const d = arcDir(s); if (K.dry(d, 0.5) && K.treesWithin(d, 2.2) === 0 && K.farFromZones(d, 0.2)) { ARC.sSite = s; break; } }
+    site.dir.copy(arcDir(ARC.sSite));
+    // les anneaux : face à la caméra, à des hauteurs qui ondulent (plusieurs passent devant la lune)
     rings.forEach((r, i) => {
-      const k = (i + 1) / (NR + 1), d = A.clone().applyAxisAngle(axis, tot * k), side = new THREE.Vector3().crossVectors(axis, d).normalize();
-      const fwd = new THREE.Vector3().crossVectors(axis, d).normalize();   // sens de la marche
-      const lat = Math.sin(i * 1.3 + Math.random()) * 4.5, dd = d.clone().addScaledVector(axis, lat / R).normalize();
-      const alt = 4 + Math.abs(Math.sin(i * 0.9 + 0.6)) * 6;
-      r.pos.copy(dd).multiplyScalar(groundR(dd) + alt); r.n.copy(fwd); r.done = false; r.t.material = ringMat; r.g.visible = true;
-      r.g.position.copy(r.pos); m4.lookAt(r.pos, tmp.copy(r.pos).add(fwd), dd); r.g.quaternion.setFromRotationMatrix(m4); r.h.material.opacity = 0.25;
-      void side;
+      const s = 9 + (ARC.sSite - 17) * i / (NR - 1), alt = 5.2 + Math.sin(i * 0.85 + 0.4) * 2.6 + (i % 3 === 1 ? 0.8 : 0);
+      arcPt(s, alt, r.pos); r.s = s; r.alt = alt; r.done = false; r.t.material = ringMat; r.g.visible = true;
+      r.g.position.copy(r.pos); m4.lookAt(r.pos, tmp.copy(r.pos).add(ARC.N), arcDir(s, tmp2)); r.g.quaternion.setFromRotationMatrix(m4); r.h.material.opacity = 0.25;
     });
-    // fourgons à projecteurs, de part et d'autre du chemin
+    // fourgons à projecteurs, au sol derrière l'arc : leurs faisceaux balaient le ciel dans le plan du vol
     lights.forEach((l, i) => {
-      const k = (i + 0.7) / (NS + 0.5), d = A.clone().applyAxisAngle(axis, tot * k).addScaledVector(axis, (i % 2 ? 1 : -1) * (3 + Math.random() * 3) / R).normalize();
-      placeOn(l.g, d, tangent(d, axis)); l.g.position.copy(d).multiplyScalar(groundR(d)); l.g.visible = true; l.dir.copy(d);
+      const s = 14 + (ARC.sSite - 24) * (i + 0.5) / NS, d = arcDir(s).addScaledVector(ARC.N, -2.5 / R).normalize();
+      placeOn(l.g, d, arcTan(s)); l.g.position.copy(d).multiplyScalar(groundR(d)); l.g.visible = true; l.dir.copy(d); l.s = s;
     });
-    // le vaisseau attend, posé au-dessus de la clairière
-    ship.visible = true; rainbow.visible = false; ship.position.copy(site.dir).multiplyScalar(groundR(site.dir) + 3.2); ship.quaternion.setFromUnitVectors(Y, site.dir);
+    // le vaisseau attend, au-dessus de la clairière
+    ship.visible = true; rainbow.visible = false; ship.userData.cone.material.opacity = 0.12; ship.position.copy(site.dir).multiplyScalar(groundR(site.dir) + 3.4); ship.quaternion.setFromUnitVectors(Y, site.dir);
     prop.visible = false; candyMesh.visible = false; moon.visible = true; moonHalo.material.opacity = 0; mist.visible = true; mistMat.opacity = 0; S.mistInit = false;
     rgEl.textContent = '◯ 0 / ' + NR; dsEl.textContent = ''; hint.textContent = "Prends de l'élan vers la rampe lumineuse";
     document.body.classList.add('egg'); hud.classList.add('on'); flash();
@@ -154,19 +170,21 @@ export function makeET({ planet, scene, sections, quality, R }) {
     S.on = false; S.k = 0; S.cine = -1; S.lock = false;
     prop.visible = true; candyMesh.visible = true; moon.visible = false; ship.visible = false; rainbow.visible = false; ramp.visible = false; mist.visible = false;
     rings.forEach(r => { r.g.visible = false; }); lights.forEach(l => { l.g.visible = false; });
+    hideTrees(false); if (planet.clouds) planet.clouds.visible = true;
     if (ctxRef) {
       if (ctxRef.ambience) ctxRef.ambience.state.forceHour = null;
       if (S.sh0) { LOOK.uShadowTint.value.copy(S.sh0); LOOK.uLitTint.value.copy(S.lit0); } S.sh0 = null;
       if (S.sat0 !== undefined && ctxRef.post.grade.uniforms.uSat) ctxRef.post.grade.uniforms.uSat.value = S.sat0;
       if (ctxRef.post.grade.uniforms.uMoon) ctxRef.post.grade.uniforms.uMoon.value = 0;
-      ctxRef.avatar.userData.bmx.userData.fork.rotation.y = 0;
+      ctxRef.avatar.userData.bmx.userData.fork.rotation.y = 0; ctxRef.avatar.visible = true;
     }
     document.body.classList.remove('egg'); hud.classList.remove('on');
     if (withFlash) flash();
   }
   function hit(ndc, camera) { if (S.on || !prop.visible) return false; ray.setFromCamera(ndc, camera); return ray.intersectObject(prop, true).length > 0; }
 
-  const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), cUp = new THREE.Vector3(), cF = new THREE.Vector3(), cR = new THREE.Vector3(), bm = new THREE.Matrix4(), q2 = new THREE.Quaternion(), XA = new THREE.Vector3(1, 0, 0), ZA = new THREE.Vector3(0, 0, 1);
+  const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), cUp = new THREE.Vector3(), cF = new THREE.Vector3(), cR = new THREE.Vector3(), bm = new THREE.Matrix4(), q2 = new THREE.Quaternion(), XA = new THREE.Vector3(1, 0, 0);
+  const cam2 = { s: 0, h: 0 };
   function update(ctx) {
     const { dt, t } = ctx; ctxRef = ctx;
     if (!S.on) { parked.userData.anim({ t, dt, heart: 0.35 + 0.25 * Math.sin(t * 0.7) }); return false; }
@@ -178,7 +196,7 @@ export function makeET({ planet, scene, sections, quality, R }) {
     sun.color.lerp(C.moon, k); sun.intensity = Math.max(sun.intensity, 0.9 * k);
     skyU.uZen.value.lerp(C.zen, k); skyU.uHor.value.lerp(C.hor, k); fog.color.lerp(C.fog, k);
     const fn = fog.near > 1000 ? 140 : fog.near, ff = fog.far > 1000 ? 300 : fog.far;
-    fog.near = THREE.MathUtils.lerp(fn, 3, k); fog.far = THREE.MathUtils.lerp(ff, S.phase === 'fly' ? 46 : 30, k);
+    fog.near = THREE.MathUtils.lerp(fn, S.phase === 'fly' ? 9 : 3, k); fog.far = THREE.MathUtils.lerp(ff, S.phase === 'fly' ? 55 : 30, k);
     if (S.sh0 == null) { S.sh0 = LOOK.uShadowTint.value.clone(); S.lit0 = LOOK.uLitTint.value.clone(); }
     LOOK.uShadowTint.value.copy(S.sh0).lerp(C.sh, k); LOOK.uLitTint.value.copy(S.lit0).lerp(C.lit, k);
     if (post.grade.uniforms.uSat) { if (S.sat0 === undefined) S.sat0 = post.grade.uniforms.uSat.value; post.grade.uniforms.uSat.value = THREE.MathUtils.lerp(S.sat0, 0.92, k); }
@@ -188,33 +206,33 @@ export function makeET({ planet, scene, sections, quality, R }) {
     // brume
     if (!S.mistInit) { for (let i = 0; i < NM; i++) placeMist(i, ctx.car); S.mistInit = true; }
     for (let i = 0; i < NM; i++) { tmp3.set(mistPos[i * 3], mistPos[i * 3 + 1], mistPos[i * 3 + 2]); if (tmp3.distanceToSquared(ctx.car) > 30 * 30) placeMist(i, ctx.car); }
-    mistGeo.attributes.position.needsUpdate = true; mistMat.opacity = 0.5 * k * (S.phase === 'fly' ? 0.7 : 1);
-    // la lune : grande, basse, devant la caméra (elle glisse doucement quand on tourne)
-    const up = cUp.copy(ctx.car).normalize();
-    if (S.cine < 0) {
-      ctx.camera.getWorldDirection(cF); cF.addScaledVector(up, -cF.dot(up)).normalize(); cR.crossVectors(cF, up).normalize();
-      const want = tmp.copy(cF).addScaledVector(up, S.phase === 'fly' ? 0.42 : 0.34).addScaledVector(cR, S.phase === 'fly' ? 0.12 : 0.42).normalize();
-      if (moonDir.lengthSq() < 0.5) moonDir.copy(want); else moonDir.lerp(want, 1 - Math.exp(-dt * 0.8)).normalize();
-    }
-    moon.position.copy(ctx.camera.position).addScaledVector(moonDir, 400); moon.scale.setScalar(190); moon.quaternion.copy(ctx.camera.quaternion);
-    moon.material.opacity = k; moonHalo.material.opacity = 0.32 * k;
+    mistGeo.attributes.position.needsUpdate = true; mistMat.opacity = 0.5 * k * (S.phase === 'fly' ? 0.55 : 1);
     // anneaux et vaisseau qui scintillent
     rings.forEach((r, i) => { if (!r.done) { r.h.material.opacity = (i === S.next ? 0.45 : 0.18) * (0.75 + 0.25 * Math.sin(t * 4 + i)); r.t.scale.setScalar(1 + (i === S.next ? 0.06 * Math.sin(t * 5) : 0)); } });
     ship.userData.lights.forEach((l, i) => { l.material.opacity = 0.5 + 0.5 * Math.sin(t * 6 + i); }); ship.rotateY(dt * 0.4);
-    // projecteurs : ils fouillent le ciel en lents balancements
+    // projecteurs : ils balancent leur faisceau dans le plan du vol
     S.caught -= dt;
     for (const l of lights) {
-      l.head.rotation.set(0.5 * Math.sin(t * 0.37 + l.ph), t * 0.45 + l.ph, 0.45 * Math.cos(t * 0.29 + l.ph * 1.7));
+      const a = 0.75 * Math.sin(t * 0.55 + l.ph * 2.3);
+      l.head.quaternion.setFromAxisAngle(XA, a);   // le fourgon est orienté le long de l'arc : son axe x est perpendiculaire au plan du vol
       l.siren.material.opacity = Math.sin(t * 9 + l.ph) > 0 ? 0.95 : 0.15;
       if (S.phase !== 'fly' || S.caught > 0 || S.cine >= 0) continue;
       l.head.updateMatrixWorld(); const o = l.head.getWorldPosition(tmp2), ax = tmp3.set(0, 1, 0).transformDirection(l.head.matrixWorld);
-      const rel = tmp.copy(ctx.avatar.position).sub(o), along = rel.dot(ax); if (along < 0 || along > 22) continue;
+      const rel = tmp.copy(ctx.avatar.position).sub(o); rel.addScaledVector(ARC.N, -rel.dot(ARC.N)); const along = rel.dot(ax); if (along < 0 || along > 22) continue;
       const radius = 0.15 + along / 22 * 1.45, off = rel.addScaledVector(ax, -along).length();
       if (off < radius) { S.caught = 2.5; S.slow = 1.6; ctx.audio.sfx('alarm'); toast('Repéré !', 1000); flash(); }
     }
-    if (S.phase === 'ground') return groundPhase(ctx, dt, t, bike, input, up);
-    if (S.cine >= 0) return cinematic(ctx, dt, t, bike);
-    return flyPhase(ctx, dt, t, bike, input);
+    const up = cUp.copy(ctx.car).normalize();
+    if (S.phase === 'ground') {
+      // au sol : la lune, grande et basse, glisse doucement devant la caméra
+      ctx.camera.getWorldDirection(cF); cF.addScaledVector(up, -cF.dot(up)).normalize(); cR.crossVectors(cF, up).normalize();
+      const want = tmp.copy(cF).addScaledVector(up, 0.34).addScaledVector(cR, 0.42).normalize();
+      if (moonDir.lengthSq() < 0.5) moonDir.copy(want); else moonDir.lerp(want, 1 - Math.exp(-dt * 0.8)).normalize();
+    }
+    const r = S.phase === 'ground' ? groundPhase(ctx, dt, t, bike, input, up) : S.cine >= 0 ? cinematic(ctx, dt, t, bike) : flyPhase(ctx, dt, t, bike, input);
+    moon.position.copy(ctx.camera.position).addScaledVector(moonDir, 400); moon.scale.setScalar(S.phase === 'ground' ? 190 : 150); moon.quaternion.copy(ctx.camera.quaternion);
+    moon.material.opacity = k; moonHalo.material.opacity = 0.32 * k;
+    return r;
   }
   /* au sol : on roule (conduite normale) jusqu'à la rampe ; arrivé dessus avec de l'élan, le vélo s'envole */
   function groundPhase(ctx, dt, t, bike, input, up) {
@@ -223,74 +241,72 @@ export function makeET({ planet, scene, sections, quality, R }) {
     S.heart += (Math.pow(Math.max(0, ctx.fwd.dot(to.divideScalar(Math.max(L, 1e-4)))), 3) - S.heart) * (1 - Math.exp(-dt * 3));
     dsEl.textContent = Math.round(L) + ' m';
     if (L < 1.3 && ctx.P.speed > 1.5) {
-      S.phase = 'fly'; S.lock = true; S.lift = 0;
-      F.dir.copy(ctx.car).normalize(); F.fwd.copy(S.rampFwd).projectOnPlane(F.dir).normalize();
-      S.h = ctx.car.length() - groundR(F.dir) + 0.3; S.vh = 3.5;
-      ctx.audio.sfx('fly'); toast('Il vole !', 1400); hint.textContent = 'Passe dans les anneaux de lumière jusqu\'au vaisseau · ↑ ↓ monter / descendre';
+      S.phase = 'fly'; S.lock = true; S.lift = 0; S.s = 0.3;
+      S.h = ctx.car.length() - groundR(arcDir(S.s)) + 0.2; S.vh = 3.5;
+      cam2.s = S.s + 2.2; cam2.h = S.h * 0.8 + 1.0;
+      hideTrees(true); if (planet.clouds) planet.clouds.visible = false;   // (les nuages ronds passeraient devant la lune)
+      ctx.audio.sfx('fly'); toast('Il vole !', 1400); hint.textContent = '↑ ↓ monter / descendre · → accélérer · passe dans les anneaux jusqu\'au vaisseau';
     }
     return false;
   }
-  /* en vol : gauche / droite pour virer, haut / bas pour monter et descendre ; le vélo penche et cabre */
+  /* en vol, de profil : haut / bas pour monter et descendre, droite pour accélérer, gauche pour freiner */
   function flyPhase(ctx, dt, t, bike, input) {
     S.lift = Math.min(1, S.lift + dt / 1.5);
-    const turn = Math.max(-1, Math.min(1, input.x)), climb = Math.max(-1, Math.min(1, input.y));
-    S.slow = Math.max(0, (S.slow || 0) - dt);
-    const v = FLY_V * (input.boost ? 1.55 : 1) * (S.slow > 0 ? 0.45 : 1);
-    F.fwd.applyAxisAngle(F.dir, -turn * 1.25 * dt);
-    const axis = tmp.crossVectors(F.dir, F.fwd).normalize(), r = groundR(F.dir) + S.h;
-    F.dir.applyAxisAngle(axis, v * dt / r).normalize(); F.fwd.projectOnPlane(F.dir).normalize();
-    // altitude : la commande, plus un petit élan au décollage ; jamais dans les arbres, jamais trop haut
-    S.vh += ((climb * 3.2 + (S.lift < 1 ? 2.5 * (1 - S.lift) : 0)) - S.vh) * (1 - Math.exp(-dt * 3));
-    S.h += S.vh * dt; const g = groundR(F.dir); if (S.h < FLY_MIN) { S.h += (FLY_MIN - S.h) * (1 - Math.exp(-dt * 6)); S.vh = Math.max(0, S.vh); } if (S.h > FLY_MAX) { S.h = FLY_MAX; S.vh = Math.min(0, S.vh); }
-    S.bank += (-turn * 0.55 - S.bank) * (1 - Math.exp(-dt * 4)); S.pitch += (-climb * 0.32 - S.pitch) * (1 - Math.exp(-dt * 4));
-    const U = F.dir, pos = tmp2.copy(U).multiplyScalar(g + S.h + 0.12 * Math.sin(t * 1.7));
-    const right = tmp3.crossVectors(U, F.fwd).normalize(); bm.makeBasis(right, U, F.fwd);
-    ctx.avatar.quaternion.setFromRotationMatrix(bm).multiply(q2.setFromAxisAngle(ZA, S.bank)).multiply(new THREE.Quaternion().setFromAxisAngle(XA, S.pitch));
+    const climb = Math.max(-1, Math.min(1, input.y)), push = Math.max(-1, Math.min(1, input.x));
+    S.slow = Math.max(0, S.slow - dt);
+    const v = FLY_V * (1 + 0.45 * push) * (input.boost ? 1.45 : 1) * (S.slow > 0 ? 0.45 : 1);
+    S.s += v * dt;
+    S.vh += ((climb * 3.4 + (S.lift < 1 ? 2.8 * (1 - S.lift) : 0)) - S.vh) * (1 - Math.exp(-dt * 3));
+    S.h += S.vh * dt; if (S.h < FLY_MIN) { S.h += (FLY_MIN - S.h) * (1 - Math.exp(-dt * 6)); S.vh = Math.max(0, S.vh); } if (S.h > FLY_MAX) { S.h = FLY_MAX; S.vh = Math.min(0, S.vh); }
+    S.pitch += (-Math.max(-0.4, Math.min(0.4, S.vh * 0.09)) - S.pitch) * (1 - Math.exp(-dt * 4));
+    const U = arcDir(S.s), T = arcTan(S.s), pos = arcPt(S.s, S.h + 0.1 * Math.sin(t * 1.7), tmp2);
+    const right = tmp3.crossVectors(U, T).normalize(); bm.makeBasis(right, U, T);
+    ctx.avatar.quaternion.setFromRotationMatrix(bm).multiply(q2.setFromAxisAngle(XA, S.pitch));
     ctx.avatar.position.copy(pos);
     ctx.P.spin += v * dt / 0.24;
-    bike.userData.anim({ spin: ctx.P.spin, steer: turn * 0.3, speed: 0, t, dt, wet: false, heart: 1 });
-    // pour le reste du jeu
-    const P = ctx.P; P.dir.copy(U); P.fwd.copy(F.fwd); P.mv.copy(F.fwd); P.r = g + S.h; P.speed = v; P.ground = false; P.boost = input.boost ? 1 : 0; P.hover = 0;
-    // anneaux : on les traverse
+    bike.userData.anim({ spin: ctx.P.spin, steer: 0, speed: 0, t, dt, wet: false, heart: 1 });
+    const P = ctx.P; P.dir.copy(U); P.fwd.copy(T); P.mv.copy(T); P.r = pos.length(); P.speed = v; P.ground = false; P.boost = input.boost ? 1 : 0; P.hover = 0;
+    // anneaux : on passe dedans (vu de profil : à moins d'un rayon de leur centre)
     for (let i = 0; i < NR; i++) {
       const rg = rings[i]; if (rg.done) continue;
-      const rel = tmp.copy(pos).sub(rg.pos), dn = rel.dot(rg.n);
-      if (Math.abs(dn) < 0.7 && rel.addScaledVector(rg.n, -dn).length() < 1.45) {
-        rg.done = true; rg.t.material = ringDone; rg.h.material.opacity = 0.05; S.rings++; ctx.audio.sfx('coin'); rgEl.textContent = '◯ ' + S.rings + ' / ' + NR;
-        if (S.rings === NR) toast('Tous les anneaux !', 1400);
-      }
+      const rel = tmp.copy(pos).sub(rg.pos); rel.addScaledVector(ARC.N, -rel.dot(ARC.N));
+      if (rel.length() < 1.25) { rg.done = true; rg.t.material = ringDone; rg.h.material.opacity = 0.05; S.rings++; ctx.audio.sfx('coin'); rgEl.textContent = '◯ ' + S.rings + ' / ' + NR; if (S.rings === NR) toast('Tous les anneaux !', 1400); }
+      else if (rg.s < S.s - 2) rg.passed = true;
     }
-    while (S.next < NR && rings[S.next].done) S.next++;
-    // le cœur guide vers l'anneau suivant (ou le vaisseau)
-    const goal = S.next < NR ? rings[S.next].pos : ship.position, to = tmp.copy(goal).sub(pos), L = to.length();
-    S.heart += (Math.max(0, F.fwd.dot(to.projectOnPlane(U).normalize())) - S.heart) * (1 - Math.exp(-dt * 3));
-    dsEl.textContent = 'vaisseau ' + Math.round(pos.distanceTo(ship.position)) + ' m';
-    // caméra : derrière et un peu en dessous, le vélo se découpe sur le ciel et la lune
+    while (S.next < NR && (rings[S.next].done || rings[S.next].s < S.s - 1.5)) S.next++;
+    dsEl.textContent = 'vaisseau ' + Math.max(0, Math.round(ARC.sSite - S.s)) + ' m';
+    // contre-jour : la lumière vient de derrière (de la lune), le vélo se découpe en silhouette
+    const sun = ctx.sun; sun.target.position.copy(pos); sun.position.copy(pos).addScaledVector(ARC.N, -22).addScaledVector(U, 12); sun.target.updateMatrixWorld();
+    // caméra de profil : en avance dans le sens du vol, elle suit la hauteur en douceur ; la lune derrière, centrée sur la bande où l'on vole
     const zoom = ctx.zoom || 1;
-    camPos.copy(pos).addScaledVector(F.fwd, -4.2 * zoom).addScaledVector(U, 0.25 * zoom);
-    const cg = groundR(tmp.copy(camPos).normalize()) + 0.6; if (camPos.length() < cg) camPos.setLength(cg);
-    camLook.copy(pos).addScaledVector(F.fwd, 3).addScaledVector(U, 0.9);
-    ctx.camera.position.lerp(camPos, 1 - Math.exp(-dt * 4)); ctx.camera.up.copy(U); ctx.camera.lookAt(camLook);
+    cam2.s += (S.s + 2.2 - cam2.s) * (1 - Math.exp(-dt * 3)); cam2.h += (S.h * 0.8 + 1.0 - cam2.h) * (1 - Math.exp(-dt * 2.5));
+    const CU = arcDir(cam2.s); camPos.copy(arcPt(cam2.s, cam2.h, tmp)).addScaledVector(ARC.N, 11 * zoom);
+    camLook.copy(arcPt(cam2.s, cam2.h - 0.6, tmp3));
+    ctx.camera.position.lerp(camPos, 1 - Math.exp(-dt * (S.lift < 1 ? 2.5 : 6))); ctx.camera.up.copy(CU); ctx.camera.lookAt(camLook);
+    moonDir.copy(arcPt(cam2.s - 1.5, cam2.h + 0.3, tmp)).sub(ctx.camera.position).normalize();   // la lune juste derrière le vélo
     // arrivée au vaisseau
-    if (pos.distanceTo(ship.position) < 3.6) { S.cine = 0; S.cf = F.fwd.clone(); S.from = pos.clone(); ctx.audio.sfx('pick'); hint.textContent = 'Téléphone maison…'; toast(S.rings + ' / ' + NR + ' anneaux', 1600); }
+    if (S.s >= ARC.sSite - 1.2) { S.cine = 0; S.from = pos.clone(); ctx.audio.sfx('pick'); hint.textContent = 'Téléphone maison…'; toast(S.rings + ' / ' + NR + ' anneaux', 1600); }
     return false;
   }
   /* la fin : le vélo monte dans la lumière du vaisseau, qui repart en laissant un arc-en-ciel */
   function cinematic(ctx, dt, t, bike) {
-    S.cine += dt; const c = S.cine, U = tmp3.copy(site.dir), base = ship.position.clone();
+    S.cine += dt; const c = S.cine, U = arcDir(ARC.sSite), base = ship.position.clone();
     bike.userData.anim({ spin: ctx.P.spin += dt * 20, steer: 0, speed: 0, t, dt, wet: false, heart: 1 });
-    if (c < 1.6) ctx.avatar.position.lerpVectors(S.from, base.clone().addScaledVector(U, -1.6), Math.min(1, c / 1.6));   // aspiré sous le vaisseau
+    if (c < 1.6) ctx.avatar.position.lerpVectors(S.from, base.clone().addScaledVector(U, -1.4), Math.min(1, c / 1.6));   // aspiré sous le vaisseau
     else ctx.avatar.visible = false;
-    if (c > 1.8) { const s = c - 1.8; ship.position.copy(site.dir).multiplyScalar(groundR(site.dir) + 3.2 + s * s * 7); rainbow.visible = true; rainbow.material.uniforms.uK.value = Math.min(1, s * 1.5); ship.userData.cone.material.opacity = Math.max(0, 0.12 - s * 0.08); }
-    camPos.copy(site.dir).multiplyScalar(groundR(site.dir) + 1.2).addScaledVector(S.cf, -9);
-    ctx.camera.position.lerp(camPos, 1 - Math.exp(-dt * 2)); ctx.camera.up.copy(U); ctx.camera.lookAt(ship.position);
-    if (c > 5.2) { S.lock = false; ctx.avatar.visible = true; return true; }
+    if (c > 1.8) { const s = c - 1.8; ship.position.copy(U).multiplyScalar(groundR(U) + 3.4 + s * s * 7); rainbow.visible = true; rainbow.material.uniforms.uK.value = Math.min(1, s * 1.5); ship.userData.cone.material.opacity = Math.max(0, 0.12 - s * 0.08); }
+    const sun = ctx.sun; sun.target.position.copy(base); sun.position.copy(base).addScaledVector(ARC.N, -22).addScaledVector(U, 12); sun.target.updateMatrixWorld();
+    cam2.s += (ARC.sSite - cam2.s) * (1 - Math.exp(-dt * 2)); cam2.h += (5 + Math.min(4, c) - cam2.h) * (1 - Math.exp(-dt * 1.5));
+    camPos.copy(arcPt(cam2.s, cam2.h, tmp)).addScaledVector(ARC.N, 13);
+    ctx.camera.position.lerp(camPos, 1 - Math.exp(-dt * 3)); ctx.camera.up.copy(arcDir(cam2.s)); ctx.camera.lookAt(arcPt(cam2.s, cam2.h - 0.4, tmp3));
+    moonDir.copy(arcPt(cam2.s - 1.0, cam2.h + 0.6, tmp)).sub(ctx.camera.position).normalize();
+    if (c > 5.4) { S.lock = false; ctx.avatar.visible = true; return true; }
     return false;
   }
   function pins() {
     if (!S.on) return [{ dir: home.dir, icon: 'bmx' }];
     const out = S.phase === 'ground' ? [{ dir: ramp.position.clone().normalize(), color: '#bfe0ff', glyph: '▲' }] : [];
-    const nr = rings[S.next]; if (S.phase === 'fly' && nr) out.push({ dir: nr.pos.clone().normalize(), color: '#bfe8ff', glyph: '◯' });
+    const nr = rings[S.next]; if (S.phase === 'fly' && nr && !nr.done) out.push({ dir: nr.pos.clone().normalize(), color: '#bfe8ff', glyph: '◯' });
     out.push({ dir: site.dir, color: '#ffd8a0', glyph: '✦' });
     return out;
   }

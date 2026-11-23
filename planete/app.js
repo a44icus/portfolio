@@ -497,6 +497,16 @@ function setWalk(on) {
   setHint();
 }
 walkBtn.addEventListener('click', () => setWalk(mode !== 'walk'));
+/** Quitter un clin d'œil à tout moment (bouton ou Échap) : on retrouve la Jeep, posée au sol là où l'on est. */
+function quitEgg() {
+  if (!upside.on && !egg) return;
+  if (upside.on) exitUpside(false); if (egg) exitEgg(false);
+  avatar.visible = true; avatar.scale.setScalar(1);
+  P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); camF.copy(P.fwd);
+  P.r = driveR(P.dir); P.vr = 0; P.speed = 0; P.ground = true; P.ax = P.az = P.wx = P.wz = 0; P.recover = null;
+}
+$('#quitBtn')?.addEventListener('click', e => { e.stopPropagation(); quitEgg(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && (upside.on || egg)) quitEgg(); });
 promptEl.addEventListener('click', () => { if (nearProp) nearProp.go(); else if (near) openIsland(near.id); });
 
 addEventListener('keydown', e => {
