@@ -1,0 +1,15 @@
+rules_version = '2';
+// Lecture publique (le site affiche ce contenu) ; écriture réservée aux admins.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['stephane.donchery@gmail.com'];
+    }
+    match /{collection}/{doc} {
+      allow read: if collection.matches('portfolio_.*');
+      allow write: if isAdmin() && collection.matches('portfolio_.*');
+    }
+  }
+}
