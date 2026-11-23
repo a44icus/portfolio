@@ -442,6 +442,7 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
     #upFlash.on{ opacity:1; transition:opacity .12s ease; }
     body.upside #walkBtn{ display:none !important; }
     body.upside .minimap{ filter:grayscale(1) brightness(.55) sepia(.6) hue-rotate(-40deg) saturate(2.2); transition:filter 2s; }
+    @media (orientation: landscape) and (max-height: 540px){ #radioHud{ top:calc(max(8px, env(safe-area-inset-top)) + 44px); left:auto; right:max(12px, env(safe-area-inset-right)); transform:translateY(-8px); padding:.35rem .7rem; gap:.5rem; font-size:.74rem; } #radioHud.on{ transform:none; } #radioHud small{ display:none; } }
     @media (max-width: 640px){ #radioHud small{ display:none; } #radioHud{ top:70px; left:auto; right:10px; transform:translateY(-8px); gap:.5rem; padding:.5rem .75rem; } #radioHud.on{ transform:none; } }`;
   document.head.appendChild(st);
   const hud = document.createElement('div'); hud.id = 'radioHud';

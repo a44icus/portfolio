@@ -1193,7 +1193,15 @@ setTimeout(() => {
 }, 300);
 const introBtn = $('#introBtn');
 introBtn.disabled = false; introBtn.textContent = 'Explorer la planète'; window.__planetReady = true;
-introBtn.addEventListener('click', () => { audio.start(); document.body.classList.add('started'); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
+/* ---------- téléphone : plein écran et paysage verrouillé (là où le navigateur le permet, comme sur Android) ---------- */
+async function goLandscape() {
+  if (!touch) return;
+  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (e) { /* refusé : on garde la page telle quelle */ }
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) { /* non pris en charge (iPhone) : l'invitation à tourner le téléphone prend le relais */ }
+}
+$('#rotateOk')?.addEventListener('click', () => document.body.classList.add('portrait-ok'));
+walkBtn.addEventListener('click', () => { if (mode === 'walk') goLandscape(); });
+introBtn.addEventListener('click', () => { goLandscape(); audio.start(); document.body.classList.add('started'); setTimeout(nudgeLanding, 15000); $('#intro').classList.add('out'); setTimeout(() => $('#intro').remove(), 700); });
 // Supabase arrive en asynchrone : on l'attend au plus 10 s avant de lire les contenus
 const sbReady = new Promise(r => { const t0 = Date.now(); (function chk() { if (window.supabase || Date.now() - t0 > 10000) r(); else setTimeout(chk, 150); })(); });
 const clearLoad = () => { const e = $('#loadTxt'); if (e) e.textContent = ''; };   // l'écran d'accueil a pu disparaître entre-temps
