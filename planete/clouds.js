@@ -20,13 +20,13 @@ export const CLOUD_SHAPES = { 'Sphère': 'sphere', 'Cumulus': 'cumulus', 'Cube a
 export const CLOUD_DEFAULTS = {
   forme: 'cumulus', taille: 4.55, douceur: 0.33, couverture: 0.84, densite: 4, absorption: 5,
   echelle: 1.49, detail: 0.23, echelleDetail: 0.5,
-  vent: 0.001, directionVent: 0, bouillonnement: 0,
+  vent: 0.002, directionVent: 0, bouillonnement: 0,
   pas: 38, pasLumiere: 2, distanceLumiere: 0.29,
-  argente: 0.23, poudre: 0.31, ambiance: 0.13, soleil: 1.95,
+  argente: 0.23, poudre: 0.31, ambiance: 0, soleil: 1.55,
   couleurNuage: '#ffffff', couleurSoleil: '#fff1dc', ambianceHaut: '#d4e6ff', ambianceBas: '#8f98ad',
   hauteurSoleil: 30, azimutSoleil: 94,
   // dans le jeu : combien de nuages, écart de taille entre eux (0 : tous pareils), vitesse de rotation autour de la planète (radians par seconde)
-  nombre: 35, variationTaille: 0.65, rotation: 0.025,
+  nombre: 35, variationTaille: 0.65, rotation: 0.03,
 };
 const clone = o => JSON.parse(JSON.stringify(o));
 export function loadClouds() {
