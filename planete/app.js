@@ -204,7 +204,7 @@ canvas.addEventListener('pointerup', e => {
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   // en balade : clic sur un panneau fléché → la caméra se met en face ; nouveau clic → retour derrière la voiture
   if (mode === 'walk' && !upside.on && !egg) {
-    if (signView) { signView = null; return; }
+    if (signView) { exitSign(); return; }
     const sp = signpostAt(ndc); if (sp) { signView = { post: sp, side: 0 }; return; }
   }
   if (!upside.on && !egg && upside.hitVan(ndc, camera)) { enterUpside(); return; }
@@ -1163,18 +1163,33 @@ let signView = null;
 const signRay = new THREE.Raycaster(), sgU = new THREE.Vector3(), sgZ = new THREE.Vector3(), sgP = new THREE.Vector3(), sgL = new THREE.Vector3();
 function signposts() { return zones ? zones.bodies.list.filter(b => b.mesh.userData.signpost).map(b => b.mesh) : []; }
 function signpostAt(ndcV) { const list = signposts(); if (!list.length) return null; signRay.setFromCamera(ndcV, camera); const h = signRay.intersectObjects(list, true)[0]; if (!h) return null; let o = h.object; while (o && !o.userData.signpost) o = o.parent; return o; }
+/** Quitte la vue du panneau : la caméra repart en douceur depuis là où elle est vers sa place derrière la voiture. */
+function exitSign() { if (!signView) return; signBlend = { pos: camera.position.clone(), quat: camera.quaternion.clone(), t: 0 }; signView = null; }
+let signBlend = null;
+const sgM = new THREE.Matrix4(), sgQ = new THREE.Quaternion(), sgPos = new THREE.Vector3();
+const easeIO = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 function signCamera(dt) {
   const k = c => keys.has(c);
   const driving = k('KeyW') || k('KeyS') || k('KeyA') || k('KeyD') || k('ArrowUp') || k('ArrowDown') || k('ArrowLeft') || k('ArrowRight') || Math.abs(joy.x) + Math.abs(joy.y) > 0.15 || Math.abs(gpad.x) + Math.abs(gpad.y) > 0.15 || Math.abs(P.speed) > 0.6;
-  if (driving || !signView.post.parent) { signView = null; return; }
+  if (driving || !signView.post.parent) { exitSign(); return; }
   const post = signView.post; post.updateMatrixWorld();
   post.getWorldPosition(sgP); sgU.copy(sgP).normalize(); sgZ.set(0, 0, 1).transformDirection(post.matrixWorld);
-  // du côté où se trouve la caméra au moment du clic (les deux faces sont lisibles)
-  if (!signView.side) signView.side = Math.sign(sgZ.dot(sgL.copy(camera.position).sub(sgP))) || 1;
+  // départ : la pose actuelle de la caméra (derrière la voiture) ; du côté où elle se trouve (les deux faces sont lisibles)
+  if (!signView.from) { signView.from = { pos: (signBlend ? camera.position : camera.position).clone(), quat: camera.quaternion.clone() }; signView.t = 0; signBlend = null; }
+  if (!signView.side) signView.side = Math.sign(sgZ.dot(sgL.copy(signView.from.pos).sub(sgP))) || 1;
   const look = sgL.copy(sgP).addScaledVector(sgU, 1.15);
-  const want = tmpA.copy(look).addScaledVector(sgZ, 3.7 * signView.side).addScaledVector(sgU, 0.3);
-  if (!signView.pos) signView.pos = camera.position.clone();   // sa propre trajectoire : la caméra de la voiture ne la tire plus en arrière
-  signView.pos.lerp(want, 1 - Math.exp(-dt * 4)); camera.position.copy(signView.pos); camera.up.copy(sgU); camera.lookAt(look);
+  const want = sgPos.copy(look).addScaledVector(sgZ, 3.7 * signView.side).addScaledVector(sgU, 0.3);
+  sgM.lookAt(want, look, sgU); sgQ.setFromRotationMatrix(sgM);   // orientation finale : face au panneau
+  // un vrai mouvement de caméra : position et orientation glissent ensemble, en accélérant puis en ralentissant (1,4 s)
+  signView.t = Math.min(1, signView.t + dt / 1.4); const e = easeIO(signView.t);
+  camera.position.lerpVectors(signView.from.pos, want, e); camera.quaternion.slerpQuaternions(signView.from.quat, sgQ, e); camera.up.copy(sgU);
+}
+/** Retour depuis le panneau : on part de la pose figée et on rejoint en douceur la caméra de la voiture (1,2 s). */
+function signReturn(dt) {
+  signBlend.t = Math.min(1, signBlend.t + dt / 1.2); const e = easeIO(signBlend.t);
+  sgPos.copy(camera.position); sgQ.copy(camera.quaternion);   // pose voulue par la caméra de la voiture à cette image
+  camera.position.lerpVectors(signBlend.pos, sgPos, e); camera.quaternion.slerpQuaternions(signBlend.quat, sgQ, e);
+  if (signBlend.t >= 1) signBlend = null;
 }
 function frame(now) {
   if (!paceFrame(now || performance.now())) { requestAnimationFrame(frame); return; }
@@ -1196,7 +1211,7 @@ function frame(now) {
       if (k >= 1) { if (camAnim.up) camera.up.copy(WY); camAnim = null; }
     }
     if (PL.follow) followCamera(dt); else if (PL.cam) planeCamera(); else controls.update();
-  } else if (!(egg && egg.lock)) { stepWalk(dt); if (signView) signCamera(dt); }
+  } else if (!(egg && egg.lock)) { stepWalk(dt); if (signView) signCamera(dt); else if (signBlend) signReturn(dt); }
   updatePlane(dt);
   if (zones) zones.update(dt, t, mode === 'walk' && !upside.on ? carBody : null);
   levitate(t, dt);
