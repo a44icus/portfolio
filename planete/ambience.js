@@ -129,7 +129,8 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
   let lastLabel = '';
   function update(dt, t, mode, car, camera) {
     // heure : une journée complète en 10 minutes ; un choix du menu y amène en douceur puis s'y tient
-    if (TUNE.ambiance.heureFixe) S.hour = TUNE.ambiance.heure;
+    if (S.forceHour != null) { let d = S.forceHour - S.hour; if (d > 12) d -= 24; if (d < -12) d += 24; S.hour = (S.hour + Math.sign(d) * Math.min(Math.abs(d), dt * 8) + 24) % 24; }   // clins d'œil : l'heure est imposée
+    else if (TUNE.ambiance.heureFixe) S.hour = TUNE.ambiance.heure;
     else if (S.target === null) S.hour = (S.hour + dt * 24 / 600 * TUNE.ambiance.vitesseJour) % 24;
     else { let d = S.target - S.hour; if (d > 12) d -= 24; if (d < -12) d += 24; S.hour = (S.hour + Math.sign(d) * Math.min(Math.abs(d), dt * 8) + 24) % 24; }
     // météo automatique : change toutes les 1 à 3 minutes
@@ -186,7 +187,7 @@ export function makeAmbience({ scene, renderer, sun, hemi, amb, skyU, waterUnifo
       pools.forEach((l, i) => { if (ranked[i]) l.position.copy(ranked[i][1]); });
     }
     pools.forEach(l => { l.intensity = walk ? lampK * (7 + 5 * force) : 0; l.color.set(force > 0.5 ? '#e6edf7' : '#ffb35c'); l.distance = 5.5 + 3.5 * force; });
-    head.intensity = walk ? lampK * 40 : 0; head.position.z = avatar.userData.vanOn ? 1.05 : 0.62; head.distance = avatar.userData.vanOn ? 18 : 14;
+    head.intensity = walk ? lampK * 40 : 0; { const rd = avatar.userData.ride; head.position.z = rd === 'van' ? 1.05 : rd === 'bmx' ? 0.75 : rd === 'kart' ? 0.7 : 0.62; head.position.y = rd === 'bmx' ? 0.85 : rd === 'kart' ? 0.3 : 0.5; head.distance = rd === 'van' || rd === 'bmx' ? 18 : 14; }
     // barre de réglages : multiplicateurs et teintes imposées
     { const L = TUNE.lumiere;
       sun.intensity *= L.soleil; hemi.intensity *= L.ciel; amb.intensity *= L.ambiante; renderer.toneMappingExposure *= L.exposition; post.bloom.strength *= TUNE.post.bloom;

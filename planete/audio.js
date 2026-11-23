@@ -244,8 +244,85 @@ export function makeAudio() {
     }
   }
 
+  /* ---------- clins d'œil : un thème par monde (fichier audio/<nom>.mp3 s'il existe, sinon composé au synthé), et des bruitages ---------- */
+  // thèmes originaux : 'et' (nappe de cordes et arpège qui s'envole), 'mario' (petite ritournelle 8 bits)
+  const THEMES = {
+    et: { bpm: 84, play(st, t, B) {
+      const P = [[53, 57, 60, 65], [50, 57, 62, 65], [46, 53, 58, 62], [48, 55, 60, 64]], ch = P[Math.floor(st / 16) % 4], s = st % 16;
+      if (s === 0) { ch.forEach(n => tone(midi(n), t, B * 8.2, 'sawtooth', 0.018, 0.6, 0, 1400)); tone(midi(ch[0] - 12), t, B * 7.5, 'sine', 0.07, 0.2); }
+      if (s % 2 === 0) tone(midi(ch[(s / 2) % 4] + 12), t, B * 1.6, 'triangle', 0.035, 0.01);
+      const LEAD = [77, 0, 0, 76, 74, 0, 72, 0, 74, 0, 0, 0, 69, 0, 72, 0], bar = Math.floor(st / 16) % 4, n = LEAD[s] && bar % 2 === 1 ? LEAD[s] + (bar === 3 ? 2 : 0) : 0;
+      if (n) tone(midi(n), t, B * 2.4, 'sine', 0.05, 0.06, 1);
+    } },
+    mario: { bpm: 150, play(st, t, B) {
+      const s = st % 32, BASS = [48, 0, 55, 0, 48, 0, 55, 0, 53, 0, 60, 0, 53, 0, 60, 0, 50, 0, 57, 0, 50, 0, 57, 0, 55, 0, 59, 0, 55, 0, 62, 0];
+      const LEAD = [72, 0, 76, 79, 0, 76, 77, 0, 77, 0, 81, 84, 0, 81, 79, 0, 74, 0, 77, 81, 0, 79, 77, 76, 74, 0, 79, 0, 83, 0, 86, 0];
+      if (BASS[s]) tone(midi(BASS[s] - 12), t, B * 0.9, 'triangle', 0.09, 0.004);
+      if (LEAD[s]) { tone(midi(LEAD[s]), t, B * 0.8, 'square', 0.032, 0.003); tone(midi(LEAD[s] - 12), t, B * 0.6, 'square', 0.012, 0.003); }
+      if (s % 4 === 2) { const n = ctx.createBufferSource(); n.buffer = noise; const hp = filt('highpass', 7000), g = gainNode(0); n.connect(hp); hp.connect(g); g.connect(th.out); g.gain.setValueAtTime(0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05); n.start(t, Math.random()); n.stop(t + 0.06); }
+    } },
+  };
+  let th = null;
+  function tone(f, t, dur, type, vol, attack = 0.005, vib = 0, lp = 0) {
+    const o = ctx.createOscillator(), g = gainNode(0); o.type = type; o.frequency.value = f;
+    let last = o; if (lp) { const fl = filt('lowpass', lp, 0.6); o.connect(fl); last = fl; }
+    if (vib) { const l = ctx.createOscillator(), lg = gainNode(f * 0.006); l.frequency.value = 5; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + 0.6); }
+    last.connect(g); g.connect(th.out);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + attack); g.gain.setTargetAtTime(0, t + dur * 0.7, dur * 0.25);
+    o.start(t); o.stop(t + dur + 0.6);
+  }
+  const files = {};
+  /** Thème du monde `name` (null : on revient à la musique habituelle). rate : tempo (étoile d'invincibilité). */
+  function theme(name, rate = 1) {
+    if (!ctx) return;
+    if (!th) { th = { out: gainNode(0), name: null, step: 0, next: 0, srcs: [], fileNext: 0 }; th.out.connect(bus.musique); const sd = gainNode(0.5); th.out.connect(sd); sd.connect(reverb); }
+    if (name !== th.name) {
+      if (th.srcs.length) { const t = ctx.currentTime + 1; th.srcs.forEach(x => { try { x.stop(t); } catch (e) { /* déjà arrêtée */ } }); th.srcs = []; }
+      th.name = name; th.step = 0; th.next = ctx.currentTime + 0.3; th.fileNext = 0;
+      set(th.out.gain, name ? 0.9 : 0, name ? 0.5 : 0.4);
+      if (mus) set(mus.out.gain, name ? 0 : 1, 0.6);
+      if (name && files[name] === undefined) { files[name] = null; fetch('audio/' + name + '.mp3').then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(a => ctx.decodeAudioData(a)).then(b => { files[name] = b; }).catch(() => { files[name] = false; }); }
+    }
+    th.rate = rate;
+    if (!name || !TUNE.son.actif) return;
+    const buf = files[name];
+    if (buf) {   // le fichier fourni : en boucle, chaque reprise 3 s avant la fin, en fondu enchaîné
+      const now = ctx.currentTime, X = 3, dur = buf.duration / rate;
+      if (!th.fileNext || th.fileNext < now - 0.5) th.fileNext = now + 0.05;
+      if (th.fileNext - now < 0.6) {
+        const t = th.fileNext, src = ctx.createBufferSource(), g = gainNode(0); src.buffer = buf; src.playbackRate.value = rate; src.connect(g); g.connect(th.out);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + (th.srcs.length ? X : 1)); g.gain.setValueAtTime(1, t + dur - X); g.gain.linearRampToValueAtTime(0, t + dur);
+        src.start(t); src.stop(t + dur + 0.05); th.srcs.push(src); src.onended = () => { th.srcs = th.srcs.filter(x => x !== src); }; th.fileNext = t + dur - X;
+      }
+      th.srcs.forEach(x => { x.playbackRate.value = rate; });
+      return;
+    }
+    if (buf === null) return;   // en cours de chargement
+    const T = THEMES[name]; if (!T) return; const B = 60 / (T.bpm * rate) / 2;   // pas : une croche
+    while (th.next < ctx.currentTime + 0.4) { T.play(th.step, th.next, B); th.next += B; th.step++; }
+  }
+  /** Petits bruitages : 'coin', 'bump', 'power', 'star', 'pipe', 'spin', 'pick', 'alarm', 'fly', 'boom', 'flag', 'grow'. */
+  function sfx(kind) {
+    if (!ctx) return;
+    const t = ctx.currentTime, out = bus.effets;
+    const beep = (f, t0, d, type = 'square', v = 0.08, f2 = 0) => { const o = ctx.createOscillator(), g = gainNode(0); o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + d); o.connect(g); g.connect(out); g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d); o.start(t0); o.stop(t0 + d + 0.02); };
+    if (kind === 'jump') beep(midi(62), t, 0.16, 'square', 0.05, midi(79));
+    else if (kind === 'coin') { beep(midi(83), t, 0.07, 'square', 0.06); beep(midi(88), t + 0.07, 0.3, 'square', 0.06); }
+    else if (kind === 'bump') { beep(220, t, 0.12, 'square', 0.08, 110); impact(2.5, 0, 'bois'); }
+    else if (kind === 'power') [60, 64, 67, 72, 76, 79, 84].forEach((n, i) => beep(midi(n), t + i * 0.05, 0.09, 'square', 0.05));
+    else if (kind === 'grow') for (let i = 0; i < 9; i++) beep(midi(55 + i * 2 + (i % 2) * 5), t + i * 0.06, 0.07, 'square', 0.05);
+    else if (kind === 'star') [72, 76, 79, 84, 88, 91].forEach((n, i) => beep(midi(n), t + i * 0.04, 0.12, 'triangle', 0.07));
+    else if (kind === 'pipe') for (let i = 0; i < 3; i++) beep(midi(60 - i * 5), t + i * 0.12, 0.11, 'square', 0.07);
+    else if (kind === 'spin') beep(900, t, 0.5, 'sawtooth', 0.04, 120);
+    else if (kind === 'flag') for (let i = 0; i < 12; i++) beep(midi(84 - i * 2), t + i * 0.05, 0.06, 'square', 0.04);
+    else if (kind === 'pick') [69, 76, 81, 88].forEach((n, i) => beep(midi(n), t + i * 0.09, 0.6, 'sine', 0.07));
+    else if (kind === 'alarm') for (let i = 0; i < 4; i++) beep(i % 2 ? 660 : 880, t + i * 0.18, 0.17, 'sawtooth', 0.035);
+    else if (kind === 'fly') { const n = ctx.createBufferSource(); n.buffer = noise; const bp = filt('bandpass', 400, 0.8), g = gainNode(0); n.connect(bp); bp.connect(g); g.connect(out); g.connect(reverb); bp.frequency.exponentialRampToValueAtTime(2400, t + 3); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.12, t + 1); g.gain.linearRampToValueAtTime(0, t + 4); n.start(t); n.stop(t + 4.1); [60, 67, 72, 76, 79].forEach((m, i) => beep(midi(m + 12), t + 0.3 + i * 0.3, 1.4, 'sine', 0.04)); }
+    else if (kind === 'boom') { const n = ctx.createBufferSource(); n.buffer = noise; const lp = filt('lowpass', 1200), g = gainNode(0); n.connect(lp); lp.connect(g); g.connect(out); g.connect(reverb); g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); lp.frequency.exponentialRampToValueAtTime(120, t + 0.8); n.start(t, Math.random()); n.stop(t + 1); }
+  }
+
   return {
-    start, applyVolumes, impact, thunder, radio: (dt, on, sig) => radio(dt, on, sig), click: (v, f) => ctx && click(v, f),
+    start, applyVolumes, impact, thunder, radio: (dt, on, sig) => radio(dt, on, sig), click: (v, f) => ctx && click(v, f), theme, sfx,
     get started() { return S.started; },
     update(dt, car, ambi) { if (!ctx) return; updateCar(dt, car); updateAmbience(dt, ambi); },
   };

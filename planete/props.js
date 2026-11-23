@@ -10,6 +10,7 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { leafCluster, LEAF_MAT, fadeNearCamera, SEA_R } from './world.js';
 import { makeVan, VAN_WHEEL_Z } from './van.js';
+import { makeBMX, makeKart, kartWheel } from './rides.js';
 
 const FONT_URL = new URL('./vendor/three/fonts/helvetiker_bold.typeface.json', import.meta.url).href;   // servie par le site (pas de CDN)
 const Y = new THREE.Vector3(0, 1, 0);
@@ -257,8 +258,8 @@ export function makeCar() {
   function pose(k, spin = 0, wy = null, bodyY = 0, pitch = 0, roll = 0, flame = 0, t = 0) {
     const e = k * k * (3 - 2 * k), pop = Math.max(0, Math.min(1, (k - 0.35) / 0.65)), over = pop < 1 ? pop + Math.sin(pop * Math.PI) * 0.25 : 1;
     skirt.visible = k > 0.01; skirt.scale.set(0.8 + 0.2 * e, Math.max(0.02, e), 0.8 + 0.2 * e);
-    fan.visible = !vanOn && pop > 0.01; fan.scale.setScalar(Math.max(0.01, over));
-    spare.visible = !vanOn && e < 0.6; spare.scale.setScalar(Math.max(0.01, 1 - e * 1.6));
+    fan.visible = ride === 'jeep' && pop > 0.01; fan.scale.setScalar(Math.max(0.01, over));
+    spare.visible = ride === 'jeep' && e < 0.6; spare.scale.setScalar(Math.max(0.01, 1 - e * 1.6));
     blades.rotation.z = spin;
     flames.forEach((fl, i) => {
       const kf = flame * (1 - e), flick = 0.75 + 0.2 * Math.sin(t * 47 + i * 2.1) + 0.12 * Math.sin(t * 91 + i * 5.3);
@@ -277,16 +278,31 @@ export function makeCar() {
   const jeepParts = body.children.filter(o => o !== skirt && o !== fan && o !== spare && !flames.includes(o));
   const van = makeVan({ wheels: false }); van.visible = false; body.add(van);
   wheels.forEach(w => { w.jeep = w.w.children.slice(); w.vw = van.userData.wheelPart(); w.vw.visible = false; w.w.add(w.vw); w.along0 = w.along; });
-  const flameZ = flames.map(f => f.position.z);
-  let vanOn = false;
-  function setVan(on) {
-    vanOn = on; van.visible = on; jeepParts.forEach(o => { o.visible = !on; });
+  // les véhicules des autres clins d'œil : le BMX (E.T.) et le kart (le tuyau vert)
+  const bmx = makeBMX(); bmx.visible = false; body.add(bmx);
+  const kart = makeKart({ paint: flakePaint(mat('#e0141e', { roughness: 0.22, metalness: 0.2 })) }); kart.visible = false; body.add(kart);   // châssis pailleté, comme la Jeep
+  wheels.forEach(w => { w.kw = kartWheel(!w.front, w.side); w.kw.visible = false; w.w.add(w.kw); });
+  const flameZ = flames.map(f => f.position.z), flameX = flames.map(f => f.position.x), flameY = flames.map(f => f.position.y);
+  let ride = 'jeep';
+  /** Change de véhicule : 'jeep', 'van', 'bmx' ou 'kart'. */
+  function setRide(kind) {
+    ride = kind; const on = kind === 'van';
+    van.visible = on; bmx.visible = kind === 'bmx'; kart.visible = kind === 'kart'; jeepParts.forEach(o => { o.visible = kind === 'jeep'; });
     // le van est plus long : roues écartées (la suspension et les traces suivent), échappements au bout du pare-chocs
-    wheels.forEach(w => { w.jeep.forEach(m => { m.visible = !on; }); w.vw.visible = on; w.along = on ? (w.front ? VAN_WHEEL_Z.front : VAN_WHEEL_Z.rear) : w.along0; w.pivot.position.z = w.along; });
-    flames.forEach((f, i) => { f.position.z = on ? -1.06 : flameZ[i]; });
+    wheels.forEach(w => {
+      w.jeep.forEach(m => { m.visible = kind === 'jeep'; }); w.vw.visible = on; w.kw.visible = kind === 'kart';
+      w.w.visible = kind !== 'bmx';   // le BMX a ses deux roues à lui
+      w.along = on ? (w.front ? VAN_WHEEL_Z.front : VAN_WHEEL_Z.rear) : w.along0; w.pivot.position.z = w.along;
+    });
+    flames.forEach((f, i) => {
+      f.position.z = on ? -1.06 : kind === 'kart' ? -0.68 : kind === 'bmx' ? -0.62 : flameZ[i];
+      f.position.x = kind === 'kart' ? Math.sign(flameX[i] || (i ? 1 : -1)) * 0.19 : kind === 'bmx' ? (i ? 0.03 : -0.03) : flameX[i];
+      f.position.y = kind === 'kart' ? 0.54 : kind === 'bmx' ? 0.27 : flameY[i];
+    });
   }
+  const setVan = on => setRide(on ? 'van' : 'jeep');
   pose(0);
-  car.userData = { body, wheels, pose, flames, van, setVan, get vanOn() { return vanOn; } };   // flames : sortie des échappements, d'où partent les traînées du turbo
+  car.userData = { body, wheels, pose, flames, van, bmx, kart, setVan, setRide, get vanOn() { return ride === 'van'; }, get ride() { return ride; } };   // flames : sortie des échappements, d'où partent les traînées du turbo
   return car;
 }
 
