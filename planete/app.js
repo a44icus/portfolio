@@ -137,6 +137,7 @@ const trailHeads = [new THREE.Vector3(), new THREE.Vector3()], trailSide = new T
 const spray = makeSpray(quality === 'low' ? 70 : 140); scene.add(spray.mesh);
 // faune discrète (lapins, crabes, papillons, martins-pêcheurs, tortues, poissons) : visible et animée seulement en conduite
 const fauna = makeFauna(planet, quality); scene.add(fauna.group); stylizeTree(fauna.group, { cast: quality !== 'low', receive: true });
+fauna.group.traverse(o => { if (o.userData.fur) o.castShadow = false; });   // les couches de fourrure ne projettent pas d'ombre
 // la caméra part face au pavillon « Profil »
 camera.position.copy(SECTIONS[0].dir).multiplyScalar(innerWidth / innerHeight < 0.8 ? 132 : 98).addScaledVector(new THREE.Vector3(0, 1, 0), 6);
 
@@ -1045,6 +1046,7 @@ function locateAnimal(kind) {
 }
 const tuneHooks = {
   locate: locateAnimal,
+  clouds: planet.clouds.userData.volume,
   apply() {
     const W = planet.waterUniforms, T = TUNE;
     W.uShallow.value.set(T.eau.bord); W.uTeal.value.set(T.eau.milieu); W.uDeep.value.set(T.eau.large);
@@ -1244,6 +1246,15 @@ function frame(now) {
     setShadowBox(40, 50, 175);
     planet.waterUniforms.uSun.value.copy(sun.position).normalize();
   }
+  // nuages volumétriques : le soleil du jeu (direction, couleur, force) et la face à dessiner selon la caméra
+  { const V = planet.clouds.userData.volume;
+    if (V && planet.clouds.visible) {
+      if (!V.sunBase) V.sunBase = V.u.uSunCol.value.clone();
+      V.u.uTime.value = t;
+      V.u.uSunWorld.value.copy(planet.waterUniforms.uSun.value);
+      V.u.uSunCol.value.copy(V.sunBase).lerp(sun.color, 0.5).multiplyScalar(Math.min(1.4, sun.intensity / 2.8));
+      for (const m of planet.clouds.children) V.pickSide(m, camera);
+    } }
   groundLeaves.update(dt, avatar.position, P.speed, mode === 'walk' && P.ground && P.hover < 0.5, mode === 'walk' && P.hover > 0.5);   // l'aéroglisseur chasse les feuilles sur l'eau
   if (mode === 'walk' && (++mmTick & 1)) drawMinimap();
   spray.mesh.visible = mode === 'walk';

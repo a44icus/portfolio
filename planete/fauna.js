@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SEA_R } from './world.js';
 import { TUNE } from './tune.js';
+import { loadFur, furPartGeometry, makeFurGeometry, makeFurMaterial } from './fur.js';
 
 const K = 1.5;   // échelle générale : à taille réelle, on ne les remarquait pas depuis la caméra de conduite
 const SPH = new THREE.SphereGeometry(0.5, 10, 7), CONE = new THREE.ConeGeometry(0.5, 1, 8), EUL = new THREE.Euler(), M4 = new THREE.Matrix4();
@@ -241,15 +242,29 @@ export function makeFauna(planet, quality = 'high') {
   const away = (dir, p, out) => out.copy(dir).sub(v1.copy(p).normalize()).projectOnPlane(dir).normalize();
   const near = (dir, r, p, d) => p && v2.copy(dir).multiplyScalar(r).distanceToSquared(p) < d * d;
   /** Un animal articulé : un groupe racine (posé sur la sphère) + des parties mobiles placées à leur pivot. */
+  /* ---------- fourrure et plumes (réglées sur la page fourrure.html) : couches dessinées seulement près de la caméra ---------- */
+  const FUR = loadFur(), FUR_OF = new Map([[RABBIT, 'lapin'], [BIRD, 'martin']]), furMats = {}, furAnimals = [];
+  /** Maillage d'une partie ; avec ses couches de fourrure si l'animal en porte. */
+  function partMesh(key, list) {
+    const p = key && FUR[key];
+    if (!p || !p.actif) return new THREE.Mesh(blocks(list), mat);
+    const geo = furPartGeometry(list, p, blocks, mergeGeometries), m = new THREE.Mesh(geo, mat);
+    const fm = furMats[key] || (furMats[key] = makeFurMaterial(p));
+    const shell = new THREE.Mesh(makeFurGeometry(geo, Math.max(4, Math.round(p.couches * (low ? 0.5 : 1))), p.longueur * 2), fm);
+    shell.userData.fur = true; shell.castShadow = false; m.add(shell);
+    return m;
+  }
   function rig(model, extra = {}) {
-    const root = new THREE.Group(), parts = {};
-    root.add(new THREE.Mesh(blocks(model.body), mat));
+    const root = new THREE.Group(), parts = {}, key = FUR_OF.get(model);
+    root.add(partMesh(key, model.body));
     for (const k of Object.keys(model.PIV || {})) {
-      const p = new THREE.Group(); p.position.fromArray(model.PIV[k]).multiplyScalar(K); p.add(new THREE.Mesh(blocks(model[k]), mat));
+      const p = new THREE.Group(); p.position.fromArray(model.PIV[k]).multiplyScalar(K); p.add(partMesh(key, model[k]));
       (k === 'ears' ? parts.head : root).add(p); parts[k] = p;
     }
     group.add(root);
-    return Object.assign({ root, ...parts }, extra);
+    const a = Object.assign({ root, ...parts }, extra);
+    if (key && FUR[key].actif) furAnimals.push(a);
+    return a;
   }
   const ease = x => x * x * (3 - 2 * x), easeIO = x => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
   const lerpTo = (cur, target, rate, dt) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
@@ -304,7 +319,7 @@ export function makeFauna(planet, quality = 'high') {
     const roosts = [{ dir: d.clone(), h: planet.heightDir(d) + 0.45 * K, post: true }];
     for (let k = 0; k < 6 && trees.length; k++) { const t = trees[Math.floor(rnd() * trees.length)]; tangents(t, tA, tB); const a = rnd() * PI * 2; const p = offset(new THREE.Vector3(), t, tA, tB, Math.cos(a) * 0.32, Math.sin(a) * 0.32); roosts.push({ dir: p, h: planet.heightDir(p) + 1.0 + rnd() * 0.35, post: false }); }
     const b = rig(BIRD, { perch, roosts, at: 0, target, state: 'perch', t: 0, dur: 1, timer: 2 + rnd() * 4, look: 0, lookT: 0, dir: d.clone(), f: fwd.clone(), fwd0: fwd.clone(), from: null, to: null, ph: rnd() * 9, h: roosts[0].h, flapT: 0 });
-    b.wl = new THREE.Mesh(wingGeo, mat); b.wr = new THREE.Mesh(wingRGeo, mat);
+    b.wl = FUR.martin.actif ? partMesh('martin', WING) : new THREE.Mesh(wingGeo, mat); b.wr = FUR.martin.actif ? partMesh('martin', mirror(WING)) : new THREE.Mesh(wingRGeo, mat);
     b.wl.position.set(0.03 * K, 0.075 * K, -0.005 * K); b.wr.position.set(-0.03 * K, 0.075 * K, -0.005 * K); b.root.add(b.wl, b.wr);
     return b;
   });
@@ -390,6 +405,8 @@ export function makeFauna(planet, quality = 'high') {
     if (!walk) return;
     const scary = carSpeed > 0.4, day = night < 0.6;
     const A = TUNE.animaux || {}, sz = k => (A.taille || 1) * (A[k] || 1);   // tailles réglables (panneau « Animaux »)
+    for (const k in furMats) furMats[k].userData.u.uTime.value = t;
+    for (const a of furAnimals) { const near = a.root.position.distanceToSquared(car) < 22 * 22; a.root.traverse(o => { if (o.userData.fur) o.visible = near; }); }
     const nR = activeN('lapins'), nC = activeN('crabes'), nT = activeN('tortues'), nF = activeN('grenouilles'), nB = activeN('martins'), nH = activeN('colibris'), nP = activeN('papillons'), nA = activeN('abeilles'), nFi = activeN('poissons'), nM = activeN('moucherons');
     const zR = sz('lapins'), zC = sz('crabes'), zT = sz('tortues'), zF = sz('grenouilles'), zB = sz('martins'), zH = sz('colibris'), zP = sz('papillons'), zA = sz('abeilles'), zFi = sz('poissons'), zM = sz('moucherons');
 
@@ -697,3 +714,13 @@ export function makeFauna(planet, quality = 'high') {
   function locate(kind, i) { const L = LIST[kind]; const n = L ? activeN(kind) : 0; if (!n) return null; const a = L[0][((i % n) + n) % n]; return { pos: L[1](a).clone(), n, flying: ['martins', 'colibris', 'papillons', 'abeilles', 'moucherons'].includes(kind) }; }
   return { group, update, locate, counts: { lapins: rabbits.length, crabes: crabs.length, tortues: turtles.length, grenouilles: frogs.length, grenouillesNenuphars: padFrogIdx.length, martinsPecheurs: birds.length, perchoirsArbres: birds.map(b => b.roosts.length - 1), poissons: fishList.length, papillons: bflies.length, abeilles: bees.length, colibris: hums.length, moucherons: NM } };
 }
+
+/* ---------- modèles exposés pour la page de réglage des fourrures et plumes (fourrure.html) ----------
+   piv : position du pivot de chaque partie (avant l'échelle K) ; parent : partie qui porte celle-ci. */
+export const FUR_MODELS = {
+  lapin: { nom: 'Lapin', parts: { corps: RABBIT.body, tete: RABBIT.head, oreilles: RABBIT.ears }, piv: { tete: RABBIT.PIV.head, oreilles: RABBIT.PIV.ears }, parent: { oreilles: 'tete' } },
+  martin: { nom: 'Martin-pêcheur', parts: { corps: BIRD.body, tete: BIRD.head, aileG: WING, aileD: mirror(WING) }, piv: { tete: BIRD.PIV.head, aileG: [0.03, 0.075, -0.005], aileD: [-0.03, 0.075, -0.005] } },
+  colibri: { nom: 'Colibri', parts: { corps: HUM, aileG: HUM_WING, aileD: mirror(HUM_WING) }, piv: { aileG: [0.012, 0.014, 0.005], aileD: [-0.012, 0.014, 0.005] } },
+  abeille: { nom: 'Abeille', parts: { corps: BEE } },
+};
+export { blocks, K as FAUNA_K };

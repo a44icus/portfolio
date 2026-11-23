@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { LOOK, UPSIDE_GLSL, UPSIDE_UNIFORMS } from './look.js';
 import { TUNE } from './tune.js';
+import { loadClouds, makeCloudMaterials, makeCloudNoise } from './clouds.js';
 
 export const SEA_R = 32;      // rayon de la mer dans la scène
 export const PAV_R = 2.6;     // rayon de l'esplanade d'une zone (scène)
@@ -1022,34 +1023,30 @@ export function buildPlanet(anchors, quality = 'high') {
     return { id: an.id, color: an.color, dir, t1, t2, h, top: dir.clone().multiplyScalar(h + 2.2) };
   });
 
-  /* ---------- nuages arrondis ---------- */
+  /* ---------- nuages volumétriques (réglés dans le labo de fourrure.html, onglet Nuages) ----------
+     Une boîte par nuage ; le shader y dessine un cumulus rongé par un bruit 3D, éclairé par le soleil. */
   const clouds = new THREE.Group();
-  // aspect coton : comme les feuillages, chaque boule est un bouquet de petites cartes, ici des flocons de coton ronds et duveteux
-  const cottonTex = (() => {
-    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
-    let sd = 11; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-    const blob = (cx, cy, rad) => { const g = x.createRadialGradient(cx - rad * 0.25, cy - rad * 0.3, rad * 0.1, cx, cy, rad); g.addColorStop(0, '#ffffff'); g.addColorStop(0.75, '#fdfaff'); g.addColorStop(1, '#f1ebf8'); x.fillStyle = g; x.beginPath(); x.arc(cx, cy, rad, 0, Math.PI * 2); x.fill(); };
-    for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2 + r(), d = 22 + r() * 10; blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 14 + r() * 8); }   // couronne de petites bosses
-    blob(64, 64, 34);   // cœur
-    for (let i = 0; i < 6; i++) blob(46 + r() * 36, 46 + r() * 36, 12 + r() * 9);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-  })();
-  const puff = leafCluster(64, 1, 0.82, 0.42);
-  { const c = puff.attributes.color; for (let i = 0; i < c.count; i++) { const v = 0.8 + 0.28 * (c.getX(i) - 0.5) / 0.7; c.setXYZ(i, v, v, v); } }   // dessous à peine ombré : un coton bien blanc
-  const cloudMat = new THREE.MeshStandardMaterial({ color: '#fff1ea', map: cottonTex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, vertexColors: true, roughness: 1, emissive: '#ffd9c8', emissiveIntensity: 0.22 });
-  const puffs = [];
-  for (let c = 0; c < 60; c++) {
-    d.set(rng() * 2 - 1, (rng() * 2 - 1) * 0.8, rng() * 2 - 1).normalize(); orient(d);
-    const t1 = new THREE.Vector3(1, 0, 0).applyQuaternion(quat), t2 = new THREE.Vector3(0, 0, 1).applyQuaternion(quat), alt = SEA_R + MAX_H * S + 1.4 + rng() * 1.2;
-    // une touffe de coton : des boules de tailles variées, les plus grosses au milieu et un peu plus haut, plus petites sur les bords
-    for (let p = 0, np = 9 + Math.floor(rng() * 6); p < np; p++) {
-      const ox = (rng() - 0.5) * 2.8, oz = (rng() - 0.5) * 1.5, mid = 1 - Math.min(1, Math.hypot(ox / 1.4, oz / 0.75));
-      const s = 0.32 + rng() * 0.25 + mid * 0.38, up = mid * 0.35 + rng() * 0.12;
-      m4.compose(ps.copy(d).multiplyScalar(alt + up).addScaledVector(t1, ox).addScaledVector(t2, oz), quat, sc.set(s * 1.1, s * 0.82, s));
-      puffs.push(m4.clone());
+  {
+    const low = quality === 'low', CP = loadClouds();
+    // sur téléphone : moins de pas de calcul
+    const forQuality = q => (low ? { ...q, pas: Math.round(q.pas * 0.6), pasLumiere: Math.min(q.pasLumiere, 2) } : q);
+    const vol = makeCloudMaterials(makeCloudNoise(low ? 48 : 64), forQuality(CP)), box = new THREE.BoxGeometry(2, 2, 2), yaw = new THREE.Quaternion();
+    for (let c = 0, n = low ? 40 : 60; c < n; c++) {
+      d.set(rng() * 2 - 1, (rng() * 2 - 1) * 0.8, rng() * 2 - 1).normalize();
+      const alt = SEA_R + MAX_H * S + 1.6 + rng() * 1.2;
+      const m = new THREE.Mesh(box, vol.front);
+      m.position.copy(d).multiplyScalar(alt);
+      m.quaternion.copy(orient(d)).multiply(yaw.setFromAxisAngle(Y, rng() * Math.PI * 2));
+      m.userData.k = 0.8 + rng() * 0.45; m.userData.sx = 1.05 + rng() * 0.3;   // taille propre à ce nuage (multipliée par le réglage « taille »)
+      m.renderOrder = 2;
+      clouds.add(m);
     }
+    const resize = q => clouds.children.forEach(m => { const k = q.taille * m.userData.k; m.scale.set(k * m.userData.sx, k * 0.9, k); });
+    resize(CP);
+    vol.params = CP;   // réglages (panneau de réglages et labo) ; vol.update les applique en direct
+    vol.update = q => { vol.apply(forQuality(q)); resize(q); };
+    clouds.userData.volume = vol;
   }
-  const cloudMesh = new THREE.InstancedMesh(puff, cloudMat, puffs.length); puffs.forEach((m, i) => cloudMesh.setMatrixAt(i, m)); clouds.add(cloudMesh);
 
   const SWIM = (R - 1.4) * S;
   function groundRadius(dir) { return Math.max(heightDir(dir), SWIM); }   // on marche, ou on nage

@@ -50,6 +50,8 @@ function changes(a = TUNE, b = DEFAULTS) {
   return out;
 }
 
+import { CLOUD_DEFAULTS, CLOUD_SHAPES, saveClouds } from './clouds.js';
+
 let gui = null;
 /**
  * Ouvre (ou ferme) le panneau. hooks.apply() répercute les réglages sur la scène,
@@ -193,18 +195,50 @@ export async function toggleTunePanel(hooks) {
     fZ.add(go, k).name('📍 Voir ' + one);
   });
 
-  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fN, fC, fZ].forEach(f => f.close());
+  // nuages volumétriques : mêmes réglages que l'onglet Nuages du labo (fourrure.html), appliqués en direct
+  const V = hooks.clouds, CQ = V && V.params;
+  const fNu = gui.addFolder('Nuages');
+  if (CQ) {
+    const cl = c => c.onChange(() => { saveClouds(CQ); V.update(CQ); });
+    cl(fNu.add(CQ, 'forme', CLOUD_SHAPES).name('Forme de départ'));
+    cl(fNu.add(CQ, 'taille', 0.4, 5, 0.05).name('Taille'));
+    cl(fNu.add(CQ, 'douceur', 0.02, 0.8, 0.01).name('Douceur des bords'));
+    cl(fNu.add(CQ, 'couverture', 0, 1.5, 0.01).name('Remplissage'));
+    cl(fNu.add(CQ, 'densite', 0.1, 4, 0.05).name('Densité'));
+    cl(fNu.add(CQ, 'absorption', 1, 30, 0.5).name('Opacité'));
+    cl(fNu.add(CQ, 'echelle', 0.1, 2, 0.01).name('Taille des masses (inverse)'));
+    cl(fNu.add(CQ, 'detail', 0, 1, 0.01).name('Érosion du détail'));
+    cl(fNu.add(CQ, 'echelleDetail', 0.5, 8, 0.05).name('Finesse du détail'));
+    cl(fNu.add(CQ, 'vent', 0, 0.3, 0.005).name('Vent dans le nuage'));
+    cl(fNu.add(CQ, 'directionVent', 0, 360, 1).name('Direction du vent'));
+    cl(fNu.add(CQ, 'bouillonnement', 0, 0.4, 0.005).name('Bouillonnement'));
+    cl(fNu.add(CQ, 'soleil', 0, 8, 0.05).name('Force du soleil'));
+    cl(fNu.addColor(CQ, 'couleurSoleil').name('Couleur du soleil'));
+    cl(fNu.add(CQ, 'ambiance', 0, 2, 0.01).name('Lumière ambiante'));
+    cl(fNu.addColor(CQ, 'ambianceHaut').name('Ambiante (haut)'));
+    cl(fNu.addColor(CQ, 'ambianceBas').name('Ambiante (bas)'));
+    cl(fNu.addColor(CQ, 'couleurNuage').name('Couleur du nuage'));
+    cl(fNu.add(CQ, 'argente', 0, 0.95, 0.01).name('Liseré à contre-jour'));
+    cl(fNu.add(CQ, 'poudre', 0, 1, 0.01).name('Bords sombres (poudre)'));
+    cl(fNu.add(CQ, 'pas', 16, 160, 1).name('Qualité : pas de rendu'));
+    cl(fNu.add(CQ, 'pasLumiere', 1, 12, 1).name('Qualité : pas vers le soleil'));
+    cl(fNu.add(CQ, 'distanceLumiere', 0.1, 1.5, 0.01).name('Portée de l’ombre interne'));
+  }
+
+  [fA, fL, fP, fE, fS, fH, fT, fK, fU, fF, fV, fR, fN, fC, fZ, fNu].forEach(f => f.close());
 
   const actions = {
     copier() {
-      const txt = JSON.stringify(changes(), null, 2);
+      const out = changes();
+      if (CQ) { const nu = {}; for (const k in CLOUD_DEFAULTS) if (CQ[k] !== CLOUD_DEFAULTS[k]) nu[k] = CQ[k]; if (Object.keys(nu).length) out.nuages = nu; }
+      const txt = JSON.stringify(out, null, 2);
       (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Copié ✓'), () => { prompt('Réglages à copier :', txt); });
     },
     telecharger() {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(TUNE, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(CQ ? { ...TUNE, nuages: CQ } : TUNE, null, 2)], { type: 'application/json' }));
       a.download = 'reglages-planete.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     },
-    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); hooks.recolorLupins(); hooks.recolorPaths && hooks.recolorPaths(); hooks.previewPaths && hooks.previewPaths(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
+    reinitialiser() { merge(TUNE, clone(DEFAULTS)); save(); if (CQ) { Object.assign(CQ, clone(CLOUD_DEFAULTS)); saveClouds(CQ); V.update(CQ); } hooks.apply(); hooks.recolorGrass(); hooks.recolorTrees(); hooks.recolorLupins(); hooks.recolorPaths && hooks.recolorPaths(); hooks.previewPaths && hooks.previewPaths(); gui.controllersRecursive().forEach(c => c.updateDisplay()); toast('Réglages d’origine'); },
   };
   gui.add(actions, 'copier').name('📋 Copier les réglages');
   gui.add(actions, 'telecharger').name('⬇ Télécharger (JSON)');

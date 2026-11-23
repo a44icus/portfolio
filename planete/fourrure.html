@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Labo fourrures et nuages</title>
+<style>
+  :root { --bg: #dfe9f2; --ink: #1d2733; --panel: rgba(255,255,255,.86); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #bar { position: fixed; left: 16px; top: 16px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 360px); }
+  #bar button { border: 0; border-radius: 999px; padding: 8px 14px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  #bar button.on { background: #1d2733; color: #fff; }
+  #bar button.mode { background: #fff; }
+  #bar button.mode.on { background: #e8613a; color: #fff; }
+  #bar .sep { width: 100%; height: 0; }
+  #info { position: fixed; left: 16px; bottom: 16px; background: var(--panel); border-radius: 10px; padding: 8px 12px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); max-width: calc(100vw - 32px); }
+  #info b { font-variant-numeric: tabular-nums; }
+  #toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); background: #1d2733; color: #fff; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  .lil-gui .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+  @media (max-width: 700px) { #bar { max-width: calc(100vw - 32px); } .lil-gui.root { top: auto !important; bottom: 0; max-height: 50vh; width: 100% !important; } #info { bottom: calc(50vh + 8px); } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/three.module.min.js",
+  "three/addons/": "./vendor/three/addons/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="bar"></div>
+<div id="info">Chargement…</div>
+<div id="toast"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { FUR_MODELS, blocks, FAUNA_K as K } from './fauna.js';
+import { CLOUD_DEFAULTS, CLOUD_SHAPES, loadClouds, saveClouds, makeCloudNoise, makeCloud } from './clouds.js';
+import { FUR_DEFAULTS, loadFur, saveFur, defaultColorFur, furPartGeometry, makeFurGeometry, makeFurMaterial, updateFurMaterial } from './fur.js';
+const { GUI } = await import('https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/+esm');
+
+/* ---------- scène ---------- */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#dfe9f2');
+const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 50);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.autoRotateSpeed = 1.2;
+scene.add(new THREE.HemisphereLight('#d9ecff', '#6f8a3c', 1.3));
+const sun = new THREE.DirectionalLight('#fff3e0', 2.4);
+sun.position.set(1.2, 2.2, 1.4); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.1, far: 6 }); sun.shadow.bias = -0.0005;
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(2.5, 64), new THREE.MeshStandardMaterial({ color: '#8fb35a', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+/* ---------- réglages ---------- */
+const S = loadFur();
+const view = { mode: localStorage.getItem('planete-labo-mode') === 'nuages' ? 'nuages' : 'fourrure', animal: localStorage.getItem('planete-fourrure-animal') || 'lapin', tourner: true, animer: true, comparer: false, telephone: false };
+if (!FUR_MODELS[view.animal]) view.animal = 'lapin';
+const save = () => saveFur(S);
+const baseMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, flatShading: true });   // la matière des animaux du jeu
+let current = null;   // { root, parts: { nom: { pivot, base, shell, list } }, mat }
+
+/** Couleurs du modèle (dans l'ordre d'apparition). */
+const modelColors = key => [...new Set(Object.values(FUR_MODELS[key].parts).flat().map(pt => pt[6].toLowerCase()))];
+const furOf = (p, hex) => p.couleurs[hex] ?? defaultColorFur(hex);
+
+const partGeometry = (list, p) => furPartGeometry(list, p, blocks, mergeGeometries);
+
+function layersOf(p) { return Math.max(2, Math.round(p.couches * (view.telephone ? 0.5 : 1))); }
+function build() {
+  if (current) { scene.remove(current.root); current.root.traverse(o => { if (o.geometry) o.geometry.dispose(); }); current.mat.dispose(); }
+  const key = view.animal, M = FUR_MODELS[key], p = S[key];
+  const root = new THREE.Group(), parts = {}, mat = makeFurMaterial(p);
+  for (const name of Object.keys(M.parts)) {
+    const pivot = new THREE.Group();
+    if (M.piv?.[name]) pivot.position.fromArray(M.piv[name]).multiplyScalar(K);
+    const geo = partGeometry(M.parts[name], p);
+    const base = new THREE.Mesh(geo, baseMat); base.castShadow = true;
+    const shell = new THREE.Mesh(makeFurGeometry(geo, layersOf(p), p.longueur * 2), mat);
+    shell.visible = p.actif && !view.comparer;
+    pivot.add(base, shell);
+    parts[name] = { pivot, base, shell, list: M.parts[name] };
+  }
+  for (const name in parts) (parts[M.parent?.[name]]?.pivot || root).add(parts[name].pivot);
+  scene.add(root);
+  current = { root, parts, mat, key };
+}
+/** Géométrie à refaire (couleurs, dégagement, longueur) sans toucher à la matière. */
+function rebuildGeometry() {
+  const p = S[view.animal];
+  for (const pt of Object.values(current.parts)) {
+    const geo = partGeometry(pt.list, p);
+    pt.base.geometry.dispose(); pt.shell.geometry.dispose();
+    pt.base.geometry = geo; pt.shell.geometry = makeFurGeometry(geo, layersOf(p), p.longueur * 2);
+  }
+}
+function refresh() {
+  const p = S[view.animal];
+  updateFurMaterial(current.mat, p);
+  for (const pt of Object.values(current.parts)) { pt.shell.geometry.instanceCount = layersOf(p); pt.shell.visible = p.actif && !view.comparer; }
+  save();
+}
+function frame() {
+  current.root.position.y = view.animal !== 'lapin' ? 0.12 : 0;   // les volants planent au-dessus du sol
+  const box = new THREE.Box3().setFromObject(current.root), c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  controls.target.copy(c);
+  camera.position.copy(c).add(new THREE.Vector3(0.9, 0.45, 1.25).normalize().multiplyScalar(r * 4.2));
+  camera.near = r * 0.05; camera.far = r * 200; camera.updateProjectionMatrix();
+  controls.minDistance = r * 1.2; controls.maxDistance = r * 14;
+}
+
+/* ---------- labo de nuages ---------- */
+const C = loadClouds(), skyFur = new THREE.Color('#dfe9f2'), skyCloud = new THREE.Color('#7fb4e6');
+let cloud = null;
+const sunDir = new THREE.Vector3();
+function sunFromAngles() {
+  const h = C.hauteurSoleil * Math.PI / 180, a = C.azimutSoleil * Math.PI / 180;
+  sunDir.set(Math.cos(h) * Math.cos(a), Math.sin(h), Math.cos(h) * Math.sin(a)).normalize();
+}
+function ensureCloud() {
+  if (cloud) return;
+  const t0 = performance.now(), noise = makeCloudNoise(64);
+  cloud = makeCloud(noise, C); cloud.position.set(0, 2, 0); scene.add(cloud);
+  console.log('bruit des nuages : ' + Math.round(performance.now() - t0) + ' ms');
+  window.__labo = { C, cloud, apply: () => cloud.userData.apply(C) };
+}
+function frameCloud() {
+  controls.target.copy(cloud.position);
+  camera.position.copy(cloud.position).add(new THREE.Vector3(0.2, 0.25, 1).normalize().multiplyScalar(C.taille * 4.2));
+  camera.near = 0.05; camera.far = 200; camera.updateProjectionMatrix();
+  controls.minDistance = C.taille * 0.3; controls.maxDistance = C.taille * 12;
+}
+function setMode(m) {
+  view.mode = m; try { localStorage.setItem('planete-labo-mode', m); } catch (e) {}
+  const nu = m === 'nuages';
+  if (nu) ensureCloud();
+  current.root.visible = !nu; ground.visible = !nu; if (cloud) cloud.visible = nu;
+  scene.background = nu ? skyCloud : skyFur;
+  if (nu) frameCloud(); else frame();
+  makeGui(); makeBar();
+}
+
+/* ---------- panneau ---------- */
+let gui = null;
+const toast = msg => { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1800); };
+function makeCloudGui() {
+  gui = new GUI({ title: 'Nuage volumétrique', width: 320 });
+  const live = () => { cloud.userData.apply(C); saveClouds(C); };
+  const fS = gui.addFolder('Forme');
+  fS.add(C, 'forme', CLOUD_SHAPES).name('Forme de départ').onChange(live);
+  fS.add(C, 'taille', 0.4, 5, 0.05).name('Taille').onChange(live);
+  fS.add(C, 'douceur', 0.02, 0.8, 0.01).name('Douceur des bords').onChange(live);
+  fS.add(C, 'couverture', 0, 1.5, 0.01).name('Remplissage').onChange(live);
+  fS.add(C, 'densite', 0.1, 4, 0.05).name('Densité').onChange(live);
+  fS.add(C, 'absorption', 1, 30, 0.5).name('Opacité').onChange(live);
+  const fN = gui.addFolder('Bruit');
+  fN.add(C, 'echelle', 0.1, 2, 0.01).name('Taille des masses (inverse)').onChange(live);
+  fN.add(C, 'detail', 0, 1, 0.01).name('Érosion du détail').onChange(live);
+  fN.add(C, 'echelleDetail', 0.5, 8, 0.05).name('Finesse du détail').onChange(live);
+  const fA = gui.addFolder('Animation');
+  fA.add(C, 'vent', 0, 0.3, 0.005).name('Vent').onChange(live);
+  fA.add(C, 'directionVent', 0, 360, 1).name('Direction du vent').onChange(live);
+  fA.add(C, 'bouillonnement', 0, 0.4, 0.005).name('Bouillonnement').onChange(live);
+  const fL = gui.addFolder('Lumière');
+  fL.add(C, 'hauteurSoleil', -10, 90, 1).name('Hauteur du soleil').onChange(() => { sunFromAngles(); live(); });
+  fL.add(C, 'azimutSoleil', 0, 360, 1).name('Direction du soleil').onChange(() => { sunFromAngles(); live(); });
+  fL.add(C, 'soleil', 0, 8, 0.05).name('Force du soleil').onChange(live);
+  fL.addColor(C, 'couleurSoleil').name('Couleur du soleil').onChange(live);
+  fL.add(C, 'ambiance', 0, 2, 0.01).name('Lumière ambiante').onChange(live);
+  fL.addColor(C, 'ambianceHaut').name('Ambiante (haut)').onChange(live);
+  fL.addColor(C, 'ambianceBas').name('Ambiante (bas)').onChange(live);
+  fL.addColor(C, 'couleurNuage').name('Couleur du nuage').onChange(live);
+  fL.add(C, 'argente', 0, 0.95, 0.01).name('Liseré à contre-jour').onChange(live);
+  fL.add(C, 'poudre', 0, 1, 0.01).name('Bords sombres (poudre)').onChange(live);
+  const fQ = gui.addFolder('Qualité');
+  fQ.add(C, 'pas', 16, 160, 1).name('Pas de rendu').onChange(live);
+  fQ.add(C, 'pasLumiere', 1, 12, 1).name('Pas vers le soleil').onChange(live);
+  fQ.add(C, 'distanceLumiere', 0.1, 1.5, 0.01).name('Portée de l\'ombre interne').onChange(live);
+  fQ.close();
+  const fR = gui.addFolder('Réglages');
+  fR.add({ f: () => { navigator.clipboard.writeText(JSON.stringify(C, null, 1)).then(() => toast('Réglages copiés'), () => prompt('Copier :', JSON.stringify(C))); } }, 'f').name('Copier les réglages du nuage');
+  fR.add({ f: () => { const t = prompt('Coller des réglages JSON :'); if (!t) return; try { Object.assign(C, JSON.parse(t)); sunFromAngles(); live(); makeGui(); toast('Réglages appliqués'); } catch (e) { toast('JSON invalide'); } } }, 'f').name('Coller des réglages');
+  fR.add({ f: () => { Object.assign(C, JSON.parse(JSON.stringify(CLOUD_DEFAULTS))); sunFromAngles(); live(); makeGui(); toast('Nuage réinitialisé'); } }, 'f').name('Réinitialiser');
+}
+function makeGui() {
+  if (gui) gui.destroy();
+  if (view.mode === 'nuages') return makeCloudGui();
+  const key = view.animal, p = S[key];
+  gui = new GUI({ title: `Fourrure — ${FUR_MODELS[key].nom}`, width: 320 });
+  const live = () => refresh(), geoChange = () => { rebuildGeometry(); refresh(); };
+  gui.add(p, 'actif').name('Fourrure / plumes').onChange(live);
+  gui.add(p, 'type', { 'Poils': 'poils', 'Plumes': 'plumes' }).name('Type').onChange(() => { refresh(); showType(); });
+  const fF = gui.addFolder('Forme');
+  fF.add(p, 'longueur', 0.001, 0.05, 0.0005).name('Longueur').onChange(geoChange);
+  fF.add(p, 'couches', 4, 48, 1).name('Couches (qualité)').onChange(live);
+  fF.add(p, 'gravite', 0, 1.5, 0.01).name('Gravité').onChange(live);
+  fF.add(p, 'frisure', 0, 1, 0.01).name('Frisure').onChange(live);
+  fF.add(p, 'vent', 0, 1, 0.01).name('Vent').onChange(live);
+  const fP = gui.addFolder('Poils');
+  fP.add(p, 'densite', 50, 1500, 10).name('Densité').onChange(live);
+  fP.add(p, 'epaisseur', 0.2, 1.6, 0.01).name('Épaisseur').onChange(live);
+  fP.add(p, 'effilement', 0, 1, 0.01).name('Effilement').onChange(live);
+  const fPl = gui.addFolder('Plumes');
+  fPl.add(p, 'taillePlume', 0.002, 0.04, 0.0005).name('Taille des plumes').onChange(live);
+  fPl.add(p, 'rachis', 0, 1, 0.01).name('Rachis (nervure)').onChange(live);
+  fPl.add(p, 'barbes', 0, 1, 0.01).name('Barbes').onChange(live);
+  const fC = gui.addFolder('Couleur');
+  fC.add(p, 'ombre', 0, 1, 0.01).name('Ombre à la racine').onChange(live);
+  fC.add(p, 'pointes', 0, 1, 0.01).name('Pointes éclaircies').onChange(live);
+  fC.addColor(p, 'couleurPointe').name('Couleur des pointes').onChange(live);
+  fC.add(p, 'variation', 0, 0.5, 0.01).name('Variation').onChange(live);
+  const fM = gui.addFolder('Motif');
+  fM.add(p, 'motif', { 'Aucun': 'aucun', 'Taches': 'taches', 'Rayures': 'rayures' }).name('Motif').onChange(live);
+  fM.addColor(p, 'couleurMotif').name('Couleur').onChange(live);
+  fM.add(p, 'echelleMotif', 2, 120, 1).name('Échelle').onChange(live);
+  fM.add(p, 'forceMotif', 0, 1, 0.01).name('Force').onChange(live);
+  const fZ = gui.addFolder('Zones (longueur par couleur)');
+  fZ.add(p, 'degagement', 0, 2, 0.05).name('Dégager yeux / bec').onChange(geoChange);
+  for (const hex of modelColors(key)) {
+    const o = { v: furOf(p, hex) };
+    const c = fZ.add(o, 'v', 0, 1.5, 0.05).name(hex).onChange(v => { p.couleurs[hex] = v; geoChange(); });
+    c.$name.innerHTML = `<span class="swatch" style="background:${hex}"></span>${hex}`;
+  }
+  fZ.close();
+  const fA = gui.addFolder('Réglages');
+  fA.add({ f: () => { navigator.clipboard.writeText(JSON.stringify(S, null, 1)).then(() => toast('Réglages copiés'), () => prompt('Copier :', JSON.stringify(S))); } }, 'f').name('Copier les réglages (tous les animaux)');
+  fA.add({ f: () => { const t = prompt('Coller des réglages JSON :'); if (!t) return; try { const o = JSON.parse(t); for (const k in S) if (o[k]) Object.assign(S[k], o[k]); save(); build(); makeGui(); toast('Réglages appliqués'); } catch (e) { toast('JSON invalide'); } } }, 'f').name('Coller des réglages');
+  fA.add({ f: () => { S[key] = JSON.parse(JSON.stringify(FUR_DEFAULTS[key])); save(); build(); makeGui(); toast('Animal réinitialisé'); } }, 'f').name('Réinitialiser cet animal');
+  function showType() { const feather = p.type === 'plumes'; fP.show(!feather); fPl.show(feather); }
+  showType();
+}
+
+/* ---------- barre du haut ---------- */
+const bar = document.getElementById('bar');
+function makeBar() {
+  bar.innerHTML = '';
+  for (const [m, label] of [['fourrure', 'Fourrures'], ['nuages', 'Nuages']]) {
+    const b = document.createElement('button'); b.textContent = label; b.className = 'mode' + (view.mode === m ? ' on' : '');
+    b.onclick = () => { if (view.mode !== m) setMode(m); }; bar.appendChild(b);
+  }
+  const sep = document.createElement('div'); sep.className = 'sep'; bar.appendChild(sep);
+  const tg = (label, prop, fn) => { const b = document.createElement('button'); b.textContent = label; b.className = view[prop] ? 'on' : ''; b.onclick = () => { view[prop] = !view[prop]; b.className = view[prop] ? 'on' : ''; fn && fn(); }; bar.appendChild(b); };
+  if (view.mode === 'nuages') { tg('Rotation', 'tourner'); tg('Animation', 'animer'); return; }
+  for (const k of Object.keys(FUR_MODELS)) {
+    const b = document.createElement('button'); b.textContent = FUR_MODELS[k].nom; b.className = k === view.animal ? 'on' : '';
+    b.onclick = () => { view.animal = k; try { localStorage.setItem('planete-fourrure-animal', k); } catch (e) {} build(); frame(); makeGui(); makeBar(); };
+    bar.appendChild(b);
+  }
+  tg('Rotation', 'tourner');
+  tg('Animation', 'animer');
+  tg('Sans fourrure', 'comparer', refresh);
+  tg('Aperçu téléphone', 'telephone', refresh);
+}
+
+/* ---------- boucle ---------- */
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+sunFromAngles();
+build(); frame(); setMode(view.mode);
+const info = document.getElementById('info'), clock = new THREE.Clock();
+let fps = 60, acc = 0, frames = 0, cloudT = 0;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime, P = current.parts;
+  controls.autoRotate = view.tourner; controls.update();
+  if (view.mode === 'nuages') {
+    if (view.animer) cloudT += dt;
+    cloud.userData.tick(cloudT, camera, sunDir);
+    renderer.render(scene, camera);
+    acc += dt; frames++;
+    if (acc > 0.5) { fps = frames / acc; acc = 0; frames = 0; info.innerHTML = `Nuage · ${Object.keys(CLOUD_SHAPES).find(k => CLOUD_SHAPES[k] === C.forme)} · <b>${C.pas}</b> pas · <b>${fps.toFixed(0)}</b> img/s — glisser pour tourner autour, molette pour zoomer (on peut entrer dedans). Réglages gardés dans ce navigateur.`; }
+    return;
+  }
+  current.mat.userData.u.uTime.value = t;
+  if (view.animer) {
+    if (current.key === 'lapin') { P.tete.pivot.rotation.set(Math.sin(t * 1.3) * 0.12, Math.sin(t * 0.7) * 0.35, 0); P.oreilles.pivot.rotation.x = Math.max(0, Math.sin(t * 2.1)) * -0.25; }
+    if (current.key === 'martin') { P.tete.pivot.rotation.y = Math.sin(t * 0.8) * 0.5; const f = Math.max(0, Math.sin(t * 1.5)) * 0.6; P.aileG.pivot.rotation.z = f; P.aileD.pivot.rotation.z = -f; }
+    if (current.key === 'colibri') { const f = Math.sin(t * 38) * 0.8; P.aileG.pivot.rotation.z = f; P.aileD.pivot.rotation.z = -f; current.root.position.y = 0.12 + Math.sin(t * 2) * 0.008; }
+    if (current.key === 'abeille') current.root.position.y = 0.12 + Math.sin(t * 3) * 0.006;
+  }
+  renderer.render(scene, camera);
+  acc += dt; frames++;
+  if (acc > 0.5) {
+    fps = frames / acc; acc = 0; frames = 0;
+    const p = S[view.animal], tris = renderer.info.render.triangles;
+    info.innerHTML = `${FUR_MODELS[view.animal].nom} · ${p.type === 'plumes' ? 'plumes' : 'poils'} · <b>${layersOf(p)}</b> couches · <b>${(tris / 1000).toFixed(1)}k</b> triangles · <b>${fps.toFixed(0)}</b> img/s — glisser pour tourner, molette pour zoomer. Réglages gardés dans ce navigateur.`;
+  }
+});
+</script>
+</body>
+</html>
