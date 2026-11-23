@@ -26,80 +26,104 @@ export function glowSprite(color, size, opacity = 0.8) {
   s.scale.setScalar(size); return s;
 }
 
-/* ---------- BMX ---------- */
+/* ---------- BMX : cadre rouge et blanc, jantes dorées, caisse à lait grise sur porte-bagages, drap blanc, enfant en sweat rouge ---------- */
+let crateT = null;
+function crateTex() {   // plastique gris ajouré : losanges et fentes, poignée découpée en haut
+  if (crateT) return crateT;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 160; const x = c.getContext('2d');
+  x.fillStyle = '#a6a8ac'; x.fillRect(0, 0, 256, 160);
+  x.fillStyle = '#5e6064';
+  for (let r = 0; r < 4; r++) for (let k = 0; k < 9; k++) { const cx = 18 + k * 27.5 + (r % 2) * 13.7, cy = 52 + r * 25; x.beginPath(); x.moveTo(cx, cy - 9); x.lineTo(cx + 9, cy); x.lineTo(cx, cy + 9); x.lineTo(cx - 9, cy); x.closePath(); x.fill(); }
+  x.beginPath(); x.roundRect(78, 14, 100, 20, 10); x.fill();   // poignée
+  x.fillStyle = '#c4c6ca'; x.fillRect(0, 0, 256, 6); x.fillRect(0, 154, 256, 6); x.fillRect(0, 0, 6, 160); x.fillRect(250, 0, 6, 160);
+  crateT = new THREE.CanvasTexture(c); crateT.colorSpace = THREE.SRGBColorSpace; return crateT;
+}
 export function makeBMX({ rider = true } = {}) {
   const bike = new THREE.Group(), lean = new THREE.Group(); bike.add(lean);
-  const red = mat('#d8202c', { roughness: 0.3, metalness: 0.25 }), black = mat('#16161c', { roughness: 0.8 }), chrome = mat('#c9ccd4', { roughness: 0.2, metalness: 0.9 });
+  const red = mat('#d61e2a', { roughness: 0.25, metalness: 0.2 }), white = mat('#f2f2f0', { roughness: 0.25, metalness: 0.1 }), black = mat('#141418', { roughness: 0.8 });
+  const chrome = mat('#cfd2d8', { roughness: 0.18, metalness: 0.9 }), gold = mat('#c9a26a', { roughness: 0.3, metalness: 0.6 }), brown = mat('#5a3426', { roughness: 0.55 });
   const WR = 0.24, ZF = 0.42, ZR = -0.4;
   function wheel() {
     const w = new THREE.Group();
-    w.add(new THREE.Mesh(new THREE.TorusGeometry(WR - 0.03, 0.032, 8, 28).rotateY(Math.PI / 2), black));
-    w.add(new THREE.Mesh(new THREE.TorusGeometry(WR - 0.065, 0.012, 6, 28).rotateY(Math.PI / 2), chrome));
-    for (let i = 0; i < 9; i++) { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, (WR - 0.065) * 2, 4), chrome); s.rotation.x = i / 9 * Math.PI; w.add(s); }
-    w.add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.07, 10).rotateZ(Math.PI / 2), chrome));
+    w.add(new THREE.Mesh(new THREE.TorusGeometry(WR - 0.032, 0.034, 10, 32).rotateY(Math.PI / 2), black));
+    w.add(new THREE.Mesh(new THREE.TorusGeometry(WR - 0.07, 0.015, 6, 32).rotateY(Math.PI / 2), gold));
+    w.add(new THREE.Mesh(new THREE.CylinderGeometry(WR - 0.06, WR - 0.06, 0.03, 32, 1, true).rotateZ(Math.PI / 2), gold));
+    for (let i = 0; i < 18; i++) { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, WR - 0.07, 4).translate(0, (WR - 0.07) / 2, 0), chrome); s.rotation.x = i / 18 * Math.PI * 2; s.position.x = (i % 2 ? 1 : -1) * 0.012; s.rotation.z = (i % 2 ? -1 : 1) * 0.04; w.add(s); }
+    w.add(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.08, 12).rotateZ(Math.PI / 2), chrome));
     return w;
   }
   const wR = wheel(); wR.position.set(0, WR, ZR); lean.add(wR);
-  const fork = new THREE.Group(); fork.position.set(0, WR, ZF); lean.add(fork);   // fourche + roue avant + guidon : tournent ensemble
+  const fork = new THREE.Group(); fork.position.set(0, WR, ZF); lean.add(fork);   // fourche + roue avant + guidon + caisse : tournent ensemble
   fork.rotation.x = -0.32;
   const wF = wheel(); fork.add(wF);
-  for (const x of [-0.045, 0.045]) tube(fork, [x, 0, 0], [x * 0.6, 0.52, 0], 0.014, chrome);
-  tube(fork, [0, 0.52, 0], [0, 0.66, 0], 0.016, chrome);
-  tube(fork, [-0.26, 0.7, -0.02], [0.26, 0.7, -0.02], 0.014, chrome);
-  tube(fork, [-0.1, 0.66, 0], [-0.14, 0.7, -0.02], 0.012, chrome); tube(fork, [0.1, 0.66, 0], [0.14, 0.7, -0.02], 0.012, chrome); tube(fork, [-0.1, 0.66, 0], [0.1, 0.66, 0], 0.012, chrome);
-  for (const x of [-0.25, 0.25]) { const g = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8).rotateZ(Math.PI / 2), black); g.position.set(x, 0.7, -0.02); fork.add(g); }
-  // panier en osier, drap blanc par-dessus (quelque chose dort dessous…)
-  const wick = mat('#a97b45', { roughness: 0.95 }), basket = new THREE.Group(); basket.position.set(0, 0.6, 0.12); fork.add(basket);
-  { const W = 0.34, H = 0.2, D = 0.26, T = 0.018;
-    const b0 = rbox(W, T, D, wick, 0.006); b0.position.y = -H / 2; basket.add(b0);
-    for (const sx of [-1, 1]) { const s = rbox(T, H, D, wick, 0.006); s.position.x = sx * W / 2; basket.add(s); }
-    for (const sz of [-1, 1]) { const s = rbox(W, H, T, wick, 0.006); s.position.z = sz * D / 2; basket.add(s); }
-    for (let i = 0; i < 3; i++) { const band = rbox(W + 0.01, 0.012, D + 0.01, mat('#7a5530', { roughness: 1 }), 0.004); band.position.y = -H / 2 + 0.05 + i * 0.06; basket.add(band); }
-    // le drap : une silhouette assise dessous — un corps qui s'évase en plis, un cou fin, une grosse tête large
-    const pts = [[0.2, -0.03], [0.19, 0.03], [0.16, 0.1], [0.13, 0.17], [0.1, 0.22], [0.075, 0.26]].map(([r, y]) => new THREE.Vector2(r, y));
-    for (let i = 0; i <= 10; i++) { const a = -0.95 + i / 10 * (Math.PI / 2 + 0.95); pts.push(new THREE.Vector2(Math.max(0.001, 0.13 * Math.cos(a)), 0.37 + 0.12 * Math.sin(a))); }
-    const sheetG = new THREE.LatheGeometry(pts, 28); sheetG.scale(1.18, 1, 0.92);
-    const sp = sheetG.attributes.position; for (let i = 0; i < sp.count; i++) { const x = sp.getX(i), z = sp.getZ(i), y = sp.getY(i), a = Math.atan2(z, x), fold = Math.max(0, 0.2 - y) / 0.2; sp.setX(i, x * (1 + 0.07 * fold * Math.sin(a * 7))); sp.setZ(i, z * (1 + 0.07 * fold * Math.sin(a * 7))); }
+  for (const x of [-0.045, 0.045]) tube(fork, [x, 0, 0], [x * 0.6, 0.5, 0], 0.016, white);
+  tube(fork, [0, 0.48, 0], [0, 0.62, 0], 0.024, white);                       // douille de direction
+  tube(fork, [0, 0.62, 0], [0, 0.7, -0.03], 0.014, black);                     // potence
+  tube(fork, [-0.24, 0.72, -0.05], [0.24, 0.72, -0.05], 0.013, black);         // cintre
+  for (const x of [-0.24, 0.24]) { const g = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.11, 10).rotateZ(Math.PI / 2), black); g.position.set(x * 1.08, 0.72, -0.05); fork.add(g); }
+  // porte-bagages blanc et caisse à lait grise
+  const basket = new THREE.Group(); basket.position.set(0, 0.6, 0.2); fork.add(basket);
+  const CW = 0.42, CH = 0.26, CD = 0.34;
+  for (const x of [-0.11, 0.11]) { tube(fork, [x * 0.5, 0.02, 0.02], [x, 0.6 - CH / 2, 0.2], 0.01, white); tube(fork, [x, 0.6 - CH / 2, 0.06], [x, 0.6 - CH / 2, 0.34], 0.009, white); }
+  { const cm = mat('#ffffff', { map: crateTex(), roughness: 0.6 }), plain = mat('#9fa1a5', { roughness: 0.6 });
+    const bot = rbox(CW, 0.02, CD, plain, 0.006); bot.position.y = -CH / 2; basket.add(bot);
+    for (const sz of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.016), [plain, plain, plain, plain, cm, cm]); p.position.z = sz * CD / 2; basket.add(p); }
+    for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.016, CH, CD), [cm, cm, plain, plain, plain, plain]); p.position.x = sx * CW / 2; basket.add(p); }
+    for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const post = rbox(0.035, CH + 0.01, 0.035, plain, 0.008); post.position.set(x * CW / 2, 0, z * CD / 2); basket.add(post); }
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(CW + 0.03, 0.025, CD + 0.03), plain); lip.position.y = CH / 2; basket.add(lip);
+    const lipIn = new THREE.Mesh(new THREE.BoxGeometry(CW - 0.01, 0.03, CD - 0.01), mat('#6e7074', { roughness: 0.7 })); lipIn.position.y = CH / 2 + 0.002; basket.add(lipIn); lipIn.visible = false;
+    // le drap : haut, posé dans la caisse, qui retombe sur ses bords ; une ouverture sombre devant, deux grands yeux qui brillent
+    const pts = [[0.26, CH / 2 - 0.06], [0.25, CH / 2 + 0.01], [0.22, CH / 2 + 0.08], [0.19, CH / 2 + 0.18], [0.17, CH / 2 + 0.28]].map(([r, y]) => new THREE.Vector2(r, y));
+    for (let i = 1; i <= 10; i++) { const a = i / 10 * Math.PI / 2; pts.push(new THREE.Vector2(Math.max(0.001, 0.17 * Math.cos(a)), CH / 2 + 0.28 + 0.17 * Math.sin(a) * 1.05)); }
+    const sheetG = new THREE.LatheGeometry(pts, 32); sheetG.scale(1, 1, 0.86);
+    const sp = sheetG.attributes.position;
+    for (let i = 0; i < sp.count; i++) { const x = sp.getX(i), z = sp.getZ(i), y = sp.getY(i), a = Math.atan2(z, x), low = THREE.MathUtils.smoothstep(CH / 2 + 0.3, CH / 2 - 0.05, y), f = 1 + 0.06 * low * Math.sin(a * 9) + 0.03 * low * Math.sin(a * 4 + 1); sp.setX(i, x * f); sp.setZ(i, z * f + 0.03 * (y - CH / 2)); }
     sheetG.computeVertexNormals();
-    const sheet = new THREE.Mesh(sheetG, mat('#f4f1ea', { roughness: 0.95, side: THREE.DoubleSide })); sheet.position.y = 0.0; basket.add(sheet);
-    // deux grands yeux qui brillent à travers le drap
+    const sheet = new THREE.Mesh(sheetG, mat('#efece6', { roughness: 0.95, side: THREE.DoubleSide })); basket.add(sheet);
+    const hy = CH / 2 + 0.31;
+    const open = new THREE.Mesh(new THREE.SphereGeometry(0.1, 18, 12), mat('#141018', { roughness: 0.9 })); open.scale.set(1.15, 0.95, 0.35); open.position.set(0, hy, 0.14); basket.add(open);
     for (const sx of [-1, 1]) {
-      const hole = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), mat('#0c1220', { roughness: 0.4 })); hole.scale.set(1.25, 0.95, 0.35); hole.position.set(sx * 0.052, 0.385, 0.11); hole.rotation.y = sx * 0.35; basket.add(hole);
-      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 2.2, 2.6) })); iris.position.set(sx * 0.052, 0.385, 0.12); basket.add(iris);
-      const eg = glowSprite('#bfe8ff', 0.14, 0.75); eg.position.set(sx * 0.052, 0.385, 0.13); basket.add(eg);
+      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 2.1, 2.6) })); iris.scale.set(1.2, 1, 0.6); iris.position.set(sx * 0.045, hy + 0.01, 0.168); basket.add(iris);
+      const eg = glowSprite('#bfe8ff', 0.16, 0.7); eg.position.set(sx * 0.045, hy + 0.01, 0.18); basket.add(eg);
     }
   }
   // une lueur rouge sous le drap : le cœur qui bat
-  const heart = glowSprite('#ff3040', 0.32, 0); heart.position.set(0, 0.68, 0.14); fork.add(heart);
-  // phare rond à l'avant du panier
+  const heart = glowSprite('#ff3040', 0.36, 0); heart.position.set(0, 0.72, 0.2); fork.add(heart);
+  // phare rond sous la caisse
   const lampM = mat('#fff6d8', { emissive: '#fff2c0', emissiveIntensity: 2 }); lampM.userData.glow = 2;
-  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 14).rotateX(Math.PI / 2), lampM); lamp.position.set(0, 0.55, 0.27); fork.add(lamp);
-  // cadre
-  const BB = [0, 0.27, -0.02], ST = [0, 0.66, -0.14], HT = [0, 0.66, 0.3];
-  tube(lean, BB, HT, 0.022, red); tube(lean, ST, HT, 0.02, red); tube(lean, BB, ST, 0.022, red);
-  for (const x of [-0.04, 0.04]) { tube(lean, [x, WR, ZR], [x * 0.5, BB[1], BB[2]], 0.012, red); tube(lean, [x, WR, ZR], [x * 0.5, ST[1] - 0.03, ST[2]], 0.012, red); }
-  tube(lean, ST, [0, 0.76, -0.17], 0.014, chrome);
-  const seat = rbox(0.1, 0.04, 0.22, black, 0.02); seat.position.set(0, 0.78, -0.2); lean.add(seat);
-  // pédalier
+  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 14).rotateX(Math.PI / 2), lampM); lamp.position.set(0, 0.42, 0.38); fork.add(lamp);
+  // cadre : tube supérieur et douille blancs, tube oblique et haubans rouges
+  const BB = [0, 0.27, -0.02], ST = [0, 0.64, -0.15], HT = [0, 0.64, 0.3], HL = [0, 0.46, 0.36];
+  tube(lean, ST, HT, 0.021, white); tube(lean, BB, HL, 0.024, red); tube(lean, BB, ST, 0.022, red);
+  for (const x of [-0.04, 0.04]) { tube(lean, [x, WR, ZR], [x * 0.5, BB[1], BB[2]], 0.012, white); tube(lean, [x, WR, ZR], [x * 0.5, ST[1] - 0.03, ST[2]], 0.012, red); }
+  tube(lean, ST, [0, 0.76, -0.18], 0.013, chrome);
+  { const seat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), brown); seat.scale.set(0.9, 0.38, 1.7); seat.position.set(0, 0.79, -0.2); lean.add(seat); }
+  // pédalier et chaîne
   const crank = new THREE.Group(); crank.position.set(0, BB[1], BB[2]); lean.add(crank);
-  crank.add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.012, 18).rotateZ(Math.PI / 2).translate(0.05, 0, 0), chrome));
+  crank.add(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.012, 22).rotateZ(Math.PI / 2).translate(0.05, 0, 0), chrome));
+  for (const y of [0.075, -0.075]) tube(lean, [0.05, BB[1] + y, BB[2]], [0.05, WR + y * 0.4, ZR], 0.005, black);
   const pedals = [];
   for (const sx of [-1, 1]) { const arm = new THREE.Group(); arm.rotation.x = sx > 0 ? 0 : Math.PI; crank.add(arm); tube(arm, [sx * 0.07, 0, 0], [sx * 0.07, -0.15, 0], 0.01, chrome); const p = rbox(0.08, 0.018, 0.05, black, 0.006); p.position.set(sx * 0.11, -0.15, 0); arm.add(p); pedals.push(p); }
-  // le pilote : un enfant en sweat rouge à capuche, jean, baskets
+  // le pilote : sweat rouge à capuche relevée, jean bleu, baskets blanches
   let kid = null;
   if (rider) {
     kid = new THREE.Group(); lean.add(kid);
-    const hood = mat('#c8202a', { roughness: 0.85 }), jean = mat('#3a5a8c', { roughness: 0.9 }), skin = mat('#f0c49c', { roughness: 0.7 }), hair = mat('#5a3a22', { roughness: 0.9 }), shoe = mat('#f2f2f2', { roughness: 0.6 });
-    const torso = rbox(0.24, 0.32, 0.16, hood, 0.06); torso.position.set(0, 1.0, -0.1); torso.rotation.x = 0.42; kid.add(torso);
-    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), skin); hd.position.set(0, 1.25, 0.03); kid.add(hd);
-    const hr = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hair); hr.position.copy(hd.position); hr.rotation.x = -0.35; kid.add(hr);
-    const hoodB = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 8, 16, Math.PI * 1.3), hood); hoodB.position.set(0, 1.2, -0.02); hoodB.rotation.set(-0.3, 0, Math.PI * 1.15); kid.add(hoodB);
+    const hood = mat('#d01c24', { roughness: 0.6 }), jean = mat('#4a6ea8', { roughness: 0.85 }), skin = mat('#f0c8a6', { roughness: 0.7 }), hair = mat('#4a2c1a', { roughness: 0.9 }), shoe = mat('#f4f4f4', { roughness: 0.5 });
+    const torso = rbox(0.3, 0.34, 0.21, hood, 0.09); torso.position.set(0, 1.0, -0.1); torso.rotation.x = 0.25; kid.add(torso);
+    const pocket = rbox(0.2, 0.08, 0.02, mat('#b8161e', { roughness: 0.6 }), 0.02); pocket.position.set(0, 0.9, -0.0); pocket.rotation.x = 0.25; kid.add(pocket);
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.095, 18, 14), skin); hd.position.set(0, 1.27, 0.035); kid.add(hd);
+    const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.098, 18, 10, -1.3, 2.6, 0.35, 0.6), hair); fringe.position.copy(hd.position); kid.add(fringe);
+    // capuche : une coque ouverte sur le visage
+    const hoodG = new THREE.SphereGeometry(0.135, 20, 16, Math.PI * 0.36, Math.PI * 1.28, 0, Math.PI * 0.8); hoodG.rotateY(Math.PI / 2);
+    const hoodM = new THREE.Mesh(hoodG, mat('#d01c24', { roughness: 0.6, side: THREE.DoubleSide })); hoodM.position.set(0, 1.28, -0.02); hoodM.rotation.x = -0.15; kid.add(hoodM);
+    const hem = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.02, 8, 24), hood); hem.scale.set(0.95, 1.1, 1); hem.position.set(0, 1.27, 0.085); kid.add(hem);   // bord de la capuche autour du visage
     for (const sx of [-1, 1]) {   // bras vers le guidon
-      tube(kid, [sx * 0.13, 1.1, -0.04], [sx * 0.24, 0.86, 0.28], 0.035, hood);
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin); hand.position.set(sx * 0.25, 0.86, 0.3); kid.add(hand);
+      tube(kid, [sx * 0.15, 1.1, -0.06], [sx * 0.2, 0.96, 0.12], 0.045, hood);
+      tube(kid, [sx * 0.2, 0.96, 0.12], [sx * 0.25, 0.88, 0.32], 0.04, hood);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 8), skin); hand.position.set(sx * 0.255, 0.875, 0.34); kid.add(hand);
     }
-    const hips = rbox(0.22, 0.12, 0.16, jean, 0.04); hips.position.set(0, 0.84, -0.2); kid.add(hips);
-    kid.userData.legs = [-1, 1].map(sx => { const thigh = tube(kid, [sx * 0.08, 0.84, -0.18], [sx * 0.1, 0.62, 0.02], 0.04, jean), shin = tube(kid, [sx * 0.1, 0.62, 0.02], [sx * 0.11, 0.3, -0.02], 0.035, jean); const sh = rbox(0.07, 0.05, 0.13, shoe, 0.02); kid.add(sh); return { thigh, shin, sh, sx }; });
+    const hips = rbox(0.24, 0.12, 0.18, jean, 0.05); hips.position.set(0, 0.85, -0.2); kid.add(hips);
+    kid.userData.legs = [-1, 1].map(sx => { const thigh = tube(kid, [sx * 0.08, 0.84, -0.18], [sx * 0.1, 0.62, 0.02], 0.045, jean), shin = tube(kid, [sx * 0.1, 0.62, 0.02], [sx * 0.11, 0.3, -0.02], 0.04, jean); const sh = rbox(0.08, 0.06, 0.15, shoe, 0.025); kid.add(sh); return { thigh, shin, sh, sx }; });
   }
   bike.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const tmpA = new THREE.Vector3(), tmpK = new THREE.Vector3(), tmpF = new THREE.Vector3();
@@ -115,7 +139,7 @@ export function makeBMX({ rider = true } = {}) {
       L.sh.parent.updateMatrixWorld(); const p = pedals[L.sx > 0 ? 1 : 0]; p.getWorldPosition(tmpA); kid.worldToLocal(tmpA);
       const hip = tmpK.set(L.sx * 0.08, 0.84, -0.18), knee = tmpF.copy(hip).lerp(tmpA, 0.5).add(new THREE.Vector3(0, 0.12, 0.12));
       const set = (m, a, b) => { m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(Y, b.clone().sub(a).normalize()); m.scale.y = a.distanceTo(b) / m.geometry.parameters.height; };
-      set(L.thigh, hip, knee); set(L.shin, knee, tmpA); L.sh.position.copy(tmpA).add(new THREE.Vector3(0, 0.02, 0.02));
+      set(L.thigh, hip, knee); set(L.shin, knee, tmpA); L.sh.position.copy(tmpA).add(new THREE.Vector3(0, 0.025, 0.025));
     }
   }
   anim({});
