@@ -1202,7 +1202,7 @@ function frame(now) {
   nearVan = nearProp === PARKED[0];
   if (upside.update({ dt, t, car: avatar.position, fwd: P.fwd, avatar, camera, sun, hemi, amb: ambL, skyU, fog: scene.fog, renderer, post, waterUniforms: planet.waterUniforms, audio, trails: trails.uniforms, ambience })) exitUpside(true);
   { const kd = c => keys.has(c);   // commandes brutes (le parcours de profil fait sa propre conduite)
-    const input = { x: (kd('KeyD') || kd('ArrowRight') ? 1 : 0) - (kd('KeyA') || kd('ArrowLeft') ? 1 : 0) + joy.x + gpad.x, jump: kd('Space') || kd('KeyW') || kd('ArrowUp') || gpad.jump, boost: kd('ShiftLeft') || kd('ShiftRight') || boostTouch || gpad.boost };
+    const input = { x: (kd('KeyD') || kd('ArrowRight') ? 1 : 0) - (kd('KeyA') || kd('ArrowLeft') ? 1 : 0) + joy.x + gpad.x, y: (kd('KeyW') || kd('ArrowUp') ? 1 : 0) - (kd('KeyS') || kd('ArrowDown') ? 1 : 0) + joy.y + gpad.y, jump: kd('Space') || kd('KeyW') || kd('ArrowUp') || gpad.jump, boost: kd('ShiftLeft') || kd('ShiftRight') || boostTouch || gpad.boost };
     const ectx = { dt, t, car: avatar.position, fwd: P.fwd, avatar, camera, sun, hemi, amb: ambL, skyU, fog: scene.fog, renderer, post, audio, ambience, P, wet: !!P.wet, carBody, input, zoom: camZoom };
     for (const e of eggs) if (e.update(ectx) && e === egg) exitEgg(true); }
   fauna.group.visible = !(upside.on && upside.k > 0.3);   // les animaux se cachent

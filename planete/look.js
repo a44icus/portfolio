@@ -88,10 +88,10 @@ const TiltShift = {
 };
 /** Étalonnage : couleurs plus franches, ombres poussées vers le violet, hautes lumières vers l'orangé. */
 const Grade = {
-  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.18 }, uUp: { value: 0 }, uTime: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.18 }, uUp: { value: 0 }, uTime: { value: 0 }, uMoon: { value: 0 } },
   vertexShader: TiltShift.vertexShader,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uSat; uniform float uUp; uniform float uTime; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uSat; uniform float uUp; uniform float uTime; uniform float uMoon; varying vec2 vUv;
     float grainH(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
@@ -113,6 +113,14 @@ const Grade = {
         g *= 1.0 + n * 0.22 * (1.0 - smoothstep(0.6, 1.6, lu));
         vec2 q = vUv - 0.5; g *= 1.0 - 0.55 * dot(q, q);
         c.rgb = mix(c.rgb, g, uUp);
+      }
+      if (uMoon > 0.001) {
+        // nuit de pleine lune (E.T.) : tout bascule dans un bleu froid et brumeux ; les lumières vives gardent un peu de leur couleur
+        float lu = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+        vec3 blue = lu * vec3(0.55, 0.8, 1.42) + vec3(0.006, 0.012, 0.03);
+        vec3 m = mix(blue, c.rgb, 0.18 + 0.45 * smoothstep(0.9, 2.5, lu));
+        vec2 q = vUv - 0.5; m *= 1.0 - 0.45 * dot(q, q);
+        c.rgb = mix(c.rgb, m, uMoon);
       }
       gl_FragColor = vec4(max(c.rgb, 0.0), c.a);
     }`,

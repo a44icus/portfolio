@@ -55,13 +55,19 @@ export function makeBMX({ rider = true } = {}) {
     for (const sx of [-1, 1]) { const s = rbox(T, H, D, wick, 0.006); s.position.x = sx * W / 2; basket.add(s); }
     for (const sz of [-1, 1]) { const s = rbox(W, H, T, wick, 0.006); s.position.z = sz * D / 2; basket.add(s); }
     for (let i = 0; i < 3; i++) { const band = rbox(W + 0.01, 0.012, D + 0.01, mat('#7a5530', { roughness: 1 }), 0.004); band.position.y = -H / 2 + 0.05 + i * 0.06; basket.add(band); }
-    // le drap : un dôme bosselé qui déborde sur les côtés
-    const pts = []; for (let i = 0; i <= 12; i++) { const k = i / 12; pts.push(new THREE.Vector2(Math.sin(k * Math.PI * 0.62) * 0.2 + 0.02 * (k > 0.8 ? (k - 0.8) * 5 : 0), 0.24 * Math.cos(k * Math.PI * 0.5) - 0.09 * k * k)); }
-    const sheetG = new THREE.LatheGeometry(pts.reverse(), 20); sheetG.scale(1, 1, 0.8);
-    const sp = sheetG.attributes.position; for (let i = 0; i < sp.count; i++) { const x = sp.getX(i), z = sp.getZ(i), y = sp.getY(i); sp.setY(i, y + 0.012 * Math.sin(x * 40) * Math.cos(z * 37)); }
+    // le drap : une silhouette assise dessous — un corps qui s'évase en plis, un cou fin, une grosse tête large
+    const pts = [[0.2, -0.03], [0.19, 0.03], [0.16, 0.1], [0.13, 0.17], [0.1, 0.22], [0.075, 0.26]].map(([r, y]) => new THREE.Vector2(r, y));
+    for (let i = 0; i <= 10; i++) { const a = -0.95 + i / 10 * (Math.PI / 2 + 0.95); pts.push(new THREE.Vector2(Math.max(0.001, 0.13 * Math.cos(a)), 0.37 + 0.12 * Math.sin(a))); }
+    const sheetG = new THREE.LatheGeometry(pts, 28); sheetG.scale(1.18, 1, 0.92);
+    const sp = sheetG.attributes.position; for (let i = 0; i < sp.count; i++) { const x = sp.getX(i), z = sp.getZ(i), y = sp.getY(i), a = Math.atan2(z, x), fold = Math.max(0, 0.2 - y) / 0.2; sp.setX(i, x * (1 + 0.07 * fold * Math.sin(a * 7))); sp.setZ(i, z * (1 + 0.07 * fold * Math.sin(a * 7))); }
     sheetG.computeVertexNormals();
-    const sheet = new THREE.Mesh(sheetG, mat('#f4f1ea', { roughness: 0.95, side: THREE.DoubleSide })); sheet.position.y = 0.05; basket.add(sheet);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 10), sheet.material); head.scale.set(1.25, 0.9, 1); head.position.set(0, 0.27, 0.03); basket.add(head);
+    const sheet = new THREE.Mesh(sheetG, mat('#f4f1ea', { roughness: 0.95, side: THREE.DoubleSide })); sheet.position.y = 0.0; basket.add(sheet);
+    // deux grands yeux qui brillent à travers le drap
+    for (const sx of [-1, 1]) {
+      const hole = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), mat('#0c1220', { roughness: 0.4 })); hole.scale.set(1.25, 0.95, 0.35); hole.position.set(sx * 0.052, 0.385, 0.11); hole.rotation.y = sx * 0.35; basket.add(hole);
+      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 2.2, 2.6) })); iris.position.set(sx * 0.052, 0.385, 0.12); basket.add(iris);
+      const eg = glowSprite('#bfe8ff', 0.14, 0.75); eg.position.set(sx * 0.052, 0.385, 0.13); basket.add(eg);
+    }
   }
   // une lueur rouge sous le drap : le cœur qui bat
   const heart = glowSprite('#ff3040', 0.32, 0); heart.position.set(0, 0.68, 0.14); fork.add(heart);
