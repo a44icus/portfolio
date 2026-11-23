@@ -16,6 +16,7 @@ import { makeAmbience } from './ambience.js';
 import { makeFauna } from './fauna.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
+import { makeToast } from './eggkit.js';
 import { SAND, GRASS, TREE, BUSH, LUPIN, WIND, TILT } from './world.js';
 
 const $ = s => document.querySelector(s);
@@ -186,9 +187,20 @@ function updateLabels() {
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let downAt = null;
 canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerleave', () => tipOn(false));
+// bulle qui suit la souris au-dessus d'un objet cliquable
+const hoverTip = document.createElement('div');
+hoverTip.style.cssText = 'position:fixed;left:0;top:0;z-index:24;pointer-events:none;padding:.35rem .6rem;border-radius:999px;background:rgba(20,20,40,.82);color:#fff;font:700 12px/1 Manrope, Arial, sans-serif;white-space:nowrap;opacity:0;transition:opacity .15s';
+document.body.appendChild(hoverTip);
+const tipOn = on => { hoverTip.style.opacity = on ? '1' : '0'; };
 canvas.addEventListener('pointermove', e => {
   if (PL.follow && downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) stopFollow();
-  if (!e.buttons && e.pointerType === 'mouse') canvas.style.cursor = (mode === 'orbit' && !PL.follow && overPlane(e)) || (mode === 'walk' && !upside.on && !egg && signpostAt(ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1))) ? 'pointer' : '';   // la main signale ce qu'on peut cliquer (l'avion, les panneaux)   // la main signale qu'on peut cliquer l'avion
+  if (!e.buttons && e.pointerType === 'mouse') {   // la main signale ce qu'on peut cliquer (l'avion, les panneaux, les objets des zones)
+    const walk = mode === 'walk' && !upside.on && !egg; ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    const it = walk ? interactiveAt(ndc) : null;
+    canvas.style.cursor = (mode === 'orbit' && !PL.follow && overPlane(e)) || it || (walk && signpostAt(ndc)) ? 'pointer' : '';
+    if (it) { hoverTip.textContent = it.prompt; hoverTip.style.transform = `translate(${e.clientX + 16}px, ${e.clientY + 14}px)`; tipOn(true); } else tipOn(false);
+  }
 });
 /** La molette sert à faire défiler un panneau (fiche de zone, réglages) : elle ne touche alors pas à la caméra. */
 const wheelOnUI = e => !!(e.target && e.target.closest && e.target.closest('aside, .lil-gui'));
@@ -208,6 +220,7 @@ canvas.addEventListener('pointerup', e => {
   // en balade : clic sur un panneau fléché → la caméra se met en face ; nouveau clic → retour derrière la voiture
   if (mode === 'walk' && !upside.on && !egg) {
     if (signView) { exitSign(); return; }
+    const it = interactiveAt(ndc); if (it) { audio.start(); it.go(); tipOn(false); canvas.style.cursor = ''; return; }
     const sp = signpostAt(ndc); if (sp) { signView = { post: sp, side: 0 }; return; }
   }
   if (!upside.on && !egg && upside.hitVan(ndc, camera)) { enterUpside(); return; }
@@ -251,11 +264,23 @@ function openIsland(id) {
   pTitle.textContent = s.title;
   pBody.innerHTML = RENDER[id](DATA);
   pBody.scrollTop = 0;
-  panel.classList.add('on'); panel.setAttribute('aria-hidden', 'false');
+  panel.classList.add('on'); panel.setAttribute('aria-hidden', 'false'); panelOpenedAt = performance.now();
   $('#pClose').focus({ preventScroll: true });
   wireGallery();
 }
 function closePanel() { panel.classList.remove('on'); panel.setAttribute('aria-hidden', 'true'); openId = null; }
+let panelOpenedAt = 0;
+// fermer la fiche : la croix, Échap, un clic à l'extérieur (pas un glisser, ni le clic qui vient de l'ouvrir), ou la voiture qui repart
+{
+  let downPt = null;
+  addEventListener('pointerdown', e => { downPt = [e.clientX, e.clientY]; }, { capture: true, passive: true });
+  addEventListener('click', e => {
+    if (!panel.classList.contains('on') || panel.contains(e.target) || e.target.closest('#lb')) return;
+    if (performance.now() - panelOpenedAt < 400) return;
+    if (downPt && Math.hypot(e.clientX - downPt[0], e.clientY - downPt[1]) > 6) return;
+    closePanel();
+  });
+}
 $('#pClose').addEventListener('click', closePanel);
 addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('#lb').classList.contains('on')) $('#lb').classList.remove('on'); else closePanel(); } });
 
@@ -343,7 +368,24 @@ const eggs = [et, mario];
 scene.children.slice(-40).forEach(o => { if (o !== avatar && o !== upside.van && o !== upside.fence) stylizeTree(o); });
 let egg = null, eggHour = 12, nearProp = null;
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
-const zonesReady = buildZones(planet, SECTIONS).then(z => { zones = z; z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
+/* ---------- objets interactifs des zones : messages, son, photo souvenir ---------- */
+const zoneToast = makeToast('top:38%; color:#fff; font-size:clamp(1.1rem, 3.6vw, 2rem); white-space:normal; width:min(86vw, 620px); line-height:1.15; -webkit-text-stroke:1.5px #1a1a40; text-shadow:0 3px 0 #1a1a40;');
+let wantShot = false;
+function showPhoto(url) {
+  const fl = document.createElement('div'); fl.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:45;pointer-events:none;opacity:1;transition:opacity .7s ease';
+  document.body.appendChild(fl); requestAnimationFrame(() => requestAnimationFrame(() => { fl.style.opacity = '0'; })); setTimeout(() => fl.remove(), 900);
+  document.querySelectorAll('.polaroid').forEach(e => e.remove());
+  const d = new Date(), a = document.createElement('a');
+  a.className = 'polaroid'; a.href = url; a.download = 'planete-' + d.toISOString().slice(0, 10) + '.jpg'; a.title = 'Télécharger la photo';
+  a.style.cssText = 'position:fixed;left:max(14px, env(safe-area-inset-left));bottom:calc(max(14px, env(safe-area-inset-bottom)) + 70px);z-index:30;background:#fffdf8;padding:8px 8px 30px;box-shadow:0 10px 30px rgba(0,0,0,.35);transform:translateY(40px) rotate(-12deg) scale(.6);opacity:0;transition:transform .6s cubic-bezier(.2,1.4,.4,1),opacity .4s;color:#2b2b40;text-decoration:none;font:700 12px/1 Manrope, Arial, sans-serif;text-align:center';
+  a.innerHTML = '<img alt="" style="display:block;width:min(42vw,220px);aspect-ratio:4/3;object-fit:cover;filter:saturate(1.1) contrast(1.05)"><span style="position:absolute;left:0;right:0;bottom:10px">Souvenir de la planète · ' + d.toLocaleDateString('fr-FR') + ' ⤓</span>';
+  a.querySelector('img').src = url; document.body.appendChild(a);
+  requestAnimationFrame(() => requestAnimationFrame(() => { a.style.opacity = '1'; a.style.transform = 'rotate(-4deg)'; }));
+  setTimeout(() => { a.style.opacity = '0'; a.style.transform = 'translateY(30px) rotate(-8deg) scale(.8)'; setTimeout(() => a.remove(), 700); }, 8000);
+  audio.started && audio.impact(1.2, 0, 'bois');
+}
+const zonesReady = buildZones(planet, SECTIONS).then(z => { zones = z;
+  Object.assign(z.hooks, { toast: (t, ms) => zoneToast(t, ms), sfx: k => { if (audio.started) audio.sfx(k); }, open: id => openIsland(id), data: () => DATA, img: (u, o) => IMG(u, o), photo: () => { wantShot = true; } }); z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
@@ -524,7 +566,9 @@ $('#quitBtn')?.addEventListener('click', e => { e.stopPropagation(); quitEgg(); 
 addEventListener('keydown', e => { if (e.key === 'Escape' && (upside.on || egg)) quitEgg(); });
 promptEl.addEventListener('click', () => { if (nearProp) nearProp.go(); else if (near) openIsland(near.id); });
 
+const DRIVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 addEventListener('keydown', e => {
+  if (mode === 'walk' && panel.classList.contains('on') && DRIVE_KEYS.includes(e.code)) closePanel();   // la voiture repart : la fiche se ferme
   if (mode !== 'walk' || panel.classList.contains('on')) return;
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyE' && nearProp) { nearProp.go(); return; }
@@ -539,7 +583,7 @@ addEventListener('blur', () => keys.clear());
 {
   const pad = $('#pad'), knob = pad.querySelector('i'); let id = null;
   const move = e => { const r = pad.getBoundingClientRect(); let x = (e.clientX - r.left) / r.width * 2 - 1, y = (e.clientY - r.top) / r.height * 2 - 1; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } joy.x = x; joy.y = -y; knob.style.transform = 'translate(' + x * 34 + 'px,' + y * 34 + 'px)'; };
-  pad.addEventListener('pointerdown', e => { padUsed = true; document.body.classList.remove('pad-hint'); id = e.pointerId; try { pad.setPointerCapture(id); } catch (er) { /* rien */ } move(e); });
+  pad.addEventListener('pointerdown', e => { padUsed = true; if (panel.classList.contains('on')) closePanel(); document.body.classList.remove('pad-hint'); id = e.pointerId; try { pad.setPointerCapture(id); } catch (er) { /* rien */ } move(e); });
   pad.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
   const end = () => { id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
@@ -918,7 +962,7 @@ function pollGamepad(dt) {
   const dpx = (b(15) ? 1 : 0) - (b(14) ? 1 : 0), dpy = (b(12) ? 1 : 0) - (b(13) ? 1 : 0);
   const intro = $('#intro');
   if (intro && !intro.classList.contains('out')) { if (press(0) || press(9)) introBtn.click(); }
-  else if (panel.classList.contains('on')) { if (press(1) || press(0)) closePanel(); gpad.x = gpad.y = 0; }
+  else if (panel.classList.contains('on')) { if (press(1) || press(0) || (mode === 'walk' && Math.hypot(lx, ly) > 0.4)) closePanel(); gpad.x = gpad.y = 0; }
   else if (mode === 'walk') {
     gpad.x = Math.max(-1, Math.min(1, lx + dpx));
     gpad.y = Math.max(-1, Math.min(1, -ly + dpy + bv(7) - bv(6)));   // stick, croix, ou gâchettes RT / LT
@@ -1167,6 +1211,21 @@ function drawEggPin(c, q, x, y, s) {
 let signView = null;
 const signRay = new THREE.Raycaster(), sgU = new THREE.Vector3(), sgZ = new THREE.Vector3(), sgP = new THREE.Vector3(), sgL = new THREE.Vector3();
 function signposts() { return zones ? zones.bodies.list.filter(b => b.mesh.userData.signpost).map(b => b.mesh) : []; }
+/** Objet de zone sous la souris (prêt à servir, pas trop loin de la voiture). */
+const itBox = new THREE.Box3(), itHit = new THREE.Vector3();
+function interactiveAt(ndcV) {
+  if (!zones) return null;
+  signRay.setFromCamera(ndcV, camera);
+  let best = null, bd = 1e9;
+  for (const it of zones.interactives) {
+    if ((it.ready && !it.ready()) || it.body.mesh.position.distanceTo(avatar.position) > 16) continue;
+    for (const m of [it.body.mesh, ...(it.extra || [])]) {   // boîte englobante un peu élargie : les objets fins (chevalet, poteau) restent faciles à viser
+      if (!signRay.ray.intersectBox(itBox.setFromObject(m).expandByScalar(0.08), itHit)) continue;
+      const d = itHit.distanceTo(signRay.ray.origin); if (d < bd) { bd = d; best = it; }
+    }
+  }
+  return best;
+}
 function signpostAt(ndcV) { const list = signposts(); if (!list.length) return null; signRay.setFromCamera(ndcV, camera); const h = signRay.intersectObjects(list, true)[0]; if (!h) return null; let o = h.object; while (o && !o.userData.signpost) o = o.parent; return o; }
 /** Quitte la vue du panneau : la caméra repart en douceur depuis là où elle est vers sa place derrière la voiture. */
 function exitSign() { if (!signView) return; signBlend = { pos: camera.position.clone(), quat: camera.quaternion.clone(), t: 0 }; signView = null; }
@@ -1281,7 +1340,16 @@ function frame(now) {
       P.dir.copy(v.localToWorld(loc)).normalize(); P.speed *= 0.3;
     }
   }
-  if (wasNear && !nearProp && !near) promptEl.classList.remove('on');
+  // objets des zones : la boule, la fusée, l'appareil photo… tout près, une invite propose de s'en servir
+  if (mode === 'walk' && !upside.on && !egg && !nearProp && zones) {
+    let bd = 1e9;
+    for (const it of zones.interactives) {
+      const dd = it.body.mesh.position.distanceTo(avatar.position);
+      if (dd < it.r && dd < bd && (!it.ready || it.ready())) { bd = dd; nearProp = it; }
+    }
+    if (nearProp) { promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + nearProp.prompt; }
+  }
+  if (wasNear && !nearProp) { if (near) promptEl.textContent = (touch ? 'Ouvrir · ' : 'E · Ouvrir ') + near.label; else promptEl.classList.remove('on'); }
   nearVan = nearProp === PARKED[0];
   if (upside.update({ dt, t, car: avatar.position, fwd: P.fwd, avatar, camera, sun, hemi, amb: ambL, skyU, fog: scene.fog, renderer, post, waterUniforms: planet.waterUniforms, audio, trails: trails.uniforms, ambience })) exitUpside(true);
   { const kd = c => keys.has(c);   // commandes brutes (le parcours de profil fait sa propre conduite)
@@ -1313,6 +1381,7 @@ function frame(now) {
   updateLabels();
   planet.cullDecor(camera.position, mode === 'walk' ? 30 : 0);   // herbe et lupins : seulement les tuiles en vue
   post.render();
+  if (wantShot) { wantShot = false; try { showPhoto(renderer.domElement.toDataURL('image/jpeg', 0.88)); } catch (e) { console.warn('photo impossible', e); } }   // juste après le rendu : l'image est encore là
   requestAnimationFrame(frame);
 }
 setHint();

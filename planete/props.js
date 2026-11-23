@@ -315,7 +315,7 @@ class Bodies {
    */
   add(mesh, dir, yaw, opts) {
     const b = { mesh, dir: dir.clone().normalize(), vel: new THREE.Vector3(), local: new THREE.Quaternion().setFromAxisAngle(Y, yaw), fall: null, down: false,
-      r: opts.r, lie: opts.lie || 0, topple: opts.topple !== false, fixed: !!opts.fixed, hop: 0, vh: 0, awake: false, moved: false, lastHit: 0, ret: null, retOff: 0 };
+      r: opts.r, lie: opts.lie || 0, topple: opts.topple !== false, fixed: !!opts.fixed, tip: opts.tip ?? 1.6, drag: opts.drag ?? 2.2, heavy: !!opts.heavy, hop: 0, vh: 0, awake: false, moved: false, lastHit: 0, ret: null, retOff: 0 };
     b.home = { dir: b.dir.clone(), local: b.local.clone() };
     this.list.push(b); this.place(b); return b;
   }
@@ -337,7 +337,7 @@ class Bodies {
     b.vel.add(push); b.awake = true; b.moved = true; b.lastHit = this.time;
     if (this.onHit) this.onHit(b, strength, false);
     if (b.ret) { b.ret = null; b.retOff = 0; }
-    if (b.topple && !b.down && !b.fall && strength > 1.6) {
+    if (b.topple && !b.down && !b.fall && strength > b.tip) {
       // axe de bascule dans le repère local de la zone de l'objet
       const n = this._v.copy(push).normalize();
       const axisW = this._a.crossVectors(b.dir, n).normalize();
@@ -372,7 +372,7 @@ class Bodies {
         if (dist > min || dist < 1e-4) continue;
         d.addScaledVector(b.dir, -d.dot(b.dir)).normalize();
         const rel = a.vel.dot(d) - b.vel.dot(d);
-        if (rel > 0.05) { const imp = rel * 0.6; this.hit(b, tmp.copy(d).multiplyScalar(imp), rel); a.vel.addScaledVector(d, -imp * 0.5); }
+        if (rel > 0.05) { const imp = rel * 0.6; this.hit(b, tmp.copy(d).multiplyScalar(imp), rel); if (!a.heavy) a.vel.addScaledVector(d, -imp * 0.5); }
         b.dir.addScaledVector(d, (min - dist) * 0.5 / SEA_R).normalize();
       }
     }
@@ -387,7 +387,7 @@ class Bodies {
         if (P.heightDir(next) - P.heightDir(b.dir) > 0.35) b.vel.multiplyScalar(-0.3);   // ne grimpe pas les falaises
         else b.dir.copy(next);
       }
-      b.vel.multiplyScalar(Math.exp(-dt * (b.down ? 4 : 2.2)));
+      b.vel.multiplyScalar(Math.exp(-dt * (b.down ? 4 : b.drag)));
       if (b.fall) { b.fall.t += dt * 2.6; if (b.fall.t >= 1) { b.local.premultiply(new THREE.Quaternion().setFromAxisAngle(b.fall.axis, Math.PI / 2)); b.fall = null; b.down = true; if (this.onHit) this.onHit(b, 2.5 + b.r * 4, true); } }
       if (b.hop > 0 || b.vh > 0) { b.vh -= 18 * dt; b.hop = Math.max(0, b.hop + b.vh * dt); if (b.hop === 0 && b.vh < 0) b.vh = b.vh < -2 ? -b.vh * 0.3 : 0; }
       this.place(b);
@@ -492,60 +492,297 @@ export async function buildZones(planet, sections) {
   }
   const yawToPoint = (dir, target) => yawToward(dir, target);
 
+  /* ---------- objets interactifs : effets, crochets fournis par le jeu ---------- */
+  const H = { toast() {}, sfx() {}, open() {}, data: () => ({}), img: u => u, photo() {} };   // remplis par app.js
+  const interactives = [];
+  const interact = it => { interactives.push(it); return it; };
+  const keepPart = m => { m.userData.part = true; return m; };   // pièce animée : jamais fusionnée
+  const fxGeo = new THREE.IcosahedronGeometry(1, 1), fx = [], fxV = new THREE.Vector3();
+  /** Petite bouffée (fumée, peinture, poussière) : position et vitesse monde. */
+  function puff(pos, vel, color, size, life, grow = 1.5, grav = 0) {
+    let f = fx.find(q => !q.mesh.visible);
+    if (!f) { if (fx.length > 120) return; f = { mesh: new THREE.Mesh(fxGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })), vel: new THREE.Vector3() }; group.add(f.mesh); fx.push(f); }
+    f.mesh.visible = true; f.mesh.position.copy(pos); f.vel.copy(vel); f.mesh.material.color.set(color);
+    Object.assign(f, { size, life, t: 0, grow, grav }); f.mesh.scale.setScalar(size);
+  }
+  function stepFx(dt) {
+    for (const f of fx) {
+      if (!f.mesh.visible) continue;
+      f.t += dt; const k = f.t / f.life;
+      if (k >= 1) { f.mesh.visible = false; continue; }
+      if (f.grav) f.vel.addScaledVector(fxV.copy(f.mesh.position).normalize(), -f.grav * dt);
+      f.vel.multiplyScalar(Math.exp(-dt * 1.2));
+      f.mesh.position.addScaledVector(f.vel, dt);
+      f.mesh.scale.setScalar(f.size * (1 + f.grow * k));
+      f.mesh.material.opacity = (1 - k) * (1 - k) * 0.9;
+    }
+  }
+  const randDir = (up, spread) => new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(spread).addScaledVector(up, 1);
+  const idle = b => !b.down && !b.fall && !b.ret && !b.awake;
+  const wv = new THREE.Vector3();
+
   /* ---------- un objet propre à chaque zone ---------- */
   const lathe = (pts, m) => new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 16), m);
   const THEMES = {
-    profil({ add }) {   // une partie de quilles
+    profil({ add }) {   // une partie de quilles : on lance la boule
       const white = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: 0.4 }), red = new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.4 });
-      const rows = [[0], [-0.5, 0.5], [-1, 0, 1], [-1.5, -0.5, 0.5, 1.5]];
+      const rows = [[0], [-0.5, 0.5], [-1, 0, 1], [-1.5, -0.5, 0.5, 1.5]], pins = [];
       rows.forEach((row, r) => row.forEach(c => {
         const pin = new THREE.Group();
         pin.add(lathe([[0, 0], [0.05, 0.01], [0.07, 0.1], [0.05, 0.2], [0.03, 0.26], [0.045, 0.32], [0.035, 0.37], [0, 0.38]], white));
         const band = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 12), red); band.position.y = 0.255; pin.add(band);
-        add(pin, -2.1 + c * 0.2, -0.7 - r * 0.18, { r: 0.07, lie: 0.06 });
+        pins.push(add(pin, -2.1 + c * 0.2, -0.7 - r * 0.18, { r: 0.07, lie: 0.06, tip: 0.45 }));
       }));
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14).translate(0, 0.13, 0), new THREE.MeshStandardMaterial({ color: '#3d5afe', roughness: 0.25 }));
-      add(ball, -2.1, 0.6, { r: 0.13, topple: false });
+      const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14).translate(0, 0.13, 0), new THREE.MeshStandardMaterial({ color: '#3d5afe', roughness: 0.25 }));
+      const ball = add(ballMesh, -2.1, 0.6, { r: 0.13, topple: false, heavy: true, drag: 0.9 });
+      const all = [ball, ...pins], messy = () => all.some(b => b.moved);
+      const regroup = () => all.forEach(b => { if (b.moved && !b.ret) b.lastHit = bodies.time - 31; });   // le retour automatique, tout de suite
+      let game = null;
+      interact({
+        body: ball, r: 1.7, extra: pins.map(p => p.mesh),
+        get prompt() { return messy() ? 'Replacer les quilles' : 'Lancer la boule'; },
+        ready: () => !game && !all.some(b => b.ret),
+        go() {
+          if (messy()) { regroup(); H.sfx('pipe'); return; }
+          const c = new THREE.Vector3(); pins.forEach(p => c.add(p.mesh.position)); c.divideScalar(pins.length);
+          const d = c.sub(ball.mesh.position); d.addScaledVector(ball.dir, -d.dot(ball.dir)).normalize().applyAxisAngle(ball.dir, (Math.random() - 0.5) * 0.16);
+          ball.vel.copy(d).multiplyScalar(4.2); ball.awake = ball.moved = true; ball.lastHit = bodies.time;
+          H.sfx('spin'); game = { t: 0, scored: false };
+        },
+        update(dt) {
+          if (!game) return;
+          game.t += dt;
+          if (game.t > 3 && !game.scored) {
+            game.scored = true; const n = pins.filter(p => p.down || p.fall).length;
+            H.toast(n === 10 ? 'Strike !' : n ? n + ' quille' + (n > 1 ? 's' : '') + ' sur 10' : 'Raté… droit dans la rigole', 1800); H.sfx(n === 10 ? 'star' : n ? 'coin' : 'bump');
+          }
+          if (game.t > 5.5) { regroup(); game = null; }
+        },
+      });
     },
-    photos({ add, color }) {   // un appareil photo sur trépied
+    photos({ add, color }) {   // un appareil photo sur trépied : il prend la photo de la scène
       const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: '#2b2b40', roughness: 0.5 });
       for (let k = 0; k < 3; k++) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.7, 6).translate(0, 0.35, 0), dark); leg.rotation.set(0.28 * Math.cos(k * 2.1), 0, 0.28 * Math.sin(k * 2.1)); g.add(leg); }
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.14), new THREE.MeshStandardMaterial({ color, roughness: 0.4 })); body.position.y = 0.78; g.add(body);
       const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 16).rotateX(Math.PI / 2), dark); lens.position.set(0, 0.78, 0.12); g.add(lens);
-      add(g, 2.4, -1.3, { r: 0.2, lie: 0.08 });
+      const flashM = new THREE.MeshStandardMaterial({ color: '#f4f4f4', emissive: '#ffffff', emissiveIntensity: 0, roughness: 0.2 });
+      const flash = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.05), flashM)); flash.position.set(-0.08, 0.905, 0.02); g.add(flash);
+      const btn = keepPart(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.025, 10), new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.4 }))); btn.position.set(0.09, 0.89, 0); g.add(btn);
+      const cam = add(g, 2.4, -1.3, { r: 0.2, lie: 0.08 });
+      let shot = -1;
+      interact({
+        body: cam, r: 1.7, prompt: 'Prendre une photo', ready: () => idle(cam) && shot < 0,
+        go() { shot = 0; H.sfx('jump'); },
+        update(dt) {
+          if (shot < 0) return;
+          shot += dt;
+          btn.position.y = 0.89 - (shot < 0.25 ? 0.012 : 0);
+          if (shot > 0.25 && shot - dt <= 0.25) { H.photo(); }
+          flashM.emissiveIntensity = shot > 0.25 ? Math.max(0, 14 * (1 - (shot - 0.25) / 0.35)) : 0;
+          if (shot > 1.2) { shot = -1; flashM.emissiveIntensity = 0; }
+        },
+      });
     },
-    contact({ add, color }) {   // une boîte aux lettres
+    contact({ add, color }) {   // une boîte aux lettres : on poste une lettre
       const g = new THREE.Group();
       g.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.6, 0.06).translate(0, 0.3, 0), woodD));
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.36), new THREE.MeshStandardMaterial({ color, roughness: 0.4 })); box.position.y = 0.7; g.add(box);
       const top = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.36, 16, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2), box.material); top.position.y = 0.8; g.add(top);
-      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.08), new THREE.MeshStandardMaterial({ color: '#ff5a3c' })); flag.position.set(0.15, 0.86, -0.08); g.add(flag);
-      add(g, 2.3, -1.2, { r: 0.2, lie: 0.1 });
+      const slot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.012, 0.03), new THREE.MeshStandardMaterial({ color: '#1d1d26' })); slot.position.set(0, 0.93, 0.05); g.add(slot);
+      const flagPivot = new THREE.Group(); flagPivot.position.set(0.15, 0.74, -0.1); g.add(flagPivot);
+      const flag = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.2, 0.03).translate(0, 0.1, 0), new THREE.MeshStandardMaterial({ color: '#ff5a3c' })));
+      const flagTip = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.07, 0.09).translate(0, 0.165, 0.045), flag.material));
+      flagPivot.add(flag, flagTip); flagPivot.rotation.x = Math.PI / 2;   // drapeau baissé
+      const envTex = canvasTex((c, W, H2) => {
+        c.fillStyle = '#fffaf0'; c.fillRect(0, 0, W, H2); c.strokeStyle = '#d8cdb8'; c.lineWidth = 6; c.beginPath(); c.moveTo(0, 0); c.lineTo(W / 2, H2 * 0.55); c.lineTo(W, 0); c.stroke();
+        c.fillStyle = '#ff5a3c'; c.fillRect(W - 46, 12, 32, 38); c.fillStyle = '#ffb703'; c.beginPath(); c.arc(W / 2, H2 * 0.55, 13, 0, 7); c.fill();
+      }, 192, 128);
+      const letter = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.13, 0.006), new THREE.MeshStandardMaterial({ map: envTex, roughness: 0.8 })));
+      letter.visible = false; g.add(letter);
+      const mb = add(g, 2.3, -1.2, { r: 0.2, lie: 0.1 });
+      let post = -1;
+      interact({
+        body: mb, r: 1.7, prompt: 'Poster une lettre', ready: () => idle(mb) && post < 0,
+        go() { post = 0; H.sfx('power'); },
+        update(dt) {
+          if (post < 0) return;
+          post += dt; const t = post;
+          flagPivot.rotation.x = Math.PI / 2 * (t < 0.4 ? 1 - t / 0.4 : t > 4.5 ? Math.min(1, (t - 4.5) / 0.5) : 0);
+          letter.visible = t > 0.3 && t < 2.6;
+          if (t <= 0.9) { const k = Math.max(0, (t - 0.3) / 0.6); letter.position.set(0, 0.9 + 0.22 * k, 0.05); letter.rotation.set(-Math.PI / 2 + k * Math.PI / 2, 0, 0); letter.scale.setScalar(1); }
+          else if (t < 2.6) { const k = (t - 0.9) / 1.7; letter.position.set(Math.sin(k * 9) * 0.25 * k, 1.12 + k * k * 4.5, 0.05 + k * 1.2); letter.rotation.set(Math.sin(k * 7) * 0.5, k * 8, Math.sin(k * 5) * 0.4); letter.scale.setScalar(1 - k * 0.6); }
+          if (t > 1.6 && t - dt <= 1.6) { H.toast('Lettre envoyée — à vous d’écrire !', 1600); H.open('contact'); }
+          if (t > 5) post = -1;
+        },
+      });
     },
-    parcours({ add }) {   // un poteau à flèches
-      const g = new THREE.Group();
+    parcours({ add }) {   // un poteau à flèches qui tourne : chaque tour montre une étape du parcours
+      const g = new THREE.Group(), boards = [];
       g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.4, 8).translate(0, 0.7, 0), woodD));
-      [['Hier', -1, 1.25, 0.4], ['Aujourd’hui', 1, 1.0, -0.3], ['Demain', 1, 0.75, 0.9]].forEach(([t, ar, y, rot]) => { const b = signBoard(t, 0.8, 0.18, ar); b.position.y = y; b.rotation.y = rot; g.add(b); });
-      add(g, 2.4, -1.3, { r: 0.25, lie: 0.06 });
+      [['Hier', -1, 1.25, 0.4], ['Aujourd’hui', 1, 1.0, -0.3], ['Demain', 1, 0.75, 0.9]].forEach(([t, ar, y, rot]) => { const b = signBoard(t, 0.8, 0.18, ar); b.position.y = y; b.rotation.y = rot; b.userData.rot = rot; g.add(b); boards.push(b); });
+      const post = add(g, 2.4, -1.3, { r: 0.25, lie: 0.06 });
+      let spin = -1, step = 0;
+      interact({
+        body: post, r: 1.7, prompt: 'Faire tourner le poteau', ready: () => idle(post) && spin < 0,
+        go() { spin = 0; H.sfx('spin'); },
+        update(dt) {
+          if (spin < 0) return;
+          spin += dt; const k = Math.min(1, spin / 1.6), e = 1 - Math.pow(1 - k, 3);
+          boards.forEach((b, i) => { b.rotation.y = b.userData.rot + e * Math.PI * 2 * [3, -2, 2][i]; });
+          if (k >= 1) {
+            spin = -1; boards.forEach(b => { b.rotation.y = b.userData.rot; });
+            const list = H.data().parcours || [];
+            if (list.length) { const r = list[step++ % list.length]; H.toast((r.period ? r.period + ' · ' : '') + r.title, 2600); }
+            else H.toast('Quinze ans de route… et ça continue', 2000);
+            H.sfx('coin');
+          }
+        },
+      });
     },
-    perso({ add, color }) {   // une petite fusée
+    perso({ add, color }) {   // une petite fusée : compte à rebours, décollage, retour en parachute
       const g = new THREE.Group(), white = new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.4 }), acc = new THREE.MeshStandardMaterial({ color, roughness: 0.4 });
       g.add(lathe([[0, 0.12], [0.13, 0.14], [0.15, 0.4], [0.13, 0.62], [0.08, 0.78], [0, 0.88]], white));
       const win = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshStandardMaterial({ color: '#9fd8ff', roughness: 0.1 })); win.position.set(0, 0.5, 0.14); g.add(win);
       for (let k = 0; k < 3; k++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.14), acc); const a = k / 3 * Math.PI * 2; fin.position.set(Math.sin(a) * 0.15, 0.2, Math.cos(a) * 0.15); fin.rotation.y = a; g.add(fin); }
       const nose = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 12), acc); nose.position.y = 0.86; g.add(nose);
-      add(g, 2.4, -1.3, { r: 0.2, lie: 0.14 });
+      const flameM = new THREE.MeshBasicMaterial({ color: '#ffb23a', transparent: true, opacity: 0.95, toneMapped: false });
+      const flame = keepPart(new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 12).rotateX(Math.PI).translate(0, -0.2, 0), flameM)); flame.position.y = 0.13; flame.visible = false; g.add(flame);
+      const chute = new THREE.Group(); chute.visible = false; g.add(chute);
+      const canopy = keepPart(new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ff5a3c', roughness: 0.6, side: THREE.DoubleSide })));
+      canopy.position.y = 1.7; canopy.scale.y = 0.55; chute.add(canopy);
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2, from = new THREE.Vector3(0, 0.88, 0), to = new THREE.Vector3(Math.cos(a) * 0.48, 1.7, Math.sin(a) * 0.48), L = from.distanceTo(to); const line = keepPart(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, L, 3), white)); line.position.copy(from).add(to).multiplyScalar(0.5); line.quaternion.setFromUnitVectors(Y, to.sub(from).normalize()); chute.add(line); }
+      const rocket = add(g, 2.4, -1.3, { r: 0.2, lie: 0.14 });
+      let fly = -1, alt = 0, vAlt = 0;
+      const base = () => rocket.mesh.localToWorld(wv.set(0, 0.05, 0));
+      interact({
+        body: rocket, r: 1.7, prompt: 'Lancer la fusée', ready: () => idle(rocket) && fly < 0,
+        go() { fly = 0; alt = 0; vAlt = 0; rocket.fixed = true; H.toast('3', 600); H.sfx('jump'); },
+        update(dt) {
+          if (fly < 0) return;
+          const t0 = fly; fly += dt; const t = fly;
+          if (t0 < 0.7 && t >= 0.7) { H.toast('2', 600); H.sfx('jump'); }
+          if (t0 < 1.4 && t >= 1.4) { H.toast('1', 600); H.sfx('jump'); }
+          if (t0 < 2.1 && t >= 2.1) { H.toast('Décollage !', 1200); H.sfx('fly'); }
+          const up = rocket.dir;
+          if (t < 2.1) { if (t > 1.2) for (let i = 0; i < 2; i++) puff(base(), randDir(up, 3).multiplyScalar(0.6), '#e9e4dc', 0.06, 0.9, 2.5); }
+          else if (t < 6.5) {
+            vAlt += dt * (t < 4.5 ? 9 : 2); alt += vAlt * dt;
+            flame.visible = true; flame.scale.set(1, 0.8 + Math.random() * 0.6, 1); flameM.color.setHSL(0.08 + Math.random() * 0.04, 1, 0.6);
+            if (alt < 30) for (let i = 0; i < 3; i++) puff(base(), randDir(up, 1.2).multiplyScalar(-0.8 - Math.random()), i ? '#f2eee8' : '#ffcf6a', 0.09, 1.6, 4);
+          } else if (t < 8.5) { flame.visible = false; alt = 9; }   // là-haut, hors de vue : il redescend de moins haut
+          else {
+            chute.visible = true; vAlt = -1.5; alt = Math.max(0, alt + vAlt * dt);
+            g.rotation.z = Math.sin(t * 1.7) * 0.08 * Math.min(1, alt); g.rotation.x = Math.cos(t * 1.3) * 0.06 * Math.min(1, alt);
+            if (alt === 0) {
+              for (let i = 0; i < 10; i++) puff(base(), randDir(up, 4).multiplyScalar(0.5), '#d9c7a8', 0.07, 0.8, 2);
+              H.sfx('bump'); chute.visible = false; g.rotation.set(0, 0, 0); fly = -1; rocket.fixed = false; bodies.place(rocket); return;
+            }
+          }
+          bodies.place(rocket); rocket.mesh.position.addScaledVector(up, alt);
+        },
+      });
     },
-    services({ add }) {   // une pile de caisses
-      [[2.2, -1.0], [2.65, -1.0], [3.1, -1.0], [2.42, -1.45], [2.88, -1.45], [2.65, -1.9]].forEach(([x, y]) => { const c = new THREE.Mesh(crateGeo, crateM); add(c, x, y, { r: 0.24, topple: false }, Math.random() * 0.4); });
+    services({ add, color }) {   // un distributeur à capsules : chaque tour de manivelle donne un service
+      const g = new THREE.Group(), body = new THREE.MeshStandardMaterial({ color, roughness: 0.35 }), metal = new THREE.MeshStandardMaterial({ color: '#d9dde6', roughness: 0.3, metalness: 0.6 });
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.08, 20).translate(0, 0.04, 0), body));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.3, 16).translate(0, 0.23, 0), body));
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.26, 0.28).translate(0, 0.5, 0), body));
+      const chuteM = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.06), new THREE.MeshStandardMaterial({ color: '#1d1d26', roughness: 0.6 })); chuteM.position.set(0, 0.42, 0.14); g.add(chuteM);
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 20).translate(0, 0.645, 0), metal));
+      const glass = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 16), new THREE.MeshStandardMaterial({ color: '#dff4ff', roughness: 0.05, transparent: true, opacity: 0.28, depthWrite: false })); glass.position.y = 0.85; glass.renderOrder = 2; g.add(glass);
+      const capCols = ['#ff5a3c', '#ffd23a', '#06b6d4', '#ff6fae', '#7c5cff', '#d9ff4a'], capM = capCols.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.3 }));
+      const ballG = new THREE.SphereGeometry(0.048, 10, 8);
+      for (let i = 0; i < 22; i++) { const m = new THREE.Mesh(ballG, capM[i % capM.length]); const a = Math.random() * 6.28, r = Math.random() * 0.13, y = 0.7 + Math.random() * 0.17 * (1 - r / 0.2); m.position.set(Math.cos(a) * r, y, Math.sin(a) * r); g.add(m); }
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.06, 16), body); top.position.y = 1.07; g.add(top);
+      const crank = new THREE.Group(); crank.position.set(0, 0.53, 0.15); g.add(crank);
+      const disc = keepPart(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 16).rotateX(Math.PI / 2), metal));
+      const handle = keepPart(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, 0.025).translate(0.05, 0, 0.025), metal));
+      crank.add(disc, handle);
+      const capsule = keepPart(new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), capM[0])); capsule.visible = false; g.add(capsule);
+      const machine = add(g, 2.4, -1.3, { r: 0.26, lie: 0.15 });
+      let turn = -1, pick = 0;
+      interact({
+        body: machine, r: 1.7, prompt: 'Tourner la manivelle', ready: () => idle(machine) && turn < 0,
+        go() { turn = 0; capsule.material = capM[Math.floor(Math.random() * capM.length)]; H.sfx('grow'); },
+        update(dt) {
+          if (turn < 0) return;
+          turn += dt; const t = turn;
+          crank.rotation.z = -Math.min(1, t / 0.9) * Math.PI * 2;
+          capsule.visible = t > 0.9 && t < 4;
+          if (t > 0.9) {
+            const k = Math.min(1, (t - 0.9) / 0.7), roll = Math.min(1, (t - 0.9) / 1.4);
+            capsule.position.set(0, 0.42 - 0.36 * k + Math.abs(Math.sin(roll * 9)) * 0.08 * (1 - roll), 0.16 + 0.42 * roll);
+            capsule.rotation.x = roll * 9; capsule.scale.setScalar(t > 3.6 ? Math.max(0.01, (4 - t) / 0.4) : 1);
+          }
+          if (t > 1.5 && t - dt <= 1.5) {
+            const list = (H.data().services || []).map(x => x.name).filter(Boolean);
+            H.toast(list.length ? '« ' + list[pick++ % list.length] + ' »' : 'Un service, sur mesure', 2400); H.sfx('coin');
+          }
+          if (t > 4) { turn = -1; crank.rotation.z = 0; capsule.visible = false; }
+        },
+      });
     },
-    travaux({ add, color }) {   // un chevalet et sa toile
+    travaux({ add, color }) {   // un chevalet : chaque coup de pinceau peint un des travaux sur la toile
       const g = new THREE.Group();
       for (const [x, rz] of [[-0.18, 0.12], [0.18, -0.12]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.04).translate(0, 0.5, 0), woodD); l.position.x = x; l.rotation.z = rz; l.rotation.x = -0.12; g.add(l); }
       const back = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.04).translate(0, 0.45, 0), woodD); back.position.z = -0.25; back.rotation.x = 0.3; g.add(back);
-      const tex = canvasTex((c, W, H) => { const gr = c.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#' + color.getHexString()); gr.addColorStop(1, '#3d5afe'); c.fillStyle = gr; c.fillRect(0, 0, W, H); c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(W * 0.62, H * 0.4, W * 0.16, 0, 7); c.fill(); c.fillRect(W * 0.15, H * 0.7, W * 0.5, H * 0.07); }, 256, 192);
+      const paintArt = (c, W, H2, k) => {   // peinture abstraite (en attendant les images, ou sans elles)
+        const hue = Math.random() * 360; c.fillStyle = `hsl(${hue},70%,62%)`; c.fillRect(0, 0, W, H2);
+        const style = k % 3;
+        for (let i = 0; i < 9; i++) {
+          c.fillStyle = `hsla(${(hue + 40 + Math.random() * 220) % 360},80%,${45 + Math.random() * 30}%,.9)`;
+          if (style === 0) { c.beginPath(); c.arc(Math.random() * W, Math.random() * H2, 12 + Math.random() * 46, 0, 7); c.fill(); }
+          else if (style === 1) c.fillRect(Math.random() * W, Math.random() * H2, 20 + Math.random() * 90, 14 + Math.random() * 60);
+          else { c.lineWidth = 8 + Math.random() * 14; c.strokeStyle = c.fillStyle; c.beginPath(); c.moveTo(0, Math.random() * H2); for (let x = 0; x <= W; x += 32) c.lineTo(x, H2 * (0.2 + 0.6 * Math.random())); c.stroke(); }
+        }
+      };
+      const tex = canvasTex((c, W, H2) => { const gr = c.createLinearGradient(0, 0, W, H2); gr.addColorStop(0, '#' + color.getHexString()); gr.addColorStop(1, '#3d5afe'); c.fillStyle = gr; c.fillRect(0, 0, W, H2); c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(W * 0.62, H2 * 0.4, W * 0.16, 0, 7); c.fill(); c.fillRect(W * 0.15, H2 * 0.7, W * 0.5, H2 * 0.07); }, 256, 192);
       const canvas = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.03), [woodM, woodM, woodM, woodM, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }), woodM]); canvas.position.set(0, 0.72, 0.04); canvas.rotation.x = -0.12; g.add(canvas);
-      add(g, 2.4, -1.3, { r: 0.3, lie: 0.06 });
+      const easel = add(g, 2.4, -1.3, { r: 0.3, lie: 0.06 });
+      let paint = -1, n = 0, pending = null;
+      const cv = tex.image, ctx = cv.getContext('2d');
+      function nextPicture() {
+        const list = (H.data().projects || []).filter(p => p.image_url), k = n++;
+        const p = list.length ? list[k % list.length] : null;
+        pending = { title: p ? p.title : '', img: null, ready: !p };
+        if (p) {
+          const im = new Image(); im.crossOrigin = 'anonymous';
+          const job = pending;
+          im.onload = () => { job.img = im; job.ready = true; }; im.onerror = () => { job.ready = true; };
+          im.src = H.img(p.image_url, { w: 512 });
+        }
+        return k;
+      }
+      function draw(k) {
+        const W = cv.width, H2 = cv.height, job = pending;
+        let ok = false;
+        if (job && job.img) {
+          try {
+            const im = job.img, s2 = Math.max(W / im.width, H2 / im.height), w = im.width * s2, h = im.height * s2;
+            ctx.drawImage(im, (W - w) / 2, (H2 - h) / 2, w, h);
+            ctx.getImageData(0, 0, 1, 1);   // image lisible (sinon : peinture abstraite)
+            ok = true;
+          } catch (e) { ok = false; }
+        }
+        if (!ok) paintArt(ctx, W, H2, k);
+        tex.needsUpdate = true;
+        if (job && job.title) H.toast(job.title, 2200);
+      }
+      let kk = 0;
+      interact({
+        body: easel, r: 1.7, prompt: 'Peindre une nouvelle toile', ready: () => idle(easel) && paint < 0,
+        go() { paint = 0; kk = nextPicture(); H.sfx('star'); },
+        update(dt) {
+          if (paint < 0) return;
+          paint += dt;
+          if (paint < 0.6) {
+            const c0 = canvas.getWorldPosition(wv.set(0, 0, 0)).clone();
+            for (let i = 0; i < 2; i++) puff(c0.clone().addScaledVector(easel.dir, (Math.random() - 0.3) * 0.3), randDir(easel.dir, 4).multiplyScalar(1.2), `hsl(${Math.random() * 360},85%,58%)`, 0.035, 1.1, 0.6, 5);
+          }
+          if (paint > 0.5 && pending && (pending.ready || paint > 2.5)) { draw(kk); pending = null; }
+          if (paint > 1 && !pending) paint = -1;
+        },
+      });
     },
   };
 
@@ -828,7 +1065,9 @@ export async function buildZones(planet, sections) {
 
   function update(dt, t, car) {
     bodies.step(dt, car);
+    for (const it of interactives) it.update && it.update(dt, t);
+    stepFx(dt);
     glows.forEach((g, i) => { g.material.opacity = 0.65 + 0.3 * Math.sin(t * 2.2 + i); });
   }
-  return { group, update, bodies };
+  return { group, update, bodies, interactives, hooks: H };
 }
