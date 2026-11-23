@@ -592,8 +592,8 @@ function stepWalk(dt) {
       const sg = Math.sign(P.speed), sideV = tmpC.crossVectors(next, P.mv).normalize();
       let hit = false;
       for (const lat of [0, -0.38, 0.38]) {
-        const q = fq.copy(next).addScaledVector(P.mv, sg * 1.08 / SEA_R).addScaledVector(sideV, lat / SEA_R).normalize();
-        if (upside.fenceHit(q.multiplyScalar(planet.heightDir(q) + 0.2))) { hit = true; break; }
+        const q = fq.copy(next).addScaledVector(P.mv, sg * (sg > 0 ? VAN_LEN.front : VAN_LEN.rear) / SEA_R).addScaledVector(sideV, lat / SEA_R).normalize();
+        if (upside.fenceHit(q.multiplyScalar(planet.heightDir(q) + 0.2), 0.1)) { hit = true; break; }   // le pare-chocs vient au contact de la clôture (sans marge : sinon on croit à un mur invisible)
       }
       const nose = fq.copy(next).addScaledVector(P.mv, sg * 1.25 / SEA_R).normalize();
       if (!hit && planet.heightDir(nose) < WATER_R + 0.02 && upside.bigWater(nose)) { const nbv = planet.bridgeAt(nose); hit = !(nbv && Math.abs(nbv.lat) < 1.1 && P.r > nbv.top - 0.5); }   // (les flaques se traversent)

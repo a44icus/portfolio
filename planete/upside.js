@@ -110,8 +110,7 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
       near(i, 1.0, j => { if (walk[j] === 0) { wet++; away.x -= gd[j * 3]; away.y -= gd[j * 3 + 1]; away.z -= gd[j * 3 + 2]; } });
       if (!wet) continue;
       P.set(gd[i * 3], gd[i * 3 + 1], gd[i * 3 + 2]);
-      const bi = planet.bridgeAt(P); if (bi && Math.abs(bi.lat) < 2.2) continue;
-      if (planet.onPlaza(P, 0.3 / R)) continue;
+      const bi = planet.bridgeAt(P); if (bi && Math.abs(bi.lat) < 1.3) continue;   // la clôture rejoint le garde-corps du pont (à 1,05)
       away.addScaledVector(P, -away.dot(P) / wet).projectOnPlane(P); if (away.lengthSq() > 1e-12) { away.normalize(); P.addScaledVector(away, 0.25 / R).normalize(); } else away.copy(tangent(P));
       const k = ck(P.x, P.y, P.z); let ok = true;
       for (let a = -1; a <= 1 && ok; a++) for (let b = -1; b <= 1 && ok; b++) for (let c = -1; c <= 1 && ok; c++) { const cell = pc.get(k + a * 1048576 + b * 1024 + c); if (cell) for (const p of cell) if (p.d.dot(P) > Math.cos(0.85 / R)) { ok = false; break; } }
@@ -145,7 +144,7 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
     }
     // brèches : chaque bout de clôture resté ouvert rejoint le bout libre le plus proche (sans traverser l'eau ni l'entrée d'un pont)
     const deg = new Map(posts.map(p => [p, 0])); linked.forEach(key => { const [i, j] = key.split(':').map(Number); deg.set(posts[i], deg.get(posts[i]) + 1); deg.set(posts[j], deg.get(posts[j]) + 1); });
-    const crossesWater = (a, b, dd) => { for (const f of [0.25, 0.5, 0.75]) { const m = a.clone().lerp(b, f).normalize(), n = nodeOf(m); if (dd > 2.2 && n >= 0 && walk[n] === 0) return true; const bi = planet.bridgeAt(m); if (bi && Math.abs(bi.lat) < 2.4) return true; } return false; };   // (un petit pan peut enjamber le creux d'une berge)
+    const crossesWater = (a, b, dd) => { for (const f of [0.25, 0.5, 0.75]) { const m = a.clone().lerp(b, f).normalize(), n = nodeOf(m); if (dd > 2.2 && n >= 0 && walk[n] === 0) return true; const bi = planet.bridgeAt(m); if (bi && Math.abs(bi.lat) < 1.2) return true; } return false; };   // (un petit pan peut enjamber le creux d'une berge)
     for (let pass = 0; pass < 4; pass++) for (const p of posts) {
       if (deg.get(p) >= 2) continue;
       let best = null, bd = pass < 2 ? 3.2 : pass === 2 ? 2.6 : 4.2; const k = ck(p.d.x, p.d.y, p.d.z);   // 3e passe : vers n'importe quel poteau voisin (bout de clôture en impasse)
