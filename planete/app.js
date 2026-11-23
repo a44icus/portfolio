@@ -187,7 +187,7 @@ let downAt = null;
 canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointermove', e => {
   if (PL.follow && downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) stopFollow();
-  if (!e.buttons && e.pointerType === 'mouse') canvas.style.cursor = mode === 'orbit' && !PL.follow && overPlane(e) ? 'pointer' : '';   // la main signale qu'on peut cliquer l'avion
+  if (!e.buttons && e.pointerType === 'mouse') canvas.style.cursor = (mode === 'orbit' && !PL.follow && overPlane(e)) || (mode === 'walk' && !upside.on && !egg && signpostAt(ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1))) ? 'pointer' : '';   // la main signale ce qu'on peut cliquer (l'avion, les panneaux)   // la main signale qu'on peut cliquer l'avion
 });
 addEventListener('wheel', () => stopFollow(), { passive: true });
 addEventListener('keydown', e => { if (e.key === 'Escape') stopFollow(); });
@@ -202,6 +202,11 @@ canvas.addEventListener('pointerup', e => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
   // clic sur le van caché : on en prend le volant, et le monde bascule
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  // en balade : clic sur un panneau fléché → la caméra se met en face ; nouveau clic → retour derrière la voiture
+  if (mode === 'walk' && !upside.on && !egg) {
+    if (signView) { signView = null; return; }
+    const sp = signpostAt(ndc); if (sp) { signView = { post: sp, side: 0 }; return; }
+  }
   if (!upside.on && !egg && upside.hitVan(ndc, camera)) { enterUpside(); return; }
   if (!upside.on && !egg) for (const e of eggs) if (e.hit(ndc, camera)) { enterEgg(e); return; }
   if (mode !== 'orbit') return;
@@ -348,7 +353,9 @@ let boostTouch = false;
 const crushPts = [0, 1, 2, 3].map(() => new THREE.Vector3());
 const lupPts = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
 // la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
-const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; } };
+const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; },
+  // obstacle fixe (panneau planté) : la voiture est repoussée hors de lui et s'arrête, comme contre un tronc
+  push(n, depth, rel) { P.dir.addScaledVector(n, -depth / P.r).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.addScaledVector(P.dir, -P.mv.dot(P.dir)).normalize(); if (rel > 0.2) P.speed *= -0.25; } };
 const keys = new Set();
 let camZoom = 1;
 const setZoom = z => { camZoom = Math.max(0.55, Math.min(2.6, z)); zoomAuto = null; };   // un zoom choisi à la main annule le zoom automatique sur les zones
@@ -1151,6 +1158,24 @@ function drawEggPin(c, q, x, y, s) {
   c.beginPath(); c.arc(x, y, 7 * s, 0, Math.PI * 2); c.fillStyle = q.color || '#fff'; c.fill(); c.lineWidth = 2 * s; c.strokeStyle = '#140a24'; c.stroke();
   c.fillStyle = q.fg || '#140a24'; c.font = '800 ' + Math.round(9 * s) + 'px Manrope, Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(q.glyph || '', x, y + 0.5 * s);
 }
+/* ---------- panneaux fléchés : un clic met la caméra en face (lisible), un autre clic ou la voiture qui repart la ramène ---------- */
+let signView = null;
+const signRay = new THREE.Raycaster(), sgU = new THREE.Vector3(), sgZ = new THREE.Vector3(), sgP = new THREE.Vector3(), sgL = new THREE.Vector3();
+function signposts() { return zones ? zones.bodies.list.filter(b => b.mesh.userData.signpost).map(b => b.mesh) : []; }
+function signpostAt(ndcV) { const list = signposts(); if (!list.length) return null; signRay.setFromCamera(ndcV, camera); const h = signRay.intersectObjects(list, true)[0]; if (!h) return null; let o = h.object; while (o && !o.userData.signpost) o = o.parent; return o; }
+function signCamera(dt) {
+  const k = c => keys.has(c);
+  const driving = k('KeyW') || k('KeyS') || k('KeyA') || k('KeyD') || k('ArrowUp') || k('ArrowDown') || k('ArrowLeft') || k('ArrowRight') || Math.abs(joy.x) + Math.abs(joy.y) > 0.15 || Math.abs(gpad.x) + Math.abs(gpad.y) > 0.15 || Math.abs(P.speed) > 0.6;
+  if (driving || !signView.post.parent) { signView = null; return; }
+  const post = signView.post; post.updateMatrixWorld();
+  post.getWorldPosition(sgP); sgU.copy(sgP).normalize(); sgZ.set(0, 0, 1).transformDirection(post.matrixWorld);
+  // du côté où se trouve la caméra au moment du clic (les deux faces sont lisibles)
+  if (!signView.side) signView.side = Math.sign(sgZ.dot(sgL.copy(camera.position).sub(sgP))) || 1;
+  const look = sgL.copy(sgP).addScaledVector(sgU, 1.15);
+  const want = tmpA.copy(look).addScaledVector(sgZ, 3.7 * signView.side).addScaledVector(sgU, 0.3);
+  if (!signView.pos) signView.pos = camera.position.clone();   // sa propre trajectoire : la caméra de la voiture ne la tire plus en arrière
+  signView.pos.lerp(want, 1 - Math.exp(-dt * 4)); camera.position.copy(signView.pos); camera.up.copy(sgU); camera.lookAt(look);
+}
 function frame(now) {
   if (!paceFrame(now || performance.now())) { requestAnimationFrame(frame); return; }
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
@@ -1171,7 +1196,7 @@ function frame(now) {
       if (k >= 1) { if (camAnim.up) camera.up.copy(WY); camAnim = null; }
     }
     if (PL.follow) followCamera(dt); else if (PL.cam) planeCamera(); else controls.update();
-  } else if (!(egg && egg.lock)) stepWalk(dt);
+  } else if (!(egg && egg.lock)) { stepWalk(dt); if (signView) signCamera(dt); }
   updatePlane(dt);
   if (zones) zones.update(dt, t, mode === 'walk' && !upside.on ? carBody : null);
   levitate(t, dt);
@@ -1247,7 +1272,7 @@ function frame(now) {
   // en voiture : focale longue et flou de maquette ; en orbite : vue normale
   const wantFov = mode === 'walk' ? TUNE.camera.focale + 7 * P.boost : 42;
   if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
-  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou * (upside.on ? 0.3 : egg && egg.tilt !== undefined ? egg.tilt : 1) : 0, 1 - Math.exp(-dt * 3)), 0.5);   // monde à l'envers : peu de flou, pour voir les éclairs
+  post.setTilt(THREE.MathUtils.lerp(post.tilt, mode === 'walk' ? TUNE.post.flou * (upside.on ? 0.3 : egg && egg.tilt !== undefined ? egg.tilt : signView ? 0.15 : 1) : 0, 1 - Math.exp(-dt * 3)), 0.5);   // monde à l'envers : peu de flou, pour voir les éclairs
   TILT.uTiltA.value = post.tilt > 0.02 ? post.tilt : 0;
   rim.position.copy(camera.position).multiplyScalar(-1).add(sunOff.set(0, -10, 0));
   pollGamepad(dt);
@@ -1303,7 +1328,7 @@ sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { P, avatar, setZoom, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, et, mario, enterEgg, exitEgg, get egg() { return egg; }, get zones() { return zones; } },
+  dbg: { P, avatar, setZoom, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, et, mario, enterEgg, exitEgg, get egg() { return egg; }, get signView() { return signView; }, get zones() { return zones; } },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },

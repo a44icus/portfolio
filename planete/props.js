@@ -315,7 +315,7 @@ class Bodies {
    */
   add(mesh, dir, yaw, opts) {
     const b = { mesh, dir: dir.clone().normalize(), vel: new THREE.Vector3(), local: new THREE.Quaternion().setFromAxisAngle(Y, yaw), fall: null, down: false,
-      r: opts.r, lie: opts.lie || 0, topple: opts.topple !== false, hop: 0, vh: 0, awake: false, moved: false, lastHit: 0, ret: null, retOff: 0 };
+      r: opts.r, lie: opts.lie || 0, topple: opts.topple !== false, fixed: !!opts.fixed, hop: 0, vh: 0, awake: false, moved: false, lastHit: 0, ret: null, retOff: 0 };
     b.home = { dir: b.dir.clone(), local: b.local.clone() };
     this.list.push(b); this.place(b); return b;
   }
@@ -333,6 +333,7 @@ class Bodies {
   }
   /** Pousse un objet (vitesse tangente) ; s'il est debout et que le choc est fort, il bascule dans le sens du choc. */
   hit(b, push, strength) {
+    if (b.fixed) { if (this.onHit && strength > 0.3) this.onHit(b, strength, false); return; }   // planté dans le sol : il ne bouge pas
     b.vel.add(push); b.awake = true; b.moved = true; b.lastHit = this.time;
     if (this.onHit) this.onHit(b, strength, false);
     if (b.ret) { b.ret = null; b.retOff = 0; }
@@ -354,6 +355,7 @@ class Bodies {
       if (dist > min || dist < 1e-4) continue;
       d.addScaledVector(b.dir, -d.dot(b.dir)).normalize();               // poussée horizontale
       const rel = Math.max(0, car.vel.dot(d));
+      if (b.fixed) { if (rel > 0.3 && this.time - b.lastHit > 0.4) { b.lastHit = this.time; this.hit(b, tmp, rel); } if (car.push) car.push(d, min - dist, rel); continue; }   // obstacle fixe : c'est la voiture qui s'arrête
       if (rel < 0.15 && dist > min * 0.7) continue;
       this.hit(b, tmp.copy(d).multiplyScalar(rel * 1.15 + 0.8), rel);
       b.dir.addScaledVector(d, (min - dist) / P.groundRadius(b.dir)).normalize();
@@ -717,6 +719,7 @@ export async function buildZones(planet, sections) {
       }
       if (best) {
         const { d: at, th, side } = best, post = new THREE.Group();
+        post.userData.signpost = true;   // (cliquable : la caméra vient se mettre en face)
         post.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.45, 8).translate(0, 0.72, 0), woodD));
         // les panonceaux partent sur le côté du poteau (ils ne le traversent plus), chacun du côté de sa flèche
         const toA = signBoard(labelOf(e.a), 0.9, 0.2, -1); toA.position.set(-(0.45 + 0.065), 1.28, 0); post.add(toA);
@@ -724,7 +727,7 @@ export async function buildZones(planet, sections) {
         const cap = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.1, 8), woodD); cap.position.y = 1.5; post.add(cap);
         group.add(post);
         // les flèches suivent la route : l'axe x du panneau pointe vers B
-        bodies.add(post, at, yawToward(at, e.point(th + 1 / SEA_R, side)) - Math.PI / 2, { r: 0.25, lie: 0.06 });
+        bodies.add(post, at, yawToward(at, e.point(th + 1 / SEA_R, side)) - Math.PI / 2, { r: 0.25, lie: 0.06, topple: false, fixed: true });   // bien planté : il ne tombe pas, ne glisse pas
       }
     }
   }
