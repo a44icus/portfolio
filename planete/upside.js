@@ -338,7 +338,7 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
   const sv = new THREE.Vector3(), su = new THREE.Vector3();
   const spawnSpore = (i, c) => { randDir(sv).multiplyScalar(1 + rnd() * 8); sv.add(c); sporePos[i * 3] = sv.x; sporePos[i * 3 + 1] = sv.y; sporePos[i * 3 + 2] = sv.z; };
 
-  /* ---------- ligne néon rouge au sol : le plus court chemin praticable jusqu'au portail (elle s'allume au bout de 20 s) ---------- */
+  /* ---------- ligne néon rouge au sol : le plus court chemin praticable jusqu'au portail (elle s'allume au bout de 30 s) ---------- */
   let toGate = null;   // pour chaque nœud de la carte : le suivant sur le chemin du portail (-1 : pas de chemin)
   // nœuds « libres » : terre ferme hors de la rive (là où sont les barrières) ; les abords des ponts restent ouverts
   let freeN = null, reachFree = null;
@@ -531,9 +531,9 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
     S.bolt *= Math.exp(-dt * 3.2); const fl = S.bolt * (0.6 + 0.4 * Math.sin(t * 60));
     { const fk = Math.min(1, S.bolt * 1.8) * (S.bolt > 0.55 ? 1 : 0.55 + 0.45 * Math.sin(t * 38)); boltMat.opacity = fk; haloMat.opacity = fk * 0.22; bolt.visible = S.bolt > 0.03; }
     bulbMesh.visible = true; bulbU.uTime.value = t; bulbU.uK.value = k; fence.visible = true;
-    // au bout de 20 s, la ligne néon montre le chemin le plus court (recalculée chaque seconde, depuis la position du van)
+    // au bout de 30 s, la ligne néon montre le chemin le plus court (recalculée chaque seconde, depuis la position du van)
     S.time += dt;
-    if (S.time > 20) {
+    if (S.time > 30) {
       if ((S.routeT -= dt) <= 0) { S.routeT = 1; updateRoute(ctx.car); }
       if (!route.visible) { route.visible = true; hint.textContent = "Suis la ligne rouge jusqu'au portail"; }
       routeU.uK.value = Math.min(1, routeU.uK.value + dt / 2); routeU.uTime.value = t;
@@ -576,6 +576,6 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
     const az = tmp2.set(0, 0, 1).applyQuaternion(q), lz = rel.dot(az), halfW = Math.max(0.5, GW * 0.95 * gate.scale.x);
     return Math.abs(lz) < 0.7 && Math.abs(lx) < halfW && rel.length() < halfW + 2;
   }
-  return { van, fence, fenceHit, bigWater, home, gateDir, enter, reset, hitVan, vanDist, update, flash: (car, cam) => { strike(car, cam); S.bolt = 1; }, skip: () => { S.time = 21; },   // (flash, skip : pour les essais)
+  return { van, fence, fenceHit, bigWater, home, gateDir, enter, reset, hitVan, vanDist, update, flash: (car, cam) => { strike(car, cam); S.bolt = 1; }, skip: () => { S.time = 31; },   // (flash, skip : pour les essais)
     get on() { return S.on; }, get k() { return S.k; }, get signal() { return S.signal; } };
 }
