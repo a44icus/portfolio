@@ -20,7 +20,7 @@ export const CLOUD_SHAPES = { 'Sphère': 'sphere', 'Cumulus': 'cumulus', 'Cube a
 export const CLOUD_DEFAULTS = {
   forme: 'cumulus', taille: 4.55, douceur: 0.33, couverture: 0.84, densite: 4, absorption: 5,
   echelle: 1.49, detail: 0.23, echelleDetail: 0.5,
-  vent: 0.002, directionVent: 0, bouillonnement: 0,
+  vent: 0.1, directionVent: 0, bouillonnement: 0,
   pas: 38, pasLumiere: 2, distanceLumiere: 0.29,
   argente: 0.23, poudre: 0.31, ambiance: 0, soleil: 1.55,
   couleurNuage: '#ffffff', couleurSoleil: '#fff1dc', ambianceHaut: '#d4e6ff', ambianceBas: '#8f98ad',
