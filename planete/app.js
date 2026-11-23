@@ -362,7 +362,7 @@ function setHint() {
     ? gpad.on ? [['Stick G', 'tourner la planète'], ['Stick D', 'zoomer'], ['A', 'ouvrir la zone visée'], ['Start', 'atterrir']]
       : touch ? [['Glisser', 'tourner'], ['Pincer', 'zoomer'], ['Toucher', 'ouvrir une zone']] : [['Glisser', 'tourner'], ['Molette', 'zoomer'], ['Clic', 'ouvrir une zone']]
     : gpad.on ? [['Stick / gâchettes', 'conduire'], ['A', 'sauter'], ['B / RB', 'turbo'], ['Y', 'redresser'], ['X', 'ouvrir la zone'], ['Start', 'décoller']]
-      : touch ? [['Joystick', 'conduire'], ['Turbo', 'accélérer'], ['Saut', 'sauter'], ['Cercle', 'roule dedans pour ouvrir la zone']]
+      : touch ? [['Joystick', 'conduire'], ['Turbo', 'accélérer'], ['Cercle', 'roule dedans pour ouvrir la zone']]
         : [['ZQSD / ↑↓←→', 'conduire'], ['Maj', 'turbo'], ['Espace', 'sauter'], ['R', 'redresser'], ['Molette', 'recul'], ['E', 'ouvrir la zone']];
   let closed = false; try { closed = localStorage.getItem('planete-aide-fermee') === '1'; } catch (e) { /* rien */ }
   hintEl.innerHTML = closed ? '' : H.map(([k, t]) => `<span class="it"><span class="k">${k}</span>${t}</span>`).join('')
@@ -482,7 +482,6 @@ addEventListener('blur', () => keys.clear());
   pad.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
   const end = () => { id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
-  $('#jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (P.ground && !P.flipped && !P.tumble) { P.vr = CAR.saut; P.ground = false; takeoff(); } });
   const bb = $('#boostBtn');
   bb?.addEventListener('pointerdown', e => { e.preventDefault(); boostTouch = true; bb.setPointerCapture(e.pointerId); });
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => bb?.addEventListener(ev, () => { boostTouch = false; }));

@@ -96,9 +96,8 @@ body.touch .hint{ bottom:calc(max(18px, env(safe-area-inset-bottom)) + 230px); }
 /* joystick + saut (tactile) */
 .pad{ position:fixed; left:22px; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 70px); width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,.08); border:1px solid var(--line); z-index:20; display:none; touch-action:none; }
 .pad i{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%; background:rgba(255,255,255,.35); }
-.jump{ position:fixed; right:22px; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 90px); width:74px; height:74px; border-radius:50%; border:1px solid var(--line); background:rgba(255,255,255,.12); z-index:20; display:none; font-weight:800; font-size:.8rem; }
-.boost{ position:fixed; right:108px; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 150px); width:62px; height:62px; border-radius:50%; border:1px solid var(--line); background:rgba(255,140,60,.22); z-index:20; display:none; font-weight:800; font-size:.72rem; touch-action:none; }
-body.walking.touch .pad, body.walking.touch .jump, body.walking.touch .boost{ display:block; }
+.boost{ position:fixed; right:22px; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 90px); width:74px; height:74px; border-radius:50%; border:1px solid var(--line); background:rgba(255,140,60,.22); z-index:20; display:none; font-weight:800; font-size:.72rem; touch-action:none; }
+body.walking.touch .pad, body.walking.touch .boost{ display:block; }
 /* mini-carte (en voiture) */
 .minimap{ position:fixed; left:22px; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 14px); width:190px; height:190px; border-radius:22px; z-index:18; display:none; pointer-events:none;
   border:3px solid rgba(20,12,36,.85); box-shadow:0 0 0 1px rgba(255,255,255,.25), 0 10px 30px rgba(0,0,0,.45); background:#1a1030; }
@@ -195,8 +194,7 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   /* joystick en bas à gauche, saut et turbo en bas à droite, à portée des pouces */
   .pad{ left:max(26px, calc(env(safe-area-inset-left) + 14px)); bottom:max(16px, env(safe-area-inset-bottom)); width:112px; height:112px; }
   .pad i{ width:48px; height:48px; margin:-24px 0 0 -24px; }
-  .jump{ right:max(22px, calc(env(safe-area-inset-right) + 12px)); bottom:max(18px, env(safe-area-inset-bottom)); width:66px; height:66px; }
-  .boost{ right:max(104px, calc(env(safe-area-inset-right) + 94px)); bottom:max(30px, calc(env(safe-area-inset-bottom) + 12px)); width:56px; height:56px; }
+  .boost{ right:max(22px, calc(env(safe-area-inset-right) + 12px)); bottom:max(18px, env(safe-area-inset-bottom)); width:68px; height:68px; }
   /* mini-carte : en haut à gauche, sous la barre */
   body.walking.touch .minimap{ left:max(12px, env(safe-area-inset-left)); top:calc(max(8px, env(safe-area-inset-top)) + 44px); width:96px; height:96px; border-radius:14px; }
   /* écran d'accueil moins haut */
@@ -234,7 +232,7 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   window.__planetStep = function (name) { var now = Date.now(); log.push(step.name + ' ' + sec(now - step.t)); step = { name: name, t: now }; paint(); };
   var paint = function () { if (window.__planetReady || shown) return; var t = document.getElementById('loadTxt'); if (t && !t.dataset.err) t.textContent = step.name + '… (' + Math.round((Date.now() - T0) / 1000) + ' s)'; };
   setInterval(paint, 1000);
-  var BUILD = 'v2026-11-23b';
+  var BUILD = 'v2026-11-23c';
   // fichiers attendus : ceux qui manquent dans la liste des téléchargements terminés sont les suspects
   var WANT = ['app.js', 'world.js', 'fauna.js', 'van.js', 'upside.js', 'props.js', 'look.js', 'ambience.js', 'audio.js', 'tune.js', 'three.module.min.js', 'OrbitControls.js', 'EffectComposer.js', 'RenderPass.js', 'UnrealBloomPass.js', 'ShaderPass.js', 'OutputPass.js', 'MaskPass.js', 'Pass.js', 'CopyShader.js', 'LuminosityHighPassShader.js', 'OutputShader.js', 'FontLoader.js', 'TextGeometry.js', 'BufferGeometryUtils.js', 'site-data.js', 'content.js', 'transition.js', 'maintenance.js'];
   var files = function () {
@@ -294,7 +292,6 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
 <button class="btn prompt flip" id="flipBtn" type="button">R · Remettre sur les roues</button>
 
 <div class="pad" id="pad" aria-hidden="true"><i></i></div>
-<button class="jump" id="jumpBtn" type="button" aria-label="Sauter">Saut</button>
 <button class="boost" id="boostBtn" type="button" aria-label="Turbo">Turbo</button>
 <canvas class="minimap" id="minimap" aria-hidden="true"></canvas>
 
