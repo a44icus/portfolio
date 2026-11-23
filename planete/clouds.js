@@ -18,14 +18,15 @@ import * as THREE from 'three';
 export const CLOUD_KEY = 'planete-nuages';
 export const CLOUD_SHAPES = { 'Sphère': 'sphere', 'Cumulus': 'cumulus', 'Cube arrondi': 'cube', 'Tore': 'tore', 'Boudin': 'capsule', 'Nappe': 'nappe' };
 export const CLOUD_DEFAULTS = {
-  forme: 'cumulus', taille: 3.5, douceur: 0.33, couverture: 0.84, densite: 1.45, absorption: 16.5,
-  echelle: 0.48, detail: 0.09, echelleDetail: 0.5,
-  vent: 0, directionVent: 0, bouillonnement: 0,
-  pas: 48, pasLumiere: 2, distanceLumiere: 0.39,
-  argente: 0.29, poudre: 0.46, ambiance: 0.69, soleil: 1.85,
+  forme: 'cumulus', taille: 4.55, douceur: 0.33, couverture: 0.84, densite: 4, absorption: 5,
+  echelle: 1.49, detail: 0.23, echelleDetail: 0.5,
+  vent: 0.001, directionVent: 0, bouillonnement: 0,
+  pas: 38, pasLumiere: 2, distanceLumiere: 0.29,
+  argente: 0.23, poudre: 0.31, ambiance: 0.13, soleil: 1.95,
   couleurNuage: '#ffffff', couleurSoleil: '#fff1dc', ambianceHaut: '#d4e6ff', ambianceBas: '#8f98ad',
   hauteurSoleil: 30, azimutSoleil: 94,
-  nombre: 60, variationTaille: 0.25,   // dans le jeu : combien de nuages, et écart de taille entre eux (0 : tous pareils)
+  // dans le jeu : combien de nuages, écart de taille entre eux (0 : tous pareils), vitesse de rotation autour de la planète (radians par seconde)
+  nombre: 35, variationTaille: 0.65, rotation: 0.025,
 };
 const clone = o => JSON.parse(JSON.stringify(o));
 export function loadClouds() {

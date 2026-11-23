@@ -1197,7 +1197,7 @@ function frame(now) {
   if (!paceFrame(now || performance.now())) { requestAnimationFrame(frame); return; }
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   planet.waterUniforms.uTime.value = t;
-  if (!reduce) { const CV = planet.clouds.userData.volume; planet.clouds.rotation.y += dt * 2.5 * (CV ? CV.params.vent : 0.01); planet.animate(t); }   // les nuages dérivent autour de la planète selon le réglage « vent »
+  if (!reduce) { const CV = planet.clouds.userData.volume; planet.clouds.rotation.y += dt * (CV ? CV.params.rotation ?? 0.025 : 0.025); planet.animate(t); }   // les nuages tournent autour de la planète (réglage « rotation », indépendant du vent)
   // à pied : ciel bleu autour de la caméra, étoiles effacées
   skyU.uMix.value = THREE.MathUtils.lerp(skyU.uMix.value, mode === 'walk' ? 1 : 0, 1 - Math.exp(-dt * 2.5));
   sky.position.copy(camera.position); skyU.uUp.value.copy(camera.position).normalize(); sky.visible = skyU.uMix.value > 0.01;

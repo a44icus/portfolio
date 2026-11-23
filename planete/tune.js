@@ -211,7 +211,8 @@ export async function toggleTunePanel(hooks) {
     cl(fNu.add(CQ, 'echelle', 0.1, 2, 0.01).name('Taille des masses (inverse)'));
     cl(fNu.add(CQ, 'detail', 0, 1, 0.01).name('Érosion du détail'));
     cl(fNu.add(CQ, 'echelleDetail', 0.5, 8, 0.05).name('Finesse du détail'));
-    cl(fNu.add(CQ, 'vent', 0, 0.1, 0.001).name('Vent (dérive et remous)'));
+    cl(fNu.add(CQ, 'rotation', -0.15, 0.15, 0.001).name('Rotation autour de la planète'));
+    cl(fNu.add(CQ, 'vent', 0, 0.1, 0.001).name('Vent dans le nuage'));
     cl(fNu.add(CQ, 'directionVent', 0, 360, 1).name('Direction du vent'));
     cl(fNu.add(CQ, 'bouillonnement', 0, 0.4, 0.005).name('Bouillonnement'));
     cl(fNu.add(CQ, 'soleil', 0, 8, 0.05).name('Force du soleil'));
