@@ -190,7 +190,9 @@ canvas.addEventListener('pointermove', e => {
   if (PL.follow && downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) stopFollow();
   if (!e.buttons && e.pointerType === 'mouse') canvas.style.cursor = (mode === 'orbit' && !PL.follow && overPlane(e)) || (mode === 'walk' && !upside.on && !egg && signpostAt(ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1))) ? 'pointer' : '';   // la main signale ce qu'on peut cliquer (l'avion, les panneaux)   // la main signale qu'on peut cliquer l'avion
 });
-addEventListener('wheel', () => stopFollow(), { passive: true });
+/** La molette sert à faire défiler un panneau (fiche de zone, réglages) : elle ne touche alors pas à la caméra. */
+const wheelOnUI = e => !!(e.target && e.target.closest && e.target.closest('aside, .lil-gui'));
+addEventListener('wheel', e => { if (!wheelOnUI(e)) stopFollow(); }, { passive: true });
 addEventListener('keydown', e => { if (e.key === 'Escape') stopFollow(); });
 const plScr = new THREE.Vector3();
 function overPlane(e) {   // l'avion est petit à l'écran : on accepte un clic tout près
@@ -361,7 +363,7 @@ const keys = new Set();
 let camZoom = 1;
 const setZoom = z => { camZoom = Math.max(0.55, Math.min(2.6, z)); zoomAuto = null; };   // un zoom choisi à la main annule le zoom automatique sur les zones
 let zoomAuto = null, zoneStill = 0;   // zoom d'avant l'arrêt sur une zone (pour y revenir en repartant)
-addEventListener('wheel', e => { if (mode === 'walk') setZoom(camZoom * Math.exp(Math.sign(e.deltaY) * 0.12)); }, { passive: true });
+addEventListener('wheel', e => { if (mode === 'walk' && !wheelOnUI(e)) setZoom(camZoom * Math.exp(Math.sign(e.deltaY) * 0.12)); }, { passive: true });
 { // pincer à deux doigts sur l'écran
   let d0 = 0, z0 = 1;
   const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
