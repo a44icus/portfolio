@@ -6,6 +6,7 @@
 <!-- ouverte en « /planete » (sans barre finale), la page chercherait app.js, three.js… à la racine du site et resterait bloquée : on ajoute la barre -->
 <script>if (/\/planete$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);</script>
 <script src="../js/maintenance.js"></script>
+<script src="../js/inapp.js"></script>
 <title>La planète — Stéphane Donchery</title>
 <meta name="description" content="Le portfolio de Stéphane Donchery, version planète : explorez les zones en vue orbitale ou en voiture.">
 <meta name="robots" content="noindex,follow">
@@ -237,7 +238,7 @@ body.walking.touch .minimap{ left:12px; top:calc(max(12px, env(safe-area-inset-t
   window.__planetStep = function (name) { var now = Date.now(); log.push(step.name + ' ' + sec(now - step.t)); step = { name: name, t: now }; paint(); };
   var paint = function () { if (window.__planetReady || shown) return; var t = document.getElementById('loadTxt'); if (t && !t.dataset.err) t.textContent = step.name + '… (' + Math.round((Date.now() - T0) / 1000) + ' s)'; };
   setInterval(paint, 1000);
-  var BUILD = 'v2026-11-23l';
+  var BUILD = 'v2026-11-23m';
   // fichiers attendus : ceux qui manquent dans la liste des téléchargements terminés sont les suspects
   var WANT = ['app.js', 'world.js', 'fauna.js', 'van.js', 'upside.js', 'eggkit.js', 'rides.js', 'et.js', 'mario.js', 'props.js', 'look.js', 'ambience.js', 'audio.js', 'tune.js', 'three.module.min.js', 'OrbitControls.js', 'EffectComposer.js', 'RenderPass.js', 'UnrealBloomPass.js', 'ShaderPass.js', 'OutputPass.js', 'MaskPass.js', 'Pass.js', 'CopyShader.js', 'LuminosityHighPassShader.js', 'OutputShader.js', 'FontLoader.js', 'TextGeometry.js', 'BufferGeometryUtils.js', 'site-data.js', 'content.js', 'transition.js', 'maintenance.js'];
   var files = function () {
