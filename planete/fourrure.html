@@ -189,7 +189,7 @@ function makeCloudGui() {
   fQ.close();
   const fR = gui.addFolder('Réglages');
   fR.add({ f: () => { navigator.clipboard.writeText(JSON.stringify(C, null, 1)).then(() => toast('Réglages copiés'), () => prompt('Copier :', JSON.stringify(C))); } }, 'f').name('Copier les réglages du nuage');
-  fR.add({ f: () => { const t = prompt('Coller des réglages JSON :'); if (!t) return; try { Object.assign(C, JSON.parse(t)); sunFromAngles(); live(); makeGui(); toast('Réglages appliqués'); } catch (e) { toast('JSON invalide'); } } }, 'f').name('Coller des réglages');
+  fR.add({ f: () => { const t = prompt('Coller des réglages JSON :'); if (!t) return; try { const o = JSON.parse(t); Object.assign(C, o.nuages || o); sunFromAngles(); live(); makeGui(); toast('Réglages appliqués'); } catch (e) { toast('JSON invalide'); } } }, 'f').name('Coller des réglages');
   fR.add({ f: () => { Object.assign(C, JSON.parse(JSON.stringify(CLOUD_DEFAULTS))); sunFromAngles(); live(); makeGui(); toast('Nuage réinitialisé'); } }, 'f').name('Réinitialiser');
 }
 function makeGui() {

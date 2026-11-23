@@ -201,7 +201,9 @@ export async function toggleTunePanel(hooks) {
   if (CQ) {
     const cl = c => c.onChange(() => { saveClouds(CQ); V.update(CQ); });
     cl(fNu.add(CQ, 'forme', CLOUD_SHAPES).name('Forme de départ'));
-    cl(fNu.add(CQ, 'taille', 0.4, 5, 0.05).name('Taille'));
+    cl(fNu.add(CQ, 'nombre', 0, 160, 1).name('Nombre de nuages'));
+    cl(fNu.add(CQ, 'taille', 0.4, 6, 0.05).name('Taille'));
+    cl(fNu.add(CQ, 'variationTaille', 0, 0.9, 0.01).name('Variation de taille'));
     cl(fNu.add(CQ, 'douceur', 0.02, 0.8, 0.01).name('Douceur des bords'));
     cl(fNu.add(CQ, 'couverture', 0, 1.5, 0.01).name('Remplissage'));
     cl(fNu.add(CQ, 'densite', 0.1, 4, 0.05).name('Densité'));
@@ -209,7 +211,7 @@ export async function toggleTunePanel(hooks) {
     cl(fNu.add(CQ, 'echelle', 0.1, 2, 0.01).name('Taille des masses (inverse)'));
     cl(fNu.add(CQ, 'detail', 0, 1, 0.01).name('Érosion du détail'));
     cl(fNu.add(CQ, 'echelleDetail', 0.5, 8, 0.05).name('Finesse du détail'));
-    cl(fNu.add(CQ, 'vent', 0, 0.3, 0.005).name('Vent dans le nuage'));
+    cl(fNu.add(CQ, 'vent', 0, 0.1, 0.001).name('Vent (dérive et remous)'));
     cl(fNu.add(CQ, 'directionVent', 0, 360, 1).name('Direction du vent'));
     cl(fNu.add(CQ, 'bouillonnement', 0, 0.4, 0.005).name('Bouillonnement'));
     cl(fNu.add(CQ, 'soleil', 0, 8, 0.05).name('Force du soleil'));

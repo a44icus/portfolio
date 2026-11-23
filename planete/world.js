@@ -1031,17 +1031,21 @@ export function buildPlanet(anchors, quality = 'high') {
     // sur téléphone : moins de pas de calcul
     const forQuality = q => (low ? { ...q, pas: Math.round(q.pas * 0.6), pasLumiere: Math.min(q.pasLumiere, 2) } : q);
     const vol = makeCloudMaterials(makeCloudNoise(low ? 48 : 64), forQuality(CP)), box = new THREE.BoxGeometry(2, 2, 2), yaw = new THREE.Quaternion();
-    for (let c = 0, n = low ? 40 : 60; c < n; c++) {
+    const POOL = 160;   // réserve : le réglage « nombre » choisit combien sont visibles (sur téléphone, deux tiers)
+    for (let c = 0; c < POOL; c++) {
       d.set(rng() * 2 - 1, (rng() * 2 - 1) * 0.8, rng() * 2 - 1).normalize();
       const alt = SEA_R + MAX_H * S + 1.6 + rng() * 1.2;
       const m = new THREE.Mesh(box, vol.front);
       m.position.copy(d).multiplyScalar(alt);
       m.quaternion.copy(orient(d)).multiply(yaw.setFromAxisAngle(Y, rng() * Math.PI * 2));
-      m.userData.k = 0.8 + rng() * 0.45; m.userData.sx = 1.05 + rng() * 0.3;   // taille propre à ce nuage (multipliée par le réglage « taille »)
+      m.userData.r = rng() * 2 - 1; m.userData.sx = 1.05 + rng() * 0.3;   // tirage propre à ce nuage : sa taille suit « taille » et « variation de taille »
       m.renderOrder = 2;
       clouds.add(m);
     }
-    const resize = q => clouds.children.forEach(m => { const k = q.taille * m.userData.k; m.scale.set(k * m.userData.sx, k * 0.9, k); });
+    const resize = q => {
+      const n = Math.round((q.nombre ?? 60) * (low ? 0.67 : 1)), v = q.variationTaille ?? 0.25;
+      clouds.children.forEach((m, i) => { const k = q.taille * Math.max(0.15, 1 + m.userData.r * v); m.scale.set(k * m.userData.sx, k * 0.9, k); m.visible = i < n; });
+    };
     resize(CP);
     vol.params = CP;   // réglages (panneau de réglages et labo) ; vol.update les applique en direct
     vol.update = q => { vol.apply(forQuality(q)); resize(q); };
