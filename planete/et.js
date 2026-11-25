@@ -9,6 +9,7 @@
    une clairière. Il repart en laissant un arc-en-ciel : on retrouve la Jeep.
    ============================================================================ */
 import * as THREE from 'three';
+import { getPlace } from './placement.js';
 import { makeKit, makeHud, makeFlash, makeToast } from './eggkit.js';
 import { makeBMX, glowSprite } from './rides.js';
 import { LOOK } from './look.js';
@@ -28,7 +29,8 @@ export function makeET({ planet, scene, sections, quality, R }) {
   /* ---------- le vélo garé, à l'orée d'un bois ---------- */
   const home = { dir: new THREE.Vector3(1, 0, 0), fwd: new THREE.Vector3(0, 1, 0) };
   { const d = findSpot(d => K.dry(d) && K.farFromZones(d, 0.45) && K.treesWithin(d, 1.3) === 0 && K.flat(d), { tries: 2500, score: d => { const n = K.treesWithin(d, 3.4); return n < 14 ? n : -1; } });
-    if (d) home.dir.copy(d); home.fwd.copy(tangent(home.dir, new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5))); }
+    if (d) home.dir.copy(d); home.fwd.copy(tangent(home.dir, new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5)));
+    const man = getPlace('velo'); if (man) { home.dir.copy(man.dir); home.fwd.copy(man.fwd); } }   // (emplacement choisi à la main : outil ?placer)
   const prop = new THREE.Group(); scene.add(prop);
   const parked = makeBMX({ rider: false }); parked.rotation.z = 0.2; parked.position.y = -0.02; prop.add(parked);   // posé sur sa béquille
   { const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 4), std('#c9ccd4', { metalness: 0.9, roughness: 0.2 })); stand.position.set(0.1, 0.13, -0.05); stand.rotation.z = 0.5; prop.add(stand); }

@@ -3,20 +3,12 @@
    visible la nuit), et un food truck garé près de la plage, avec son auvent
    rayé, son cornet géant sur le toit, sa guirlande et sa petite table.
 
-   Emplacements : POS ci-dessous (direction sur la planète + cap en degrés).
-   S'ils sont vides, on cherche tout seul un coin de côte.
-   Outil de placement : ajouter ?placer à l'adresse. Un panneau permet de
-   choisir l'objet, de cliquer sur la planète pour le poser, de le tourner,
-   puis de copier les positions (à recopier dans POS).
+   Emplacements : PLACES dans placement.js (outil ?placer) ; sans
+   emplacement choisi, on cherche tout seul un coin de côte.
    ============================================================================ */
 import * as THREE from 'three';
 import { makeKit } from './eggkit.js';
-
-/** Positions définitives : { dir: [x, y, z], cap: degrés } — null : placement automatique sur la côte. */
-const POS = {
-  phare: { dir: [0.2234, 0.44711, -0.86613], cap: -20 },
-  truck: { dir: [0.29338, 0.84757, 0.44222], cap: 105 },
-};
+import { getPlace } from './placement.js';
 
 const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, ...o });
 const glowMat = (c, o = {}) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false, ...o });
@@ -156,12 +148,10 @@ function makeFoodTruck() {
 }
 
 /* ---------- pose sur la planète, recherche de côte, outil de placement ---------- */
-export function makeBeach({ planet, scene, sections, camera, canvas, R, quality = 'high', focus = null }) {
+export function makeBeach({ planet, scene, sections, R, quality = 'high' }) {
   const low = quality === 'low';
   const K = makeKit({ planet, sections, R, seed: 90217 });
   const { tangent } = K;
-  const placing = (() => { try { return new URLSearchParams(location.search).has('placer'); } catch (e) { return false; } })();
-  const LS = 'planete-plage';
 
   const lh = makeLighthouse(), ft = makeFoodTruck();
   scene.add(lh.group, ft.group);
@@ -193,12 +183,8 @@ export function makeBeach({ planet, scene, sections, camera, canvas, R, quality 
   }
 
   const state = {};
-  { const auto = (!POS.phare || !POS.truck) ? autoSpots() : {};
-    let saved = null; if (placing) try { saved = JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) { /* rien */ }
-    for (const k of Object.keys(items)) {
-      const src = (saved && saved[k]) || POS[k] || auto[k];
-      state[k] = src ? { dir: new THREE.Vector3().fromArray(src.dir.isVector3 ? src.dir.toArray() : src.dir).normalize(), cap: src.cap || 0 } : null;
-    } }
+  { const man = { phare: getPlace('phare'), truck: getPlace('truck') }, auto = (!man.phare || !man.truck) ? autoSpots() : {};
+    for (const k of Object.keys(items)) { const src = man[k] || auto[k]; state[k] = src ? { dir: src.dir.clone().normalize(), cap: src.cap || 0 } : null; } }
   const place = k => {
     const s = state[k], it = items[k]; it.obj.visible = !!s; if (!s) return;
     const up = s.dir, f = fwdFrom(up, s.cap), r = new THREE.Vector3().crossVectors(up, f);
@@ -206,55 +192,6 @@ export function makeBeach({ planet, scene, sections, camera, canvas, R, quality 
     it.obj.position.copy(up).multiplyScalar(planet.heightDir(up) - 0.02);
   };
   Object.keys(items).forEach(place);
-
-  /* ---------- outil de placement (?placer) ---------- */
-  if (placing && canvas && camera) {
-    let sel = 'phare';
-    const el = document.createElement('div');
-    el.style.cssText = 'position:fixed; left:16px; bottom:16px; z-index:60; width:min(320px, calc(100vw - 32px)); padding:.8rem .9rem; border-radius:16px; background:rgba(14,18,34,.9); border:1px solid rgba(255,255,255,.18); color:#f4f3ee; font:600 .82rem/1.35 Manrope, system-ui, sans-serif; backdrop-filter:blur(12px);';
-    el.innerHTML = `<div style="font-weight:800; margin-bottom:.4rem">Placement · plage</div>
-      <div data-r style="display:flex; gap:.35rem; margin-bottom:.45rem"></div>
-      <div style="opacity:.8; margin-bottom:.45rem">Clic sur la planète : poser l'objet choisi.</div>
-      <div style="display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.5rem">
-        <button data-rot="-15">↺ 15°</button><button data-rot="15">↻ 15°</button><button data-rot="-90">↺ 90°</button><button data-rot="90">↻ 90°</button>
-      </div>
-      <button data-go style="width:100%; margin-bottom:.35rem">Aller voir l'objet choisi</button>
-      <button data-copy style="width:100%; background:#d9ff4a; color:#141414">Copier les positions</button>
-      <textarea data-out readonly style="width:100%; height:5.2rem; margin-top:.45rem; font:400 .68rem/1.3 'Space Mono', monospace; background:rgba(0,0,0,.35); color:#d9ff4a; border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:.35rem; resize:none"></textarea>`;
-    el.querySelectorAll('button').forEach(b => { b.style.cssText += ';border:1px solid rgba(255,255,255,.2); background:' + (b.dataset.copy !== undefined ? '#d9ff4a' : 'rgba(255,255,255,.08)') + '; border-radius:100px; padding:.35rem .7rem; font:700 .78rem Manrope, sans-serif; cursor:pointer;' + (b.dataset.copy !== undefined ? 'color:#141414' : 'color:inherit'); });
-    const rbox = el.querySelector('[data-r]'), out = el.querySelector('[data-out]');
-    const fmt = () => {
-      const o = {}; for (const k of Object.keys(items)) { const s = state[k]; if (s) o[k] = { dir: s.dir.toArray().map(v => +v.toFixed(5)), cap: s.cap }; }
-      return JSON.stringify(o);
-    };
-    const refresh = () => {
-      rbox.innerHTML = ''; for (const k of Object.keys(items)) {
-        const b = document.createElement('button'); b.textContent = items[k].label;
-        b.style.cssText = `flex:1; border-radius:100px; padding:.4rem .6rem; font:700 .8rem Manrope, sans-serif; cursor:pointer; border:1px solid rgba(255,255,255,.2); ${k === sel ? 'background:#d9ff4a; color:#141414' : 'background:rgba(255,255,255,.08); color:inherit'}`;
-        b.onclick = e => { e.stopPropagation(); sel = k; refresh(); }; rbox.appendChild(b);
-      }
-      out.value = fmt(); try { localStorage.setItem(LS, out.value); } catch (e) { /* rien */ }
-    };
-    el.addEventListener('pointerdown', e => e.stopPropagation());
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      const r = e.target.closest('[data-rot]'); if (r && state[sel]) { state[sel].cap = ((state[sel].cap + +r.dataset.rot) % 360 + 540) % 360 - 180; place(sel); refresh(); }
-      if (e.target.closest('[data-go]') && state[sel] && focus) focus(state[sel].dir);
-      if (e.target.closest('[data-copy]')) { out.select(); navigator.clipboard?.writeText(out.value).catch(() => document.execCommand('copy')); e.target.textContent = 'Copié !'; setTimeout(() => { e.target.textContent = 'Copier les positions'; }, 1200); }
-    });
-    document.body.appendChild(el); refresh();
-    // un clic (sans glisser) sur la planète pose l'objet choisi ; on l'intercepte avant le reste de la page
-    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
-    addEventListener('pointerdown', e => { down = e.target === canvas ? [e.clientX, e.clientY] : null; }, { capture: true });
-    addEventListener('pointerup', e => {
-      if (!down || e.target !== canvas || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
-      ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-      const hit = ray.intersectObject(planet.groundMesh, true)[0]; if (!hit) return;
-      e.beachPlaced = true; down = null;   // (on laisse passer l'événement : les commandes de la caméra doivent voir le bouton relâché, sinon la planète suit la souris)
-      const d = hit.point.clone().normalize(), cap = state[sel] ? state[sel].cap : 0;
-      state[sel] = { dir: d, cap }; place(sel); refresh();
-    }, { capture: true });
-  }
 
   /* ---------- animation : rotation, intensité selon la nuit, reflet sur la mer ---------- */
   let ang = 0, time = 0; const lampC = new THREE.Color('#fff1b8'), lamp = new THREE.Vector3(), bdir = new THREE.Vector3();

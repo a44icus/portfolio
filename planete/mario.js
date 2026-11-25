@@ -10,6 +10,7 @@
    l'attrape haut, plus ça rapporte), le château, le feu d'artifice, la Jeep.
    ============================================================================ */
 import * as THREE from 'three';
+import { getPlace } from './placement.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeKit, makeHud, makeFlash, makeToast } from './eggkit.js';
 import { glowSprite } from './rides.js';
@@ -28,7 +29,8 @@ export function makeMario({ planet, scene, sections, quality, R }) {
   /* ---------- le tuyau vert, à moitié caché dans les buissons ---------- */
   const home = { dir: new THREE.Vector3(0, 0, 1), fwd: new THREE.Vector3(1, 0, 0) };
   { const d = findSpot(d => K.dry(d) && K.farFromZones(d, 0.45) && K.treesWithin(d, 1.2) === 0 && K.flat(d), { tries: 2500, score: d => { const n = K.treesWithin(d, 3.2); return n < 14 ? n : -1; } });
-    if (d) home.dir.copy(d); }
+    if (d) home.dir.copy(d);
+    const man = getPlace('tuyau'); if (man) home.dir.copy(man.dir); }   // (emplacement choisi à la main : outil ?placer ; le cap suit le parcours)
   // le parcours : le grand cercle qui passe par le tuyau, orienté pour éviter les zones et le plus d'eau possible
   { const t1 = tangent(home.dir), t2 = new THREE.Vector3().crossVectors(home.dir, t1); let best = -1e9;
     for (let a = 0; a < Math.PI; a += Math.PI / 36) {

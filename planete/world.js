@@ -102,7 +102,10 @@ function colorAt(d, h, steep, out, path = 0, rut = 0) {
   const dry = smoothstep(0.55, 0.8, noise.noise(d.x * 3 - 4, d.y * 3, d.z * 3) * 0.5 + 0.5);
   out.copy(COL.low).lerp(COL.high, Math.min(1, Math.max(0, above / 22 + (tone - 0.5) * 0.6)));
   out.lerp(COL.dry, dry * 0.6);
-  out.lerp(EARTH, (1 - smoothstep(0.0, 0.03, grassPatch(d))) * smoothstep(1.4, 2.2, above) * (1 - smoothstep(0.85, 1.1, steep)));   // terre nue hors des plaques d'herbe
+  // terre nue hors des plaques d'herbe, et aussi dessous tant que l'herbe n'y pousse pas (plus bas que 2 blocs) : sans quoi
+  // une mince bande vert olive restait à nu entre la plage et l'herbe, en dents de scie le long des sommets de la grille
+  const bare = Math.max(1 - smoothstep(0.0, 0.03, grassPatch(d)), 1 - smoothstep(1.9, 2.4, above));
+  out.lerp(EARTH, bare * smoothstep(0.5, 1.5, above) * (1 - smoothstep(0.85, 1.1, steep)));
   out.lerp(COL.shore, 1 - smoothstep(0.8, 2.2, above));                                     // plages
   out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.78), (1 - smoothstep(0.1, 0.9, above)) * smoothstep(-0.6, 0.1, above));   // sable mouillé au bord de l'eau
   if (above < 0) out.lerp(tmpC2.copy(COL.shore).multiplyScalar(0.7), Math.min(1, -above / 6)); // fond marin

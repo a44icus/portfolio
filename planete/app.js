@@ -17,10 +17,12 @@ import { makeAmbience } from './ambience.js';
 import { makeFauna } from './fauna.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
+import { IS_OWNER } from './owner.js';
 import { makePerf } from './perf.js';
 import { makeCascade } from './cascade.js';
 import { makeMine, CEIL_R } from './mine.js';
 import { makeToast } from './eggkit.js';
+import { makePlacer, applyPlaces, getPlace, poseObject } from './placement.js';
 import { SAND, GRASS, TREE, BUSH, LUPIN, WIND, TILT } from './world.js';
 
 const $ = s => document.querySelector(s);
@@ -232,7 +234,7 @@ function overPlane(e) {   // l'avion est petit à l'écran : on accepte un clic 
 }
 canvas.addEventListener('pointerup', e => {
   if (aim) { releaseAim(); downAt = null; canvas.style.cursor = ''; return; }
-  if (e.beachPlaced || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;   // (clic déjà pris par l'outil de placement de la plage)
+  if (e.placed || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;   // (clic déjà pris par l'outil de placement)
   // clic sur le van caché : on en prend le volant, et le monde bascule
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   // en balade : clic sur un panneau fléché → la caméra se met en face ; nouveau clic → retour derrière la voiture
@@ -383,8 +385,8 @@ let nearVan = false, upHour = 12;
 const et = makeET({ planet, scene, sections: SECTIONS, quality, R: SEA_R });
 const mario = makeMario({ planet, scene, sections: SECTIONS, quality, R: SEA_R });
 const eggs = [et, mario];
-// bord de mer : un phare et un food truck (emplacements dans beach.js ; ?placer pour les déplacer)
-const beach = makeBeach({ planet, scene, sections: SECTIONS, camera, canvas, R: SEA_R, quality, focus: d => flyTo(d, 48) });
+// bord de mer : un phare et un food truck (emplacements dans placement.js ; ?placer pour les déplacer)
+const beach = makeBeach({ planet, scene, sections: SECTIONS, R: SEA_R, quality });
 beach.groups.forEach(g => { stylizeTree(g, { cast: true, receive: true }); g.traverse(o => { if (o.isMesh && !o.material.isMeshStandardMaterial) o.castShadow = o.receiveShadow = false; }); });   // (lumières et faisceau : pas d'ombre)
 // la cascade (et le coffre au trésor derrière l'eau) ; la mine (monte-charge vers le cœur de la planète)
 const avoidDirs = [upside.van.position.clone().normalize(), ...beach.groups.map(g => g.position.clone().normalize())];
@@ -417,6 +419,21 @@ function fellTrees(center, rU) {
 }
 fellTrees(cascade.clearCenter, cascade.clearR + 1); fellTrees(mine.dir, mine.clearR + 1.2);
 clearDecor(cascade.clearCenter, cascade.clearR); clearDecor(mine.dir, mine.clearR);
+// placement à la main des gros objets (PLACES dans placement.js ; ?placer : panneau, clic sur la planète, axes, taille, caméra libre)
+const PLACE_ITEMS = [
+  { key: 'phare', label: 'Phare', obj: beach.groups[0], lift: -0.02 },
+  { key: 'truck', label: 'Food truck', obj: beach.groups[1], lift: -0.02 },
+  { key: 'cascade', label: 'Cascade', obj: cascade.group, lift: -0.05 },
+  { key: 'coffre', label: 'Coffre', obj: cascade.treasure },
+  { key: 'mine', label: 'Mine', obj: mine.surface },
+  { key: 'van', label: 'Van', obj: upside.van },
+  { key: 'velo', label: 'Vélo E.T.', obj: et.prop },
+  { key: 'tuyau', label: 'Tuyau Mario', obj: mario.prop, lift: -0.05 },
+];
+applyPlaces(planet, PLACE_ITEMS.filter(it => it.key !== 'coffre'));
+// le coffre : détaché de la grotte (une fois celle-ci posée) pour se placer tout seul ; sans emplacement choisi, il reste au fond de la grotte
+scene.attach(cascade.treasure); { const pc = getPlace('coffre'); if (pc) poseObject(planet, cascade.treasure, pc, 0); }
+const placer = makePlacer({ planet, scene, camera, canvas, controls, focus: d => flyTo(d, 48), items: PLACE_ITEMS });
 let under = false;   // sous terre, dans la caverne du noyau
 scene.children.slice(-40).forEach(o => { if (o !== avatar && o !== upside.van && o !== upside.fence) stylizeTree(o); });
 let egg = null, eggHour = 12, nearProp = null;
@@ -538,7 +555,7 @@ const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, b
   // obstacle fixe (panneau planté) : la voiture est repoussée hors de lui et s'arrête, comme contre un tronc
   push(n, depth, rel) { P.dir.addScaledVector(n, -depth / P.r).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.addScaledVector(P.dir, -P.mv.dot(P.dir)).normalize(); if (rel > 0.2) P.speed *= -0.25; } };
 const keys = new Set();
-let camZoom = 1;
+let camZoom = 1, caveK = 0;   // caveK : 0 dehors → 1 dans la grotte de la cascade (caméra rapprochée)
 const setZoom = z => { camZoom = Math.max(0.55, Math.min(2.6, z)); zoomAuto = null; };   // un zoom choisi à la main annule le zoom automatique sur les zones
 let zoomAuto = null, zoneStill = 0;   // zoom d'avant l'arrêt sur une zone (pour y revenir en repartant)
 addEventListener('wheel', e => { if (mode === 'walk' && !wheelOnUI(e)) setZoom(camZoom * Math.exp(Math.sign(e.deltaY) * 0.12)); }, { passive: true });
@@ -977,7 +994,10 @@ function stepWalk(dt) {
 
   // caméra à la troisième personne, un peu en hauteur
   camF.addScaledVector(camF, 0).lerp(P.fwd, 1 - Math.exp(-dt * 1.8)); camF.addScaledVector(up, -camF.dot(up)).normalize();
-  const target = tmpA.copy(avatar.position).addScaledVector(camF, -TUNE.camera.distance * camZoom - 1.4 * P.boost).addScaledVector(up, TUNE.camera.hauteur * camZoom);
+  // dans la grotte de la cascade : la caméra se rapproche de la voiture (et baisse sous la voûte), puis reprend sa place en sortant
+  caveK += ((under ? 0 : cascade.inside(avatar.position)) - caveK) * (1 - Math.exp(-dt * 3));
+  const camD = THREE.MathUtils.lerp(1, 0.42, caveK), camH = THREE.MathUtils.lerp(1, 0.3, caveK);
+  const target = tmpA.copy(avatar.position).addScaledVector(camF, (-TUNE.camera.distance * camZoom - 1.4 * P.boost) * camD).addScaledVector(up, TUNE.camera.hauteur * camZoom * camH);
   const clear = Math.max(under ? mine.heightDir(tmpB.copy(target).normalize()) : planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
   if (target.length() < clear) target.setLength(clear);
   if (under && target.length() > CEIL_R - 1.2) target.setLength(CEIL_R - 1.2);
@@ -1338,8 +1358,9 @@ const tuneHooks = {
 tuneHooks.apply();
 tuneHooks.recolorGrass(); tuneHooks.recolorTrees(); tuneHooks.recolorLupins();
 $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTunePanel(tuneHooks); });
-// réglages cachés : taper « stephane » les fait apparaître (et les ouvre) ; le retaper les cache
-{
+// réglages cachés : taper « stephane » les fait apparaître (et les ouvre) ; le retaper les cache.
+// Réservé au propriétaire (en local, ou connecté à admin.html : voir owner.js).
+if (IS_OWNER) {
   const SECRET = 'stephane'; let typed = '';
   const setAdmin = on => { document.body.classList.toggle('tune-on', on); try { if (on) localStorage.setItem('planete-admin', '1'); else localStorage.removeItem('planete-admin'); } catch (e) { /* rien */ } };
   try { if (localStorage.getItem('planete-admin') === '1') document.body.classList.add('tune-on'); } catch (e) { /* rien */ }
@@ -1351,7 +1372,7 @@ $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTuneP
     const on = !document.body.classList.contains('tune-on'); setAdmin(on);
     if (on || document.querySelector('.lil-gui')) toggleTunePanel(tuneHooks);
   });
-}   // page en cache sans le bouton : on s'en passe
+} else { document.body.classList.remove('tune-on'); try { localStorage.removeItem('planete-admin'); } catch (e) { /* rien */ } }
 
 /* ---------- lumières locales (lampadaires, Jeep, phare) : les matériaux stylisés sautent leur calcul quand toutes sont éteintes ---------- */
 const localLights = []; scene.traverse(o => { if (o.isPointLight || o.isSpotLight) localLights.push(o); });
@@ -1509,7 +1530,9 @@ function frame(now) {
   starMat.opacity = Math.max(1 - skyU.uMix.value, ambience.night * 0.9 * (1 - ambience.state.W.cloud * 0.85));
   // à pied, les nuages montent au-dessus de la caméra
   planet.clouds.scale.setScalar(THREE.MathUtils.lerp(planet.clouds.scale.x, mode === 'walk' ? 1.3 : 1, 1 - Math.exp(-dt * 3)));
-  if (mode === 'orbit') {
+  if (placer) placer.update();   // outil ?placer : le gizmo suit l'objet choisi
+  if (placer && placer.free) placer.stepCam(dt);   // outil ?placer : caméra libre
+  else if (mode === 'orbit') {
     if (camAnim) {
       const k = Math.min(1, (performance.now() - camAnim.t0) / camAnim.dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
       const q = camAnim.qa.clone().slerp(camAnim.qb, e);

@@ -222,16 +222,16 @@ export function makeSpray(count) {
 export const GLEAF = { uLeafS: { value: 1 } };
 const LEAF_SHAPE = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
-  // même forme que les feuilles des cartes du feuillage (LEAF_MASK) : un carré dont le flou arrondit à peine les coins
-  g.filter = 'blur(4px)'; g.fillStyle = '#fff'; g.fillRect(8, 8, 48, 48);
+  // un carré aux coins bien arrondis (bord net : le flou d'un pixel sert seulement à lisser le contour)
+  g.filter = 'blur(1px)'; g.fillStyle = '#fff'; g.beginPath(); g.roundRect(6, 6, 52, 52, 15); g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
 })();
 /**
  * @param spot  fonction qui renvoie une direction où poser une feuille ; dir.tint = [famille, nuance] du feuillage de l'arbre d'où elle tombe
  */
 export function makeGroundLeaves(planet, count, spot) {
-  // carré de 0,048 (les 3/4 du plan) : une feuille des cartes du feuillage (9 à 16 % d'une carte de 0,39) ; uLeafS y ajoute la taille des arbres
-  const geo = new THREE.PlaneGeometry(0.064, 0.064).rotateX(-Math.PI / 2);
+  // feuille d'environ 0,08 de côté (le dessin occupe 52/64 du plan) ; uLeafS y ajoute la taille des arbres
+  const geo = new THREE.PlaneGeometry(0.098, 0.098).rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 });
   mat.onBeforeCompile = sh => { sh.uniforms.uLeafS = GLEAF.uLeafS; sh.vertexShader = 'uniform float uLeafS;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed *= uLeafS;'); };
   mat.customProgramCacheKey = () => 'ground-leaf';

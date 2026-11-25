@@ -6,6 +6,7 @@
    la Jeep et tout est réinitialisé.
    ============================================================================ */
 import * as THREE from 'three';
+import { getPlace } from './placement.js';
 import { makeVan } from './van.js';
 import { LOOK } from './look.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -35,7 +36,8 @@ export function makeUpside({ planet, scene, sections, quality, R }) {
       const n = treesWithin(d, 3.6); if (n > bs && n < 16) { bs = n; best = d.clone(); }   // le plus caché, sans être en pleine forêt
     }
     if (best) home.dir.copy(best);
-    home.fwd.copy(tangent(home.dir, new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5))); }
+    home.fwd.copy(tangent(home.dir, new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5)));
+    const man = getPlace('van'); if (man) { home.dir.copy(man.dir); home.fwd.copy(man.fwd); } }   // (emplacement choisi à la main : outil ?placer)
   const van = makeVan(); scene.add(van);
   van.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const placeOn = (obj, dir, fwd, lift = 0) => {

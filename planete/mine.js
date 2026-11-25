@@ -13,9 +13,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeKit, makeHud, makeToast } from './eggkit.js';
+import { getPlace } from './placement.js';
 
 /** Position définitive du chevalement : { dir: [x, y, z], cap: degrés } — null : placement automatique. */
-const POS = null;
 
 export const CORE_R = 18, CEIL_R = 27.5;
 const GEM_COLS = ['#ff4fd8', '#8a5cff', '#33e6ff', '#5dff9b', '#ffd23f', '#ff6b6b'];
@@ -55,7 +55,8 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
 
   /* =================== en surface : le chevalement =================== */
   let dir, fwd;
-  if (POS) { dir = new THREE.Vector3(...POS.dir).normalize(); fwd = tangent(dir).applyAxisAngle(dir, POS.cap * Math.PI / 180); }
+  const man = getPlace('mine');
+  if (man) { dir = man.dir; fwd = man.fwd; }
   else {
     const clearOfPaths = (d, r) => { const t1 = tangent(d), t2 = new THREE.Vector3().crossVectors(d, t1); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; for (const f of [0.5, 1]) if (planet.pathDir(d.clone().addScaledVector(t1, Math.cos(a) * r * f / R).addScaledVector(t2, Math.sin(a) * r * f / R).normalize()) > 0) return false; } return true; };
     const ok = d => K.dry(d, 0.01) && K.farFromZones(d, 0.4) && avoid.every(a => a.dot(d) < Math.cos(12 / R)) && K.flat(d, 0.08, 1.6) && K.flat(d, 0.25, 3.5) && clearOfPaths(d, 4.5);
