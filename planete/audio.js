@@ -217,7 +217,10 @@ export function makeAudio() {
       for (const f of [55, 55.6, 82.4]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); }
       // la musique du monde à l'envers passe « par la radio » : un filtre qui s'ouvre quand on capte bien la fréquence
       const mlp = filt('lowpass', 900, 0.8), mg = gainNode(0); mlp.connect(mg); mg.connect(bus.musique);
-      rad = { gs, gd, mlp, mg, buf: null, loading: false, next: 0, srcs: [], voices: null, vNext: 0, vLast: -1, vUntil: 0 };
+      rad = { gs, gd, mlp, mg, buf: null, loading: false, next: 0, srcs: [], live: [], voices: null, vNext: 0, vLast: -1, vUntil: 0 };
+      // chaque son lancé (musique, répliques, Démogorgon) est gardé avec son gain : à la sortie, on l'arrête ET on le débranche
+      rad.track = (src, g) => { const e = [src, g]; rad.live.push(e); src.onended = () => { rad.live = rad.live.filter(x => x !== e); rad.srcs = rad.srcs.filter(x => x !== src); }; };
+      rad.was = false;
     }
     set(rad.gs.gain, on ? 0.01 + 0.1 * (1 - signal) : 0, 0.2);   // grésillement : fort quand on s'éloigne de la fréquence
     set(rad.gd.gain, on ? 0.06 : 0, 0.8);
@@ -226,13 +229,14 @@ export function makeAudio() {
     set(rad.mlp.frequency, 700 + 17000 * signal * signal, 0.25);
     // répliques et sons du monde à l'envers, au hasard par-dessus la musique (toutes les 20 à 40 s)
     if (on) {
+      if (!rad.was && rad.voices) { rad.vNext = ctx.currentTime + 9; rad.dNext = 0; }   // on (re)vient : première réplique au bout de 9 s
       if (!rad.voices) { rad.voices = []; for (let i = 1; i <= 5; i++) fetch('audio/st/v' + i + '.mp3').then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a)).then(b => { rad.voices[i - 1] = b; }).catch(() => {}); rad.vNext = ctx.currentTime + 9; }
       if (rad.voices.some(Boolean) && ctx.currentTime > rad.vNext && TUNE.son.actif) {
         // tirage au hasard, sans répéter le même son d'affilée
         const W = [1, 1, 1, 1, 1], pool = []; rad.voices.forEach((b, i) => { if (b && i !== rad.vLast) pool.push([i, W[i]]); });
         let x = Math.random() * pool.reduce((a, p) => a + p[1], 0), k = pool[0][0]; for (const [i, w] of pool) { if ((x -= w) <= 0) { k = i; break; } } rad.vLast = k;
         const b = rad.voices[k], src = ctx.createBufferSource(), g = gainNode(1.1); src.buffer = b; src.connect(g); g.connect(bus.effets); g.connect(reverb);
-        src.start(); rad.vSrc = src; rad.vUntil = ctx.currentTime + b.duration; rad.vNext = rad.vUntil + 20 + Math.random() * 20;
+        src.start(); rad.track(src, g); rad.vSrc = src; rad.vUntil = ctx.currentTime + b.duration; rad.vNext = rad.vUntil + 20 + Math.random() * 20;
       }
       // en surcouche : le Démogorgon rugit toutes les 15 s environ, d'un côté ou de l'autre
       const dg = rad.voices[3];
@@ -241,13 +245,18 @@ export function makeAudio() {
         if (ctx.currentTime > rad.dNext) {
           const src = ctx.createBufferSource(), g = gainNode(0.8), pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; src.buffer = dg; src.playbackRate.value = 0.92 + Math.random() * 0.16;
           if (pan) { pan.pan.value = (Math.random() * 2 - 1) * 0.7; src.connect(pan); pan.connect(g); } else src.connect(g);
-          g.connect(bus.effets); g.connect(reverb); src.start(); rad.dSrc = src; rad.dNext = ctx.currentTime + 14 + Math.random() * 2;
+          g.connect(bus.effets); g.connect(reverb); src.start(); rad.track(src, g); rad.dSrc = src; rad.dNext = ctx.currentTime + 14 + Math.random() * 2;
         }
       }
-    } else {   // on quitte le monde à l'envers : répliques et Démogorgon se taisent
+    } else if (rad.was) {   // on quitte le monde à l'envers : tout se tait pour de bon (arrêt et débranchement, quel que soit le navigateur)
+      const now = ctx.currentTime;
+      for (const p of [rad.mg.gain, rad.gs.gain, rad.gd.gain]) { p.cancelScheduledValues(now); p.setValueAtTime(p.value, now); p.linearRampToValueAtTime(0, now + 0.4); }
+      for (const [src, g] of rad.live) { try { g.gain.cancelScheduledValues(now); g.gain.setValueAtTime(g.gain.value, now); g.gain.linearRampToValueAtTime(0, now + 0.4); } catch (e) { /* rien */ } try { src.stop(now + 0.45); } catch (e) { /* déjà arrêtée */ } setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch (e) { /* déjà débranchée */ } }, 600); }
+      rad.live = []; rad.srcs = []; rad.next = 0;
       if (rad.dSrc) { try { rad.dSrc.stop(); } catch (e) { /* déjà fini */ } rad.dSrc = null; } rad.dNext = 0;
       if (rad.vSrc) { try { rad.vSrc.stop(); } catch (e) { /* déjà finie */ } rad.vSrc = null; rad.vUntil = 0; if (rad.voices) rad.vNext = ctx.currentTime + 9; }
     }
+    rad.was = on;
     if (!on) {
       if (rad.srcs.length) { const t = ctx.currentTime + 2; rad.srcs.forEach(s => { try { s.stop(t); } catch (e) { /* déjà arrêtée */ } }); rad.srcs = []; }
       rad.next = 0; return;
@@ -265,7 +274,7 @@ export function makeAudio() {
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + (first ? 1.2 : X));
       g.gain.setValueAtTime(1, t + dur - X); g.gain.linearRampToValueAtTime(0, t + dur);
       s.start(t); s.stop(t + dur + 0.05);
-      rad.srcs.push(s); s.onended = () => { rad.srcs = rad.srcs.filter(x => x !== s); };
+      rad.srcs.push(s); rad.track(s, g);
       rad.next = t + dur - X;
     }
   }

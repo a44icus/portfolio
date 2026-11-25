@@ -9,13 +9,15 @@ import { buildPlanet, SEA_R, FADE } from './world.js';
 import { makeCar, makeBiplane, buildZones, PAINT } from './props.js';
 import { makeUpside } from './upside.js';
 import { makeET } from './et.js';
+import { makeBeach } from './beach.js';
 import { makeMario } from './mario.js';
 import { VAN_LEN } from './van.js';
-import { stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, makeTireTracks, GLEAF } from './look.js';
+import { LOOK, stylizeTree, makePost, makeGroundLeaves, makeSpray, makeTrails, makeTireTracks, makeWake, GLEAF } from './look.js';
 import { makeAmbience } from './ambience.js';
 import { makeFauna } from './fauna.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
+import { makePerf } from './perf.js';
 import { makeToast } from './eggkit.js';
 import { SAND, GRASS, TREE, BUSH, LUPIN, WIND, TILT } from './world.js';
 
@@ -47,6 +49,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); window.__planetFail && window.__planetFail('Le processeur graphique a lâché (mémoire). Recharge la page.'); });
 const PR = Math.min(devicePixelRatio, quality === 'low' ? 1.1 : 1.6);   // téléphone : définition modérée (il chauffait vite)
 renderer.setPixelRatio(PR);
+const perf = makePerf(renderer);   // jauges de performance en direct (F9, ?perf, ou le panneau de réglages)
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = quality === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;   // ombres douces trop coûteuses sur téléphone
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -75,6 +78,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), new THREE.Shad
 sky.renderOrder = -10; scene.add(sky);
 const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: false, transparent: true });
 // étoiles
+let stars = null;
 {
   const g = new THREE.BufferGeometry(), p = [], c = [];
   for (let i = 0; i < 1800; i++) {
@@ -82,7 +86,7 @@ const starMat = new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAt
     p.push(v.x, v.y, v.z); const k = 0.6 + Math.random() * 0.4; c.push(k, k, k * (0.9 + Math.random() * 0.2));
   }
   g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
-  scene.add(new THREE.Points(g, starMat));
+  scene.add(stars = new THREE.Points(g, starMat));
 }
 // halo d'atmosphère : retiré (la planète se détache directement sur l'espace)
 {
@@ -116,26 +120,32 @@ catch (e) {   // sans post-traitement : rendu direct
   post = { setSize() {}, setTilt() {}, tilt: 0, bloom: {}, grade: { uniforms: { uSat: {} } }, setBand() {}, render() { renderer.render(scene, camera); } };
 }
 // feuilles mortes : sous les arbres et le long des routes
-const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 7000 : 16000, () => {
+// chaque feuille prend la couleur de l'arbre d'où elle tombe (ailleurs : celle d'un arbre au hasard)
+const treeTint = () => planet.treeTints[Math.floor(Math.random() * planet.treeTints.length)];
+const groundLeaves = makeGroundLeaves(planet, quality === 'low' ? 7000 : 16000, () => { const d = leafSpot(); d.tint = d.tint || treeTint(); return d; });
+function leafSpot() {
   const v = new THREE.Vector3();
   const roll = Math.random();
   if (roll < 0.5 && planet.treeDirs.length) {
-    const t = planet.treeDirs[Math.floor(Math.random() * planet.treeDirs.length)];
+    const ti = Math.floor(Math.random() * planet.treeDirs.length), t = planet.treeDirs[ti];
     v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar((0.3 + Math.random() * 1.7) / SEA_R);
-    return v.add(t).normalize();
+    v.add(t).normalize(); v.tint = planet.treeTints[ti]; return v;
   }
   const e = planet.edges[Math.floor(Math.random() * planet.edges.length)];
   if (roll < 0.8) return e.point(Math.random() * e.len, (Math.random() - 0.5) * 2.6);
   // le reste : semé un peu partout sur la terre ferme
   for (let k = 0; k < 30; k++) { v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(); if (!planet.isWet(v)) return v; }
   return e.point(Math.random() * e.len, 0);
-});
+}
 scene.add(groundLeaves.mesh); stylizeTree(groundLeaves.mesh);
 const trails = makeTrails(); scene.add(trails.group);
 const tracks = makeTireTracks(quality === 'low' ? 700 : 1400); scene.add(tracks.mesh);
 const trackLast = [new THREE.Vector3(), new THREE.Vector3()], trackOn = [false, false], trackPt = new THREE.Vector3(), trackDir = new THREE.Vector3();
 const trailHeads = [new THREE.Vector3(), new THREE.Vector3()], trailSide = new THREE.Vector3();
 const spray = makeSpray(quality === 'low' ? 70 : 140); scene.add(spray.mesh);
+// sillage d'écume derrière l'aéroglisseur
+const wake = makeWake(quality === 'low' ? 200 : 360); scene.add(wake.mesh);
+const wakeLast = new THREE.Vector3(), wakePt = new THREE.Vector3(); let wakeOn = false;
 // faune discrète (lapins, crabes, papillons, martins-pêcheurs, tortues, poissons) : visible et animée seulement en conduite
 const fauna = makeFauna(planet, quality); scene.add(fauna.group); stylizeTree(fauna.group, { cast: quality !== 'low', receive: true });
 fauna.group.traverse(o => { if (o.userData.fur) o.castShadow = false; });   // les couches de fourrure ne projettent pas d'ombre
@@ -220,7 +230,7 @@ function overPlane(e) {   // l'avion est petit à l'écran : on accepte un clic 
 }
 canvas.addEventListener('pointerup', e => {
   if (aim) { releaseAim(); downAt = null; canvas.style.cursor = ''; return; }
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  if (e.beachPlaced || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;   // (clic déjà pris par l'outil de placement de la plage)
   // clic sur le van caché : on en prend le volant, et le monde bascule
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   // en balade : clic sur un panneau fléché → la caméra se met en face ; nouveau clic → retour derrière la voiture
@@ -371,6 +381,9 @@ let nearVan = false, upHour = 12;
 const et = makeET({ planet, scene, sections: SECTIONS, quality, R: SEA_R });
 const mario = makeMario({ planet, scene, sections: SECTIONS, quality, R: SEA_R });
 const eggs = [et, mario];
+// bord de mer : un phare et un food truck (emplacements dans beach.js ; ?placer pour les déplacer)
+const beach = makeBeach({ planet, scene, sections: SECTIONS, camera, canvas, R: SEA_R, quality, focus: d => flyTo(d, 48) });
+beach.groups.forEach(g => { stylizeTree(g, { cast: true, receive: true }); g.traverse(o => { if (o.isMesh && !o.material.isMeshStandardMaterial) o.castShadow = o.receiveShadow = false; }); });   // (lumières et faisceau : pas d'ombre)
 scene.children.slice(-40).forEach(o => { if (o !== avatar && o !== upside.van && o !== upside.fence) stylizeTree(o); });
 let egg = null, eggHour = 12, nearProp = null;
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
@@ -484,6 +497,8 @@ const RAIL = 0.63, CAR = TUNE.voiture;   // écart max du centre de la voiture s
 let boostTouch = false;
 const crushPts = [0, 1, 2, 3].map(() => new THREE.Vector3());
 const lupPts = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
+// pneus : demi-largeur de la bande écrasée (pneu de 0,17 à l'échelle 1, un peu de marge) ; point de contact et axe latéral de chaque roue
+const TYRE_HALF_W = 0.095, tyreUp = new THREE.Vector3(), tyreSide = new THREE.Vector3(), tyreWheels = [0, 1, 2, 3].map(() => ({ p: null, n: null }));
 // la voiture vue par les objets : position, vitesse, rayon, et un choc qui la ralentit
 const carBody = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.42, bump(rel) { P.speed *= rel > 2 ? 0.86 : 0.95; },
   // obstacle fixe (panneau planté) : la voiture est repoussée hors de lui et s'arrête, comme contre un tronc
@@ -827,14 +842,19 @@ function stepWalk(dt) {
   trails.update(dt, trailHeads, trailSide, boostFx * (1 - hv) * (P.ground || P.airT < 0.2 ? 1 : 0.5));
   // nénuphars bousculés par la vague du véhicule
   planet.updatePads(dt, avatar.position, P.speed);
-  // l'herbe se couche sous les pneus
+  // sous les pneus, l'herbe et les lupins disparaissent sur la largeur du pneu, puis repoussent
   if (P.ground && hv < 0.5 && Math.abs(P.speed) > 0.05) {
     avatar.updateMatrixWorld(true);
-    avatar.userData.wheels.forEach((w, i) => avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)));
-    planet.crushGrass(crushPts, 0.2, planet.waterUniforms.uTime.value + 0.001);
+    const up = tyreUp.copy(avatar.position).normalize(), tw = TYRE_HALF_W * TUNE.voiture.taille;
+    tyreSide.set(1, 0, 0).transformDirection(avatar.matrixWorld); tyreSide.addScaledVector(up, -tyreSide.dot(up)).normalize();
+    avatar.userData.wheels.forEach((w, i) => { avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)); tyreWheels[i].p = crushPts[i]; tyreWheels[i].n = tyreSide; });
+    const tNow = planet.waterUniforms.uTime.value + 0.001;
+    const stride = Math.abs(P.speed) * dt;   // chemin parcouru depuis l'image d'avant : pas de trou dans la trace, même vite
+    planet.crushGrass(tyreWheels, tw, tNow, stride);
+    planet.crushLupins(null, 0, tNow, avatar.position, tyreWheels, tw, stride);
   }
-  // les lupins se couchent au passage du véhicule (voiture ou aéroglisseur), à l'opposé de lui
-  if (P.ground && Math.abs(P.speed) > 0.3) {
+  // l'aéroglisseur, lui, couche les lupins à l'opposé de lui
+  else if (P.ground && hv >= 0.5 && Math.abs(P.speed) > 0.3) {
     avatar.updateMatrixWorld(true);
     avatar.userData.wheels.forEach((w, i) => avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)));
     lupPts[4].copy(avatar.position);
@@ -858,6 +878,17 @@ function stepWalk(dt) {
       if (d > 0.6) { trackLast[i].copy(trackPt); return; }   // téléportation, saut
       if (d > 0.14) { tracks.add(trackLast[i], trackPt, 0.15, Math.min(1, sand * 1.4), tNow); trackLast[i].copy(trackPt); }
     });
+  }
+  // sillage d'écume : derrière la jupe, à la surface de l'eau, d'autant plus marqué qu'on va vite
+  wake.uniforms.uTime.value = tNow; wake.uniforms.uLight.value = 1;   // (comme l'écume du rivage)
+  {
+    const sp = Math.abs(P.speed), k = Math.min(1, (sp - 0.25) / 3.5);
+    if (bob > 0.5 && P.wet && k > 0) {
+      wakePt.copy(avatar.position).addScaledVector(P.fwd, -0.55 * Math.sign(P.speed || 1)).normalize().multiplyScalar(WATER_R + 0.012);
+      const d = wakeOn ? wakePt.distanceTo(wakeLast) : 1e9;
+      if (d > 0.8) wake.cut();                                                // saut, téléportation : nouveau ruban
+      if (d > 0.12) { wake.push(wakePt, P.fwd, 0.55 + 0.2 * k, 0.35 + 0.65 * k, tNow); wakeLast.copy(wakePt); wakeOn = true; }
+    } else if (wakeOn) { wake.cut(); wakeOn = false; }
   }
   // embruns : autour de la jupe, surtout à l'arrière et en vitesse
   if (!reduce) spray.update(dt, bob > 0.5 ? 14 + Math.abs(P.speed) * 9 + Math.abs(throttle) * 12 : 0, (p, v) => {
@@ -1150,7 +1181,7 @@ function drawMinimap() {
 }
 
 /* ---------- barre de réglages ---------- */
-const leafMats = new Set(); planet.decor.children.forEach(m => { if (m.material.map) leafMats.add(m.material); });
+const leafMats = new Set(); planet.decor.traverse(m => { if (m.isMesh && m.material.map) leafMats.add(m.material); });
 const audio = makeAudio(); let waterProbe = 0, nearWater = 0;
 ambience.state.onFlash = far => audio.thunder(far);
 addEventListener('pointerdown', () => audio.start(), { once: true });
@@ -1180,6 +1211,7 @@ function locateAnimal(kind) {
 }
 const cloudQ = new THREE.Quaternion(), cloudAxis = new THREE.Vector3(0, 1, 0);
 const tuneHooks = {
+  perf: () => perf.toggle(),
   locate: locateAnimal,
   clouds: planet.clouds.userData.volume,
   apply() {
@@ -1189,13 +1221,16 @@ const tuneHooks = {
     SAND.uGlitS.value = T.sable.paillettes; SAND.uGlitSI.value = T.sable.eclatPaillettes; SAND.uSand.value.set(T.sable.couleur); SAND.uSandMix.value = T.sable.forceCouleur;
     post.grade.uniforms.uSat.value = T.post.saturation; post.bloom.radius = T.post.bloomRayon; post.bloom.threshold = T.post.bloomSeuil; post.setBand(T.post.zoneNette); TILT.uTiltB.value = T.post.zoneNette;
     W.uFoamEdge.value = T.eau.largeurLisere; W.uFoamLine.value = T.eau.epaisseurTraits; W.uFoamGap.value = T.eau.espacementTraits; W.uFoamLen.value = T.eau.longueurTraits;
-    GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur;
+    GRASS.uGrassH.value = T.herbe.hauteur; GRASS.uGrassW.value = T.herbe.largeur; GRASS.uGrassRound.value = T.herbe.arrondi;
+    GRASS.uTrackW.value = TYRE_HALF_W * T.voiture.taille;
     LUPIN.uLupS.value = T.lupins.taille; LUPIN.uLupH.value = T.lupins.hauteur; LUPIN.uLupWind.value = T.lupins.vent; LUPIN.uFlorD.value = T.lupins.fleurs; LUPIN.uFlorS.value = T.lupins.tailleFleurs; planet.setLupinDensity(T.lupins.densite);
     planet.setGrassDensity(T.herbe.densite);
     planet.setPathSoft(T.chemins.adoucissement || 0);
-    TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons;
+    TREE.uTreeS.value = T.arbres.taille; TREE.uCrownW.value = T.arbres.largeurHouppier; BUSH.uBushS.value = T.arbres.buissons; planet.cullBushPaths();
     planet.treeMeshes.forEach(([w, l, n]) => { w.count = l.count = Math.floor(n * T.arbres.densite); });
-    GLEAF.uLeafS.value = T.feuilles.taille; groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
+    GLEAF.uLeafS.value = T.feuilles.taille * T.arbres.taille;   // 1 = la taille des feuilles des arbres
+    groundLeaves.mesh.count = Math.floor(groundLeaves.max * T.feuilles.quantite);
+    groundLeaves.mesh.material.color.setScalar(T.feuilles.luminosite); groundLeaves.setSpread(T.feuilles.ecart); groundLeaves.lift = T.feuilles.envol;
     avatar.scale.setScalar(T.voiture.taille); PAINT.uFlakeD.value = T.voiture.paillettes; PAINT.uFlakeI.value = T.voiture.eclatPaillettes;
     trails.cfg.width = T.turbo.largeur; trails.cfg.life = T.turbo.duree;
     const TU = trails.uniforms; TU.uC1.value.set(T.turbo.couleurDebut); TU.uC2.value.set(T.turbo.couleurMilieu); TU.uC3.value.set(T.turbo.couleurFin); TU.uMid.value = T.turbo.milieu; TU.uI.value = T.turbo.eclat;
@@ -1207,8 +1242,9 @@ const tuneHooks = {
   },
   recolorGrass() { planet.recolorGrass(TUNE.herbe.base, TUNE.herbe.pointe); },
   recolorPaths() { planet.recolorPaths(TUNE.chemins.couleur, TUNE.chemins.bord); },
+  waterLevel() { planet.previewWater(TUNE.eau.hauteur); },
   previewPaths() { planet.previewPaths(TUNE.chemins.largeur, TUNE.chemins.courbure); },
-  recolorTrees() { const A = TUNE.arbres; planet.recolorTrees([A.jaune, A.olive, A.orange, A.rouge, A.rose, A.sapin]); },
+  recolorTrees() { const A = TUNE.arbres, H = [A.jaune, A.olive, A.orange, A.rouge, A.rose, A.sapin]; planet.recolorTrees(H); groundLeaves.recolor(H); },
   recolorLupins() { const L = TUNE.lupins; planet.recolorLupins([L.violet, L.mauve, L.rose, L.bleu, L.blanc]); },
 };
 tuneHooks.apply();
@@ -1228,6 +1264,30 @@ $('#tuneBtn')?.addEventListener('click', e => { e.stopPropagation(); toggleTuneP
     if (on || document.querySelector('.lil-gui')) toggleTunePanel(tuneHooks);
   });
 }   // page en cache sans le bouton : on s'en passe
+
+/* ---------- lumières locales (lampadaires, Jeep, phare) : les matériaux stylisés sautent leur calcul quand toutes sont éteintes ---------- */
+const localLights = []; scene.traverse(o => { if (o.isPointLight || o.isSpotLight) localLights.push(o); });
+function gateLocalLights() { let on = 0; for (const l of localLights) if (l.intensity > 0 && l.visible) { on = 1; break; } LOOK.uLocalLights.value = on; }
+
+/* ---------- jauges de performance : masquer les familles d'éléments une à une ---------- */
+// chaque famille passe dans son propre groupe (à l'identité) : le masquer coupe aussi ses ombres, sans toucher à ce que le
+// reste du code allume ou éteint lui-même (herbe découpée en tuiles, écume en mode marche…) ; les clics la traversent toujours
+const perfOff = { shadow: false, post: false };
+{
+  const fam = (label, ...objs) => { const ok = objs.filter(Boolean); if (!ok.length) return; const g = new THREE.Group(); g.name = 'famille ' + label; ok[0].parent.add(g); ok.forEach(o => g.add(o)); perf.addToggle({ label, obj: g }); };
+  const cats = {}; [...planet.decor.children].forEach(m => (cats[m.userData.cat || 'autres'] ||= []).push(m));
+  const CATS = [['feuillage', 'Feuillage des arbres'], ['troncs', 'Troncs'], ['buissons', 'Buissons'], ['herbe', 'Herbe'], ['fleurs', 'Fleurs (lupins)'], ['rochers', 'Rochers'], ['nenuphars', 'Nénuphars'], ['coquillages', 'Coquillages'], ['autres', 'Autres décors']];
+  for (const [k, label] of CATS) if (cats[k]) fam(label, ...cats[k]);
+  fam('Sol', planet.groundMesh); fam('Eau', planet.waterMesh); fam('Nuages', planet.clouds);
+  fam('Ciel', sky); fam('Étoiles', stars); fam('Feuilles au sol', groundLeaves.mesh); fam('Animaux', fauna.group);
+  fam('Phare et food truck', ...beach.groups); fam('Traces et écume', trails.group, tracks.mesh, spray.mesh, wake.mesh);
+  fam('Voiture', avatar); fam('Biplan', plane);
+  zonesReady.then(() => { if (zones) fam('Objets des zones', zones.group); });
+  perf.addToggle({ label: 'Calcul des ombres (figées si coupé)', set: v => { perfOff.shadow = !v; } });
+  perf.addToggle({ label: 'Post-traitement (tout)', set: v => { perfOff.post = !v; } });
+  if (post.setSamples) perf.addToggle({ label: 'Anticrénelage MSAA ×' + post.samples, set: v => post.setSamples(v ? post.samples : 0) });
+  if (post.bloom && 'enabled' in post.bloom) perf.addToggle({ label: 'Halo lumineux (bloom)', set: v => { post.bloom.enabled = v; } });
+}
 
 /* ---------- boucle ---------- */
 /* Ménager la carte graphique :
@@ -1262,7 +1322,7 @@ function paceFrame(now) {
     if (pace.ema > iv * 1.3) { pace.fast = 0; if (++pace.slow > 90 && PR * pxScale > PR_MIN + 0.01) { pxScale = Math.max(PR_MIN / PR, pxScale * 0.85); pace.slow = 0; resize(); } }
     else if (pace.ema < iv * 1.08) { pace.slow = 0; if (++pace.fast > 300 && pxScale < 1) { pxScale = Math.min(1, pxScale * 1.12); pace.fast = 0; resize(); } }
   }
-  renderer.shadowMap.needsUpdate = mode === 'walk' || (++pace.n & 1) === 0;
+  renderer.shadowMap.needsUpdate = !perfOff.shadow && (mode === 'walk' || (++pace.n & 1) === 0);
   return true;
 }
 const clock = new THREE.Clock();
@@ -1276,7 +1336,8 @@ function setShadowBox(half, near, far) {
 }
 // les objets garés qu'on ne traverse pas et qui proposent d'embarquer
 const PARKED = [{ obj: upside.van, half: VAN_LEN.half, front: VAN_LEN.front, rear: VAN_LEN.rear, prompt: 'Monter dans le van', go: () => enterUpside() },
-  ...eggs.map(e => ({ obj: e.prop, ...e.box, prompt: e.prompt, go: () => enterEgg(e) }))];
+  ...eggs.map(e => ({ obj: e.prop, ...e.box, prompt: e.prompt, go: () => enterEgg(e) })),
+  ...beach.solids];   // (le phare et le food truck : on bute dessus, sans invite)
 /** Repères des clins d'œil sur la mini-carte. */
 function drawEggPin(c, q, x, y, s) {
   if (q.icon === 'bmx') {   // petit vélo rouge
@@ -1345,6 +1406,7 @@ function signReturn(dt) {
 }
 function frame(now) {
   if (!paceFrame(now || performance.now())) { requestAnimationFrame(frame); return; }
+  perf.begin(now || performance.now());
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   planet.waterUniforms.uTime.value = t;
   if (!reduce) {
@@ -1413,15 +1475,18 @@ function frame(now) {
   groundLeaves.update(dt, avatar.position, P.speed, mode === 'walk' && P.ground && P.hover < 0.5, mode === 'walk' && P.hover > 0.5);   // l'aéroglisseur chasse les feuilles sur l'eau
   if (mode === 'walk' && (++mmTick & 1)) drawMinimap();
   spray.mesh.visible = mode === 'walk';
+  wake.mesh.visible = mode === 'walk';
   trails.group.visible = mode === 'walk';
   ambience.update(dt, t, mode, avatar.position, camera);
+  WIND.uWindT.value += dt * 0.1 * Math.max(0, WIND.uWind.value) * TUNE.herbe.vitesse;   // vent de l'herbe « Bruno » : plus il souffle, plus les rafales défilent vite (sans vent, rien ne bouge)
+  beach.update(dt, ambience.night);
   // van caché : on ne le traverse pas, et tout près une invite propose d'y monter
   const wasNear = nearProp; nearProp = null;
   if (mode === 'walk' && !upside.on && !egg) for (const it of PARKED) {
     // boîte de l'objet (dans son repère), élargie de la demi-taille de la voiture
     const v = it.obj, loc = v.worldToLocal(tmpA.copy(avatar.position)), HX = it.half + 0.42, Z0 = -it.rear - 0.6, Z1 = it.front + 0.6;
     if (Math.abs(loc.y) > 3) continue;   // (sans ce test, l'axe vertical de l'objet traverse la planète : de l'autre côté du globe, on butait sur un mur invisible)
-    if (Math.abs(loc.x) < HX + 1.0 && loc.z > Z0 - 1.0 && loc.z < Z1 + 1.0) { nearProp = it; promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + it.prompt; }
+    if (it.prompt && Math.abs(loc.x) < HX + 1.0 && loc.z > Z0 - 1.0 && loc.z < Z1 + 1.0) { nearProp = it; promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + it.prompt; }
     if (Math.abs(loc.x) < HX && loc.z > Z0 && loc.z < Z1) {
       const px = HX - Math.abs(loc.x), pz = Math.min(loc.z - Z0, Z1 - loc.z);
       if (px < pz) loc.x = Math.sign(loc.x || 1) * HX; else loc.z = loc.z - Z0 < Z1 - loc.z ? Z0 : Z1;
@@ -1470,7 +1535,9 @@ function frame(now) {
   pollGamepad(dt);
   updateLabels();
   planet.cullDecor(camera.position, mode === 'walk' ? 30 : 0);   // herbe et lupins : seulement les tuiles en vue
-  post.render();
+  gateLocalLights();
+  if (perfOff.post) renderer.render(scene, camera); else post.render();
+  perf.end(targetFps(performance.now()));
   if (wantShot) { wantShot = false; try { showPhoto(renderer.domElement.toDataURL('image/jpeg', 0.88)); } catch (e) { console.warn('photo impossible', e); } }   // juste après le rendu : l'image est encore là
   requestAnimationFrame(frame);
 }

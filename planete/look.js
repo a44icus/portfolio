@@ -15,6 +15,8 @@ export const LOOK = {
   uShadowTint: { value: new THREE.Vector3(0.58, 0.3, 0.82) },  // ombres violet-magenta
   uLitTint: { value: new THREE.Vector3(1.12, 0.98, 0.82) },    // lumière chaude, orangée
   uStylize: { value: 1 },
+  // lampadaires, phare de la Jeep, faisceaux du phare : 0 quand tous sont éteints (app.js), et on saute leur calcul
+  uLocalLights: { value: 1 },
   // monde à l'envers : progression (0 à 1), point de départ de la vague (direction), rayon atteint (radians), repère de la caméra
   uUpK: { value: 0 }, uUpO: { value: new THREE.Vector3(0, 1, 0) }, uUpR: { value: 0 }, uViewInv: { value: new THREE.Matrix4() },
 };
@@ -48,6 +50,22 @@ const RAMP = /* glsl */ `
   #include <opaque_fragment>`;
 const RAMP_UP = RAMP.replace('#include <opaque_fragment>', 'outgoingLight = upsideColor(outgoingLight, (uViewInv * vec4(-vViewPosition, 1.0)).xyz);\n  #include <opaque_fragment>');
 
+/**
+ * Éclairage par pixel sans les lumières ponctuelles et projecteurs tant qu'ils sont tous éteints : three.js les calcule
+ * pour chaque pixel même à intensité nulle (6 lampadaires, la Jeep, les 2 faisceaux du phare). L'image ne change pas
+ * (une lumière éteinte n'ajoute rien) ; le test porte sur une valeur commune à toute l'image, donc il ne coûte presque rien.
+ */
+const GATED_LIGHTS = (() => {
+  let src = THREE.ShaderChunk.lights_fragment_begin;
+  for (const n of ['NUM_POINT_LIGHTS', 'NUM_SPOT_LIGHTS']) {
+    const a = src.indexOf('\t#pragma unroll_loop_start\n\tfor ( int i = 0; i < ' + n);
+    const e = '#pragma unroll_loop_end', b = src.indexOf(e, a) + e.length;
+    if (a < 0 || b < e.length) return null;   // autre version de three.js : on garde le calcul d'origine
+    src = src.slice(0, a) + '\tif ( uLocalLights > 0.5 ) {\n' + src.slice(a, b) + '\n\t}' + src.slice(b);
+  }
+  return src;
+})();
+
 /** Donne le rendu « illustration » à un matériau standard : la lumière choisit entre une teinte d'ombre et une teinte éclairée. */
 export function stylize(m) {
   if (!m || !m.isMeshStandardMaterial || m.userData.styled) return;
@@ -57,7 +75,8 @@ export function stylize(m) {
     if (prev) prev(sh, r);
     Object.assign(sh.uniforms, LOOK);
     const up = !m.userData.noUpside;   // (la voiture du joueur et le portail gardent leurs couleurs)
-    sh.fragmentShader = 'uniform vec3 uShadowTint;\nuniform vec3 uLitTint;\nuniform float uStylize;\n' + (up ? UPSIDE_UNIFORMS + UPSIDE_GLSL : '') + sh.fragmentShader.replace('#include <opaque_fragment>', up ? RAMP_UP : RAMP);
+    sh.fragmentShader = 'uniform vec3 uShadowTint;\nuniform vec3 uLitTint;\nuniform float uStylize;\nuniform float uLocalLights;\n' + (up ? UPSIDE_UNIFORMS + UPSIDE_GLSL : '') + sh.fragmentShader.replace('#include <opaque_fragment>', up ? RAMP_UP : RAMP);
+    if (GATED_LIGHTS) sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', GATED_LIGHTS);
   };
   m.customProgramCacheKey = () => prevKey() + (m.userData.noUpside ? '|look' : '|look-up');
   m.needsUpdate = true;
@@ -166,6 +185,9 @@ export function makePost(renderer, scene, camera, quality) {
     bloom, grade, target: rt,   // la scène est dessinée dans ce tampon (linéaire, sans tone mapping) : sert à précompiler les bons shaders
     setBand(b) { tilts.forEach(p => { p.uniforms.uBand.value = b; }); },
     render() { composer.render(); },
+    samples: rt.samples,
+    /** Anticrénelage : nombre d'échantillons par pixel du rendu de la scène (0 : aucun). */
+    setSamples(n) { for (const t of [composer.renderTarget1, composer.renderTarget2]) if (t.samples !== n) { t.samples = n; t.dispose(); } },
   };
 }
 
@@ -200,24 +222,21 @@ export function makeSpray(count) {
 export const GLEAF = { uLeafS: { value: 1 } };
 const LEAF_SHAPE = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
-  g.translate(32, 32); g.rotate(0.5);
-  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, -29); g.quadraticCurveTo(24, -6, 0, 26); g.quadraticCurveTo(-24, -6, 0, -29); g.fill();
-  g.fillRect(-1.5, 24, 3, 7);                                         // pétiole
-  g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -24); g.lineTo(0, 26);
-  for (let k = -16; k < 18; k += 8) { g.moveTo(0, k); g.lineTo(9, k - 7); g.moveTo(0, k); g.lineTo(-9, k - 7); }
-  g.stroke();
+  // même forme que les feuilles des cartes du feuillage (LEAF_MASK) : un carré dont le flou arrondit à peine les coins
+  g.filter = 'blur(4px)'; g.fillStyle = '#fff'; g.fillRect(8, 8, 48, 48);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
 })();
 /**
- * @param spot  fonction qui renvoie une direction où poser une feuille
+ * @param spot  fonction qui renvoie une direction où poser une feuille ; dir.tint = [famille, nuance] du feuillage de l'arbre d'où elle tombe
  */
 export function makeGroundLeaves(planet, count, spot) {
-  const geo = new THREE.PlaneGeometry(0.26, 0.26).rotateX(-Math.PI / 2);
+  // carré de 0,048 (les 3/4 du plan) : une feuille des cartes du feuillage (9 à 16 % d'une carte de 0,39) ; uLeafS y ajoute la taille des arbres
+  const geo = new THREE.PlaneGeometry(0.064, 0.064).rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ map: LEAF_SHAPE, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 });
   mat.onBeforeCompile = sh => { sh.uniforms.uLeafS = GLEAF.uLeafS; sh.vertexShader = 'uniform float uLeafS;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed *= uLeafS;'); };
   mat.customProgramCacheKey = () => 'ground-leaf';
   const mesh = new THREE.InstancedMesh(geo, mat, count); mesh.frustumCulled = false; mesh.receiveShadow = true;
-  const palette = ['#f07a32', '#e8502e', '#d93a2a', '#f2a23a', '#c94a2e', '#ee6aa4', '#e2b83a'].map(c => new THREE.Color(c));
+  const tints = [];   // [famille, nuance r g b] : la couleur du feuillage de l'arbre (repeinte avec les arbres)
   const CELL = 1, cells = new Map(), L = [];
   const key = p => ((Math.floor(p.x / CELL) + 512) * 1024 + (Math.floor(p.y / CELL) + 512)) * 1024 + (Math.floor(p.z / CELL) + 512);
   const Y = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4(), dq = new THREE.Quaternion(), sc = new THREE.Vector3(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), ax = new THREE.Vector3();
@@ -228,18 +247,34 @@ export function makeGroundLeaves(planet, count, spot) {
     l.key = key(l.p); let c = cells.get(l.key); if (!c) cells.set(l.key, c = []); c.push(l.i);
   };
   for (let i = 0; i < count; i++) {
-    const l = { i, p: new THREE.Vector3(), q: new THREE.Quaternion(), v: new THREE.Vector3(), w: new THREE.Vector3(), s: 0.7 + Math.random() * 0.7, fly: false, key: 0 };
-    L.push(l); lay(l, spot());
-    mesh.setMatrixAt(i, m4.compose(l.p, l.q, sc.setScalar(l.s))); mesh.setColorAt(i, palette[i % palette.length].clone().multiplyScalar(0.85 + Math.random() * 0.3));
+    const l = { i, p: new THREE.Vector3(), q: new THREE.Quaternion(), v: new THREE.Vector3(), w: new THREE.Vector3(), r: Math.random() - 0.5, s: 1, fly: false, key: 0 };
+    l.s = 1 + l.r * 0.6; const dir = spot(); L.push(l); lay(l, dir);
+    const t = dir.tint || [0, [1, 1, 1]], f = 0.78 + Math.random() * 0.2;   // un peu plus sombre qu'au houppier : posée à plat, sans l'ombre interne du feuillage
+    tints.push([t[0], t[1].map(v => v * f)]);
+    mesh.setMatrixAt(i, m4.compose(l.p, l.q, sc.setScalar(l.s)));
   }
-  mesh.instanceColor.needsUpdate = true;
-  const active = new Set();
-  return {
-    mesh, max: count,
+  /** Repeint les feuilles comme les arbres : hexes = couleur de chaque famille (jaune, olive, orange, rouge, rose, sapin). */
+  const recolor = hexes => {
+    const G = hexes.map(h => new THREE.Color(h)), c = new THREE.Color();
+    tints.forEach(([g, k], i) => { const b = G[g] || G[0]; mesh.setColorAt(i, c.setRGB(b.r * k[0], b.g * k[1], b.b * k[2])); });
+    mesh.instanceColor.needsUpdate = true;
+  };
+  recolor(['#c9b52e', '#b0a52a', '#ec7a2e', '#e0502e', '#ee6aa4', '#6e6a20']);
+  const active = new Set(); let spread = 1;
+  const out = {
+    mesh, max: count, recolor,
+    /** force de l'envol au passage du véhicule (1 = normale) */
+    lift: 1,
+    /** écart de tailles entre les feuilles (0 : toutes pareilles, 1 : normal, 2 : très varié) */
+    setSpread(v) {
+      if (v === spread) return; spread = v;
+      for (const l of L) { l.s = Math.max(0.15, 1 + l.r * 0.6 * v); if (!l.fly) mesh.setMatrixAt(l.i, m4.compose(l.p, l.q, sc.setScalar(l.s))); }
+      mesh.instanceMatrix.needsUpdate = true;
+    },
     /** car : position de la voiture ; speed : vitesse ; on : la voiture roule au sol ; hover : l'aéroglisseur glisse (il chasse les feuilles posées sur l'eau) */
     update(dt, car, speed, on, hover = false) {
       let dirty = false;
-      if ((on || hover) && Math.abs(speed) > (on ? 0.8 : 0.4)) {
+      if ((on || hover) && out.lift > 0 && Math.abs(speed) > (on ? 0.8 : 0.4)) {
         const reach = (on ? 0.5 : 0.75) + Math.abs(speed) * (on ? 0.07 : 0.09), cx = Math.floor(car.x / CELL), cy = Math.floor(car.y / CELL), cz = Math.floor(car.z / CELL);
         for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
           const k = ((cx + a + 512) * 1024 + (cy + b + 512)) * 1024 + (cz + c + 512), cell = cells.get(k); if (!cell) continue;
@@ -251,10 +286,10 @@ export function makeGroundLeaves(planet, count, spot) {
             ax.copy(l.p).sub(car).addScaledVector(up, -ax.copy(l.p).sub(car).dot(up));
             const away = ax.lengthSq() > 1e-6 ? ax.normalize() : ax.set(1, 0, 0);
             if (onWater && !on) {   // sur l'eau : poussées de côté par le souffle, en rasant la surface et en tournoyant
-              l.v.copy(away).multiplyScalar(0.7 + Math.abs(speed) * (0.16 + Math.random() * 0.12)).addScaledVector(up, 0.35 + Math.random() * 0.45);
+              l.v.copy(away).multiplyScalar(0.7 + Math.abs(speed) * (0.16 + Math.random() * 0.12)).addScaledVector(up, 0.35 + Math.random() * 0.45).multiplyScalar(out.lift);
               l.w.copy(up).multiplyScalar((Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 7)).add(tmp2.set(Math.random() - 0.5, 0, Math.random() - 0.5).multiplyScalar(3));
             } else {
-              l.v.copy(away).multiplyScalar(0.5 + Math.abs(speed) * (0.12 + Math.random() * 0.15)).addScaledVector(up, 0.9 + Math.abs(speed) * (0.1 + Math.random() * 0.14));
+              l.v.copy(away).multiplyScalar(0.5 + Math.abs(speed) * (0.12 + Math.random() * 0.15)).addScaledVector(up, 0.9 + Math.abs(speed) * (0.1 + Math.random() * 0.14)).multiplyScalar(out.lift);
               l.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(5 + Math.random() * 9);
             }
             l.fly = true; active.add(l); cell.splice(j, 1);
@@ -274,6 +309,7 @@ export function makeGroundLeaves(planet, count, spot) {
       if (dirty) mesh.instanceMatrix.needsUpdate = true;
     },
   };
+  return out;
 }
 
 /* ---------- traînées lumineuses du turbo : deux rubans au sol, jaune-blanc puis rose, qui s'effacent ---------- */
@@ -320,6 +356,88 @@ export function makeTireTracks(N = 1400, life = 28) {
       next = (next + 1) % N;
       mesh.instanceMatrix.needsUpdate = true; ['aBorn', 'aStr', 'aLen'].forEach(n => { geo.attributes[n].needsUpdate = true; });
     },
+  };
+}
+
+/* ---------- sillage d'écume de l'aéroglisseur ----------
+   Même dessin que l'écume du rivage (world.js) : des traits blancs nets et fins, effilés aux bouts, qui ondulent.
+   Un ruban continu suit la trajectoire (les traits restent d'un seul tenant dans les virages) ; il s'ouvre en V
+   avec le temps, et ses traits se fragmentent jusqu'à disparaître. */
+export function makeWake(N = 360, life = 7) {
+  const V = N * 2;
+  const center = new Float32Array(V * 3), side = new Float32Array(V * 3), uu = new Float32Array(V), born = new Float32Array(V).fill(-1e4), str = new Float32Array(V), w0 = new Float32Array(V);
+  for (let i = 0; i < N; i++) { uu[i * 2] = -1; uu[i * 2 + 1] = 1; }
+  const geo = new THREE.BufferGeometry();
+  const attr = (n, a, k) => { const b = new THREE.BufferAttribute(a, k); b.setUsage(THREE.DynamicDrawUsage); geo.setAttribute(n, b); return b; };
+  const A = { position: attr('position', center, 3), aSide: attr('aSide', side, 3), aU: attr('aU', uu, 1), aBorn: attr('aBorn', born, 1), aStr: attr('aStr', str, 1), aW0: attr('aW0', w0, 1) };
+  const index = new Uint16Array(N * 6); geo.setIndex(new THREE.BufferAttribute(index, 1)); geo.index.setUsage(THREE.DynamicDrawUsage); geo.setDrawRange(0, 0);
+  const U = { uTime: { value: 0 }, uLife: { value: life }, uSpread: { value: 0.3 }, uColor: { value: new THREE.Color(1.0, 0.98, 0.95) }, uLight: { value: 1 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: U, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+    vertexShader: `
+      attribute vec3 aSide; attribute float aU, aBorn, aStr, aW0; uniform float uTime, uLife, uSpread;
+      varying float vX, vAge, vS, vWid; varying vec3 vW;
+      void main() {
+        vAge = (uTime - aBorn) / uLife; vS = aStr * step(0.0, vAge); vX = aU;
+        vWid = aW0 + uSpread * max(uTime - aBorn, 0.0);                       // le sillage s'ouvre avec le temps
+        vec4 w = modelMatrix * vec4(position + aSide * aU * 0.5 * vWid, 1.0); vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uColor; uniform float uLight; varying float vX, vAge, vS, vWid; varying vec3 vW;
+      float h(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float n3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y),
+                   mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); }
+      // un trait d'écume à la distance « at » de l'axe (unités du monde) : fin, net, effilé aux bouts, morcelé avec l'âge
+      float stroke(float d, float at, float seed, float w, float th) {
+        float seg = n3(vW * (1.1 + seed * 0.17) + vec3(seed * 7.3, 3.1 - uTime * 0.05, seed * 2.9));
+        float on = smoothstep(th, th + 0.14, seg);                             // 0 → 1 : les bouts du trait s'amincissent
+        float ww = w * on, dist = abs(d - at), fw = fwidth(d) * 0.8;
+        return on * (1.0 - smoothstep(ww, ww + fw, dist));
+      }
+      void main() {
+        if (vAge > 1.0 || vS <= 0.0) discard;
+        float halfW = 0.5 * vWid;
+        // distance à l'axe, en unités du monde, qui ondule doucement
+        float d = abs(vX) * halfW + (n3(vW * 1.6 + vec3(0.0, uTime * 0.15, 0.0)) - 0.5) * 0.08;
+        float lw = 0.02 * (0.6 + 0.4 * vS), th = 0.28 + 0.6 * vAge;          // de plus en plus de trous en vieillissant
+        float foam = stroke(d, halfW * 0.88, 1.0, lw * 1.3, th);              // les deux bords du V, plus marqués
+        foam = max(foam, stroke(d, halfW * 0.62, 2.0, lw, th + 0.05));
+        foam = max(foam, stroke(d, halfW * 0.34, 3.0, lw * 0.9, th + 0.1));
+        foam = max(foam, stroke(d, halfW * 0.1, 4.0, lw * 1.6, 0.25 + 3.0 * vAge));   // remous au centre, juste derrière la jupe
+        foam *= step(d, halfW) * vS;
+        if (foam < 0.02) discard;
+        gl_FragColor = vec4(uColor * uLight, clamp(foam, 0.0, 1.0));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 3;
+  const link = new Uint8Array(N), up = new THREE.Vector3(), sd = new THREE.Vector3();
+  let next = 0, hasPrev = false;
+  function rebuild() {
+    let n = 0;
+    for (let i = 0; i < N; i++) {
+      if (!link[i]) continue;
+      const p = (i - 1 + N) % N, a = p * 2, b = a + 1, c = i * 2, e = c + 1;
+      index[n++] = a; index[n++] = b; index[n++] = c; index[n++] = b; index[n++] = e; index[n++] = c;
+    }
+    geo.index.needsUpdate = true; geo.setDrawRange(0, n);
+  }
+  return {
+    mesh, uniforms: U,
+    /** Ajoute un point au ruban (à la surface de l'eau), cap fwd, largeur de départ w, intensité k. */
+    push(pt, fwd, w, k, t) {
+      const i = next; next = (next + 1) % N;
+      up.copy(pt).normalize(); sd.crossVectors(up, fwd).normalize();
+      for (let v = i * 2; v < i * 2 + 2; v++) { center.set([pt.x, pt.y, pt.z], v * 3); side.set([sd.x, sd.y, sd.z], v * 3); born[v] = t; str[v] = k; w0[v] = w; }
+      link[i] = hasPrev ? 1 : 0; link[next] = 0; hasPrev = true;   // (le point suivant du tampon va être réécrit : on coupe son lien)
+      for (const b of Object.values(A)) b.needsUpdate = true;
+      rebuild();
+    },
+    /** Interrompt le ruban (on quitte l'eau, saut, téléportation). */
+    cut() { hasPrev = false; },
   };
 }
 

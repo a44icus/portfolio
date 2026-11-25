@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "portfolio", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "http-server", "-p", "5180", "-c-1", "--silent"], "port": 5180 }
+    { "name": "portfolio", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "http-server", "-p", "5180", "-c-1", "--silent"], "port": 5180 },
+    { "name": "cle-en-classe", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "5178", "--directory", "E:/CLAUDE/cle-en-classe/public"], "port": 5178 }
   ]
 }

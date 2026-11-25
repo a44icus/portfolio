@@ -964,6 +964,9 @@ export async function buildZones(planet, sections) {
       const a = k / 11 * Math.PI * 2 + 0.3;
       if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.75) continue;   // passage vers l'avant (+t2)
       const rr = 3.25 + Math.random() * 0.35, d = at(z, Math.cos(a) * rr, Math.sin(a) * rr), s2 = 0.75 + Math.random() * 0.45;
+      // jamais sur un chemin qui arrive à l'esplanade : ni au pied, ni sous le feuillage qui déborde
+      const foot = (0.34 + 0.18) * s2 + 0.1;
+      if ([0, 1, 2, 3, 4, 5, 6, 7, 8].some(j => planet.pathDir(j === 8 ? d : at(z, Math.cos(a) * rr + Math.cos(j / 8 * Math.PI * 2) * foot, Math.sin(a) * rr + Math.sin(j / 8 * Math.PI * 2) * foot)) > 0)) continue;
       const b = new THREE.Mesh(bushGeo, bushM(k)); b.position.copy(d).multiplyScalar(planet.heightDir(d) + 0.1 * s2);
       b.quaternion.setFromUnitVectors(Y, d); b.scale.set(s2, s2 * 0.8, s2); b.castShadow = true; group.add(b);
     }

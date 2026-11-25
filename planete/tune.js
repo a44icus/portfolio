@@ -5,23 +5,23 @@
    ============================================================================ */
 export const DEFAULTS = {
   ambiance: { heureFixe: false, heure: 12.4,   // le temps passe : une journée en 10 minutes (vitesse 1)
-    vitesseJour: 1, meteo: 'clear', vent: 2.1, brume: 1 },
+    vitesseJour: 1, meteo: 'clear', vent: 1, brume: 1 },
   lumiere: {
     soleil: 1, ciel: 1, ambiante: 1, exposition: 1,
     teinteOmbres: '#9466d1', forceTeinteOmbres: 0,
     teinteLumiere: '#ffe0c4', forceTeinteLumiere: 0,
   },
   post: { bloom: 1, bloomRayon: 0.45, bloomSeuil: 1.05, flou: 1, zoneNette: 0.14, saturation: 1.18 },
-  eau: { bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
+  eau: { hauteur: 2, bord: '#34bdb0', milieu: '#38b5bf', large: '#0b4766', ecume: 1, largeurLisere: 1, epaisseurTraits: 1, espacementTraits: 1, longueurTraits: 0.5, paillettes: 0.05, eclatPaillettes: 0.7 },
   sable: { couleur: '#fee09f', forceCouleur: 0, paillettes: 0.06, eclatPaillettes: 0.9 },
   chemins: { couleur: '#f3bf86', bord: '#9f5f3c', largeur: 1.15, courbure: 0.35, adoucissement: 0.33 },
-  herbe: { base: '#2c420b', pointe: '#cacc28', hauteur: 0.6, largeur: 0.9, densite: 1 },
-  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.69, buissons: 1.3,
+  herbe: { base: '#422a00', pointe: '#abad00', hauteur: 0.65, largeur: 0.8, arrondi: 1, vitesse: 2, densite: 0.44, style: 'bruno' },
+  arbres: { tronc: '#d4c2ff', feuillage: '#ffffff', taille: 1.35, largeurHouppier: 1, densite: 0.5, buissons: 1.3, touffes: 'cartes',
     jaune: '#c9b52e', olive: '#63bb69', orange: '#ec7a2e', rouge: '#e0502e', rose: '#ee6aa4', sapin: '#feecf2' },
-  feuilles: { taille: 0.9, quantite: 0.69 },
+  feuilles: { taille: 0.9, quantite: 0.69, luminosite: 1, ecart: 1, envol: 1 },
   lupins: { densite: 1, taille: 0.95, hauteur: 0.9, vent: 0.7, fleurs: 0.88, tailleFleurs: 1.05, violet: '#8f5cf0', mauve: '#c873ff', rose: '#ff7ab8', bleu: '#6f86ff', blanc: '#f4f0ff' },
   turbo: { largeur: 0.12, duree: 1.4, couleurDebut: '#ff6666', couleurMilieu: '#0008ff', couleurFin: '#5b28e6', milieu: 0.4, eclat: 0.55 },
-  voiture: { taille: 1, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 30.5, saut: 1.7, raideur: 0.9, paillettes: 0.55, eclatPaillettes: 3 },
+  voiture: { taille: 1.15, vitesse: 6.5, acceleration: 9, turbo: 0.7, braquage: 1.5, gravite: 30.5, saut: 1.7, raideur: 0.9, paillettes: 0.55, eclatPaillettes: 3 },
   camera: { distance: 8.1, hauteur: 6, focale: 30 },
   son: { actif: true, general: 0.51, musique: 0.45, ambiance: 0.7, vehicules: 0.17, effets: 0.8 },
   animaux: { taille: 1, lapins: 0.7, crabes: 0.55, tortues: 0.85, grenouilles: 0.7, martins: 0.7, colibris: 1, papillons: 1, abeilles: 0.85, poissons: 1, moucherons: 0.45,
@@ -65,6 +65,7 @@ export async function toggleTunePanel(hooks) {
   const ch = (c, extra) => c.onChange(() => { save(); hooks.apply(); if (extra) extra(); });
   const toast = msg => { const b = gui.title(); gui.title(msg); setTimeout(() => gui && gui.title(b), 1800); };
 
+  if (hooks.perf) gui.add({ go() { hooks.perf(); } }, 'go').name('📊 Jauges de performance (F9)');
   const fA = gui.addFolder('Ambiance');
   ch(fA.add(TUNE.ambiance, 'heureFixe').name('Heure figée'));
   ch(fA.add(TUNE.ambiance, 'heure', 0, 24, 0.1).name('Heure'));
@@ -92,6 +93,9 @@ export async function toggleTunePanel(hooks) {
   ch(fP.add(TUNE.post, 'saturation', 0.5, 2, 0.01).name('Saturation'));
 
   const fE = gui.addFolder('Eau');
+  // hauteur : la surface monte ou descend en direct ; profondeur, nage et mini-carte suivent au rechargement
+  ch(fE.add(TUNE.eau, 'hauteur', -3, 3, 0.05).name('Hauteur de l’eau'), () => hooks.waterLevel && hooks.waterLevel());
+  fE.add({ go() { save(); location.reload(); } }, 'go').name('↻ Recharger (hauteur de l’eau)');
   ch(fE.addColor(TUNE.eau, 'bord').name('Couleur au bord'));
   ch(fE.addColor(TUNE.eau, 'milieu').name('Couleur intermédiaire'));
   ch(fE.addColor(TUNE.eau, 'large').name('Couleur au large'));
@@ -125,7 +129,12 @@ export async function toggleTunePanel(hooks) {
   ch(fH.addColor(TUNE.herbe, 'pointe').name('Couleur : pointe'), () => hooks.recolorGrass());
   ch(fH.add(TUNE.herbe, 'hauteur', 0.1, 3, 0.05).name('Hauteur'));
   ch(fH.add(TUNE.herbe, 'largeur', 0.2, 3, 0.05).name('Largeur des brins'));
+  ch(fH.add(TUNE.herbe, 'arrondi', 0, 1, 0.01).name('Arrondi du sommet (Bruno)'));
+  ch(fH.add(TUNE.herbe, 'vitesse', 0, 4, 0.05).name('Vitesse du mouvement (Bruno)'));
   ch(fH.add(TUNE.herbe, 'densite', 0, 1, 0.01).name('Densité'));
+  // brins : touffes en étoile (actuelle) ou brins d'un seul triangle tournés vers la caméra, à la Bruno Simon ; au rechargement
+  ch(fH.add(TUNE.herbe, 'style', { 'Actuelle': 'actuelle', 'Bruno Simon': 'bruno' }).name('Style des brins'));
+  fH.add({ go() { save(); location.reload(); } }, 'go').name('↻ Recharger (style d’herbe)');
   const fT = gui.addFolder('Arbres et buissons');
   ch(fT.addColor(TUNE.arbres, 'tronc').name('Troncs'));
   ch(fT.addColor(TUNE.arbres, 'feuillage').name('Teinte du feuillage'));
@@ -133,6 +142,9 @@ export async function toggleTunePanel(hooks) {
   ch(fT.add(TUNE.arbres, 'largeurHouppier', 0.3, 3, 0.05).name('Largeur des houppiers'));
   ch(fT.add(TUNE.arbres, 'densite', 0, 1, 0.01).name('Nombre d’arbres'));
   ch(fT.add(TUNE.arbres, 'buissons', 0.2, 3, 0.05).name('Taille des buissons'));
+  // touffes : petites feuilles texturées (actuelles) ou cartes de feuillage à la Bruno Simon (comme dans l'éditeur) ; au rechargement
+  ch(fT.add(TUNE.arbres, 'touffes', { 'Actuelles': 'actuelles', 'Cartes (Bruno Simon)': 'cartes' }).name('Touffes des arbres'));
+  fT.add({ go() { save(); location.reload(); } }, 'go').name('↻ Recharger (touffes)');
   const fK = gui.addFolder('Couleurs des arbres');
   [['jaune', 'Feuillage jaune'], ['olive', 'Feuillage olive'], ['orange', 'Feuillage orange'], ['rouge', 'Feuillage rouge'], ['rose', 'Feuillage rose'], ['sapin', 'Sapins']]
     .forEach(([k, n]) => ch(fK.addColor(TUNE.arbres, k).name(n), () => hooks.recolorTrees()));
@@ -147,6 +159,9 @@ export async function toggleTunePanel(hooks) {
   const fF = gui.addFolder('Feuilles au sol');
   ch(fF.add(TUNE.feuilles, 'taille', 0.2, 4, 0.05).name('Taille'));
   ch(fF.add(TUNE.feuilles, 'quantite', 0, 1, 0.01).name('Quantité'));
+  ch(fF.add(TUNE.feuilles, 'luminosite', 0.3, 2, 0.01).name('Luminosité'));
+  ch(fF.add(TUNE.feuilles, 'ecart', 0, 2, 0.05).name('Écart de tailles'));
+  ch(fF.add(TUNE.feuilles, 'envol', 0, 3, 0.05).name('Envol au passage'));
 
   const fV = gui.addFolder('Voiture');
   ch(fV.add(TUNE.voiture, 'taille', 0.4, 3, 0.05).name('Taille'));
