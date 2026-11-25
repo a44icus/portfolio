@@ -18,6 +18,8 @@ import { makeFauna } from './fauna.js';
 import { makeAudio } from './audio.js';
 import { TUNE, toggleTunePanel } from './tune.js';
 import { makePerf } from './perf.js';
+import { makeCascade } from './cascade.js';
+import { makeMine, CEIL_R } from './mine.js';
 import { makeToast } from './eggkit.js';
 import { SAND, GRASS, TREE, BUSH, LUPIN, WIND, TILT } from './world.js';
 
@@ -384,6 +386,38 @@ const eggs = [et, mario];
 // bord de mer : un phare et un food truck (emplacements dans beach.js ; ?placer pour les déplacer)
 const beach = makeBeach({ planet, scene, sections: SECTIONS, camera, canvas, R: SEA_R, quality, focus: d => flyTo(d, 48) });
 beach.groups.forEach(g => { stylizeTree(g, { cast: true, receive: true }); g.traverse(o => { if (o.isMesh && !o.material.isMeshStandardMaterial) o.castShadow = o.receiveShadow = false; }); });   // (lumières et faisceau : pas d'ombre)
+// la cascade (et le coffre au trésor derrière l'eau) ; la mine (monte-charge vers le cœur de la planète)
+const avoidDirs = [upside.van.position.clone().normalize(), ...beach.groups.map(g => g.position.clone().normalize())];
+const cascade = makeCascade({ planet, sections: SECTIONS, R: SEA_R, avoid: avoidDirs });
+scene.add(cascade.group); cascade.solids.forEach(o => stylizeTree(o, { cast: true, receive: true }));
+const mine = makeMine({ planet, sections: SECTIONS, R: SEA_R, quality, avoid: [...avoidDirs, cascade.dir] });
+scene.add(mine.surface, mine.core);
+stylizeTree(mine.surface, { cast: true, receive: true }); stylizeTree(mine.core);
+mine.surface.traverse(o => { if (o.isMesh && o.renderOrder === 0) o.renderOrder = 7; if (o.material && o.material.isShaderMaterial) o.castShadow = o.receiveShadow = false; });   // dessinés après le trou du puits
+/** Retire le décor (herbe, fleurs, buissons, rochers) sous un emplacement aménagé. */
+function clearDecor(center, rU) {
+  const c = Math.cos(rU / SEA_R), M = new THREE.Matrix4(), p = new THREE.Vector3(), Z = new THREE.Matrix4().makeScale(0, 0, 0), CATS = ['herbe', 'fleurs', 'rochers', 'buissons', 'coquillages'];
+  planet.decor.traverse(o => {
+    if (!o.isInstancedMesh || !CATS.includes(o.userData.cat)) return; let n = 0;
+    for (let i = 0; i < o.instanceMatrix.count; i++) { o.getMatrixAt(i, M); p.setFromMatrixPosition(M); if (p.lengthSq() > 0 && p.normalize().dot(center) > c) { o.setMatrixAt(i, Z); n++; } }
+    if (n) o.instanceMatrix.needsUpdate = true;
+  });
+}
+/** Abat les arbres d'une clairière (avant le calcul des collisions des troncs) : instances écrasées, troncs et directions retirés. */
+function fellTrees(center, rU) {
+  const c = Math.cos(rU / SEA_R), Z = new THREE.Matrix4().makeScale(0, 0, 0), M = new THREE.Matrix4(), p = new THREE.Vector3();
+  for (let k = planet.trunkSpots.length - 1; k >= 0; k--) {
+    const t = planet.trunkSpots[k]; if (t.d.dot(center) <= c) continue;
+    const [w, l] = planet.treeMeshes[t.m]; w.setMatrixAt(t.i, Z); l.setMatrixAt(t.i, Z); planet.trunkSpots.splice(k, 1);
+  }
+  for (let k = planet.treeDirs.length - 1; k >= 0; k--) if (planet.treeDirs[k].dot(center) > c) { planet.treeDirs.splice(k, 1); planet.treeTints.splice(k, 1); }
+  planet.treeMeshes.forEach(([w, l]) => { w.instanceMatrix.needsUpdate = true; l.instanceMatrix.needsUpdate = true; });
+  // (et les haies de buissons ornementaux qui y poussaient)
+  if (planet.bushMesh) { const b = planet.bushMesh; let n = 0; for (let i = 0; i < b.instanceMatrix.count; i++) { b.getMatrixAt(i, M); p.setFromMatrixPosition(M); if (p.lengthSq() > 0 && p.normalize().dot(center) > c) { b.setMatrixAt(i, Z); n++; } } if (n) b.instanceMatrix.needsUpdate = true; }
+}
+fellTrees(cascade.clearCenter, cascade.clearR + 1); fellTrees(mine.dir, mine.clearR + 1.2);
+clearDecor(cascade.clearCenter, cascade.clearR); clearDecor(mine.dir, mine.clearR);
+let under = false;   // sous terre, dans la caverne du noyau
 scene.children.slice(-40).forEach(o => { if (o !== avatar && o !== upside.van && o !== upside.fence) stylizeTree(o); });
 let egg = null, eggHour = 12, nearProp = null;
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
@@ -492,7 +526,7 @@ const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Ve
 function spring(xo, xk, vo, vk, target, k, c, dt) { for (let n = Math.ceil(dt * 120), h = dt / n; n > 0; n--) { vo[vk] += ((target - xo[xk]) * k - vo[vk] * c) * h; xo[xk] += vo[vk] * h; } }
 // sur l'eau, on glisse à la surface (en aéroglisseur) ; sur terre, on roule sur le sol
 const WATER_R = planet.waterR + 0.02;
-const driveR = dir => Math.max(planet.heightDir(dir), WATER_R, planet.bridgeR(dir, P.r));   // sous un pont, l'aéroglisseur passe dessous
+const driveR = dir => mine.lift.active ? mine.lift.r : under ? mine.heightDir(dir) : Math.max(planet.heightDir(dir), WATER_R, planet.bridgeR(dir, P.r));   // sous un pont, l'aéroglisseur passe dessous ; dans le monte-charge, le plancher de la cabine ; sous terre, le noyau
 const RAIL = 0.63, CAR = TUNE.voiture;   // écart max du centre de la voiture sur un pont (garde-corps à 1,05)
 let boostTouch = false;
 const crushPts = [0, 1, 2, 3].map(() => new THREE.Vector3());
@@ -628,6 +662,7 @@ function exitUpside(here = true) {
   if (here) { P.dir.copy(upside.gateDir).addScaledVector(P.fwd, 1.4 / SEA_R).normalize(); P.r = driveR(P.dir); P.speed = Math.min(Math.abs(P.speed), 2); P.vr = 0; }
 }
 function setWalk(on) {
+  if (!on && (under || mine.lift.active)) leaveMine();
   if (!on && upside.on) exitUpside(false);
   if (!on && egg) exitEgg(false);   // décoller ou ouvrir le menu des zones fait aussi revenir à la réalité
   if (on) {
@@ -656,6 +691,47 @@ function setWalk(on) {
   setHint();
 }
 walkBtn.addEventListener('click', () => setWalk(mode !== 'walk'));
+
+/* ---------- la mine : monte-charge, monde souterrain ---------- */
+const mineFade = document.createElement('div');
+mineFade.style.cssText = 'position:fixed;inset:0;background:#07040c;opacity:0;pointer-events:none;z-index:30;';
+document.body.appendChild(mineFade);
+{ const st = document.createElement('style'); st.textContent = 'body.underground .minimap{ display:none !important; }'; document.head.appendChild(st); }
+const keepUnder = new Set([mine.core, avatar, trails.group, sun.target]), underHid = new Set();
+const surfBg = scene.background.clone(), rimI = rim.intensity;
+/** Passe sous terre (on) ou revient en surface : la caverne cache tout le reste, la mini-carte disparaît, les gemmes s'affichent. */
+function setUnder(on) {
+  if (on === under) return;
+  under = on; mine.core.visible = on; mine.hud.classList.toggle('on', on); document.body.classList.toggle('underground', on);
+  if (on) scene.background = new THREE.Color('#120a20');
+  else { scene.background = surfBg; rim.intensity = rimI; for (const o of underHid) o.visible = true; underHid.clear(); }
+}
+/** La voiture (et la cabine) passent devant le trou du puits : dessinées après lui. */
+const setCarOrder = n => avatar.traverse(o => { if (o.isMesh) o.renderOrder = n; });
+const liftItem = {
+  get prompt() { return under ? 'Remonter à la surface' : 'Descendre dans la mine'; },
+  go() {
+    if (mine.lift.active) return;
+    mine.start(!under); P.speed = 0; P.vr = 0; setCarOrder(8);
+    audio.impact(1.4, 0, 'lourd'); if (audio.started) audio.sfx('alarm');
+    promptEl.classList.remove('on'); nearProp = null;
+  },
+};
+function stepMine(dt) {
+  if (!mine.lift.active) return;
+  // la voiture se range au milieu de la cabine
+  P.dir.lerp(mine.dir, 1 - Math.exp(-dt * 4)).normalize(); P.speed = 0;
+  P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd);
+  const ev = mine.stepLift(dt);
+  if (ev === 'under') setUnder(true);
+  else if (ev === 'surface') setUnder(false);
+  else if (ev === 'done') { setCarOrder(0); if (under) zoneToast('Au cœur de la planète 💎', 2200); }
+}
+/** Quitter la mine d'un coup (décollage) : la voiture se retrouve en surface, devant le chevalement. */
+function leaveMine() {
+  mine.lift.active = false; mine.lift.under = false; mine.lift.fade = 0; setCarOrder(0); setUnder(false);
+  P.dir.copy(mine.dir).addScaledVector(mine.fwd, 3.2 / SEA_R).normalize(); P.r = driveR(P.dir); P.speed = 0; P.vr = 0; P.ground = true;
+}
 /** Quitter un clin d'œil à tout moment (bouton ou Échap) : on retrouve la Jeep, posée au sol là où l'on est. */
 function quitEgg() {
   if (!upside.on && !egg) return;
@@ -703,7 +779,7 @@ const camF = new THREE.Vector3(), nUp = new THREE.Vector3(), tiltQ = new THREE.Q
 function groundAt(dir, along, side) { return driveR(tmpB.copy(dir).addScaledVector(P.fwd, along / P.r).addScaledVector(right, side / P.r).normalize()); }
 function stepWalk(dt) {
   const k = c => keys.has(c);
-  const busy = panel.classList.contains('on') || !!aim || (P.tumble && P.ground) || P.flipped || !!P.recover;   // en l'air on garde la main ; couchée au sol, non   // sur le toit : on ne conduit plus
+  const busy = panel.classList.contains('on') || !!aim || (P.tumble && P.ground) || P.flipped || !!P.recover || mine.lift.active;   // en l'air on garde la main ; couchée au sol, non   // sur le toit : on ne conduit plus
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y + gpad.y));
   P.throttle = throttle;
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x + gpad.x));
@@ -713,7 +789,7 @@ function stepWalk(dt) {
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
   // le van WSQK ne se transforme pas : dans le monde à l'envers l'eau est une nappe noire figée, il roule dessus et glisse comme sur la glace
   // le BMX survole l'eau (comme par magie), le kart glisse dessus
-  const wet = planet.heightDir(P.dir) < WATER_R - 0.03 && P.r < WATER_R + 0.2, vanOn = avatar.userData.ride !== 'jeep'; P.wet = wet;
+  const wet = !under && !mine.lift.active && planet.heightDir(P.dir) < WATER_R - 0.03 && P.r < WATER_R + 0.2, vanOn = avatar.userData.ride !== 'jeep'; P.wet = wet;
   const onWater = wet && !vanOn, onIce = wet && vanOn;
   P.hover = Math.max(0, Math.min(1, P.hover + (onWater ? 1 : -1) * dt / (vanOn ? 0.15 : 0.55)));
   P.t += dt;
@@ -771,7 +847,7 @@ function stepWalk(dt) {
       if (P.ground && gNext > P.r) P.r = gNext;
     } else P.speed *= -0.25;
   }
-  hitTrunks(dt);
+  if (!under) { hitTrunks(dt); hitCascade(); } else hitCore();
   const g = driveR(P.dir);
   if (P.ground) {
     // au sol : on suit le relief tant qu'il ne se dérobe pas plus vite que la gravité ; sinon la voiture décolle (bosses, crêtes, rampes)
@@ -870,7 +946,7 @@ function stepWalk(dt) {
       if (i > 1) return;
       avatar.localToWorld(trackPt.set(w.side * 0.37, 0, w.along));
       trackDir.copy(trackPt).normalize();
-      const sand = !bmx && P.ground && hv < 0.5 && !onBridge && Math.abs(P.ax) < 0.4 && Math.abs(P.az) < 0.4 ? planet.sandAt(trackDir) : 0;
+      const sand = !under && !mine.lift.active && !bmx && P.ground && hv < 0.5 && !onBridge && Math.abs(P.ax) < 0.4 && Math.abs(P.az) < 0.4 ? planet.sandAt(trackDir) : 0;
       if (sand < 0.25) { trackOn[i] = false; return; }
       trackPt.copy(trackDir).multiplyScalar(Math.max(planet.heightDir(trackDir), WATER_R) + 0.025);
       if (!trackOn[i]) { trackLast[i].copy(trackPt); trackOn[i] = true; return; }
@@ -902,15 +978,16 @@ function stepWalk(dt) {
   // caméra à la troisième personne, un peu en hauteur
   camF.addScaledVector(camF, 0).lerp(P.fwd, 1 - Math.exp(-dt * 1.8)); camF.addScaledVector(up, -camF.dot(up)).normalize();
   const target = tmpA.copy(avatar.position).addScaledVector(camF, -TUNE.camera.distance * camZoom - 1.4 * P.boost).addScaledVector(up, TUNE.camera.hauteur * camZoom);
-  const clear = Math.max(planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
+  const clear = Math.max(under ? mine.heightDir(tmpB.copy(target).normalize()) : planet.groundRadius(tmpB.copy(target).normalize()), P.r) + 1.2;
   if (target.length() < clear) target.setLength(clear);
+  if (under && target.length() > CEIL_R - 1.2) target.setLength(CEIL_R - 1.2);
   camera.position.lerp(target, 1 - Math.exp(-dt * 5));
   camera.up.copy(up);
   camera.lookAt(tmpB.copy(avatar.position).addScaledVector(up, 0.3).addScaledVector(camF, 0.6));
 
   // dans un cercle de zone ?
   let best = null, bd = -1; SECTIONS.forEach(s => { const d = s.dir.dot(P.dir); if (d > bd) { bd = d; best = s; } });
-  const close = bd > ZONE_COS ? best : null;
+  const close = !under && bd > ZONE_COS ? best : null;
   // arrêté sur une zone : la caméra se rapproche au plus près ; en repartant, elle revient au zoom d'avant
   zoneStill = close && Math.abs(P.speed) < 0.35 && P.ground ? zoneStill + dt : 0;
   if (zoneStill > 0.6 && camZoom > 0.56) { if (zoomAuto === null) zoomAuto = camZoom; camZoom += (0.55 - camZoom) * (1 - Math.exp(-dt * 2)); }
@@ -959,6 +1036,17 @@ function hitTrunks(dt) {
     }
   }
 }
+/** Obstacle fixe (roche, cristal) : on ressort la voiture de `depth` le long de n, rebond amorti si on fonçait dessus. */
+function pushOut(n, depth, kind = 'lourd') {
+  P.dir.addScaledVector(n, depth / P.r).normalize();
+  P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.addScaledVector(P.dir, -P.mv.dot(P.dir)).normalize();
+  tVel.copy(P.mv).multiplyScalar(P.speed);
+  const vn = tVel.dot(n);
+  if (vn < 0) { tVel.addScaledVector(n, -1.35 * vn); P.speed = tVel.dot(P.fwd); if (-vn > 1.2 && trunkCd <= 0) { trunkCd = 0.3; audio.impact(-vn * 0.9, 0, kind); } }
+}
+const carPos = new THREE.Vector3();
+function hitCascade() { const h = cascade.collide(carPos.copy(P.dir).multiplyScalar(P.r)); if (h) pushOut(h.n, h.push.length()); }
+function hitCore() { trunkCd -= 1 / 60; const h = mine.collide(P.dir, P.r); if (h) pushOut(h.n, h.depth); }
 /* ---------- biplan : au décollage la voiture se transforme, monte dans le ciel puis fait le tour de la planète ---------- */
 const plane = makeBiplane(); plane.visible = false; scene.add(plane);
 const PL = { on: false, t: 0, dir: new THREE.Vector3(), fwd: new THREE.Vector3(), r: 0, r0: 0, speed: 0, bank: 0, pitch: 0, cam: 0, roll: 0, follow: false };
@@ -1430,10 +1518,12 @@ function frame(now) {
       if (k >= 1) { if (camAnim.up) camera.up.copy(WY); camAnim = null; }
     }
     if (PL.follow) followCamera(dt); else if (PL.cam) planeCamera(); else controls.update();
-  } else if (!(egg && egg.lock)) { stepWalk(dt); if (signView) signCamera(dt); else if (signBlend) signReturn(dt); }
+  } else if (!(egg && egg.lock)) { stepMine(dt); stepWalk(dt); if (signView) signCamera(dt); else if (signBlend) signReturn(dt); }
   updatePlane(dt);
   if (zones) zones.update(dt, t, mode === 'walk' && !upside.on ? carBody : null);
   levitate(t, dt);
+  cascade.update(dt, t, camera.position, mode === 'walk' ? avatar.position : null); mine.update(dt, t, mode === 'walk' ? avatar.position : null, under);
+  mineFade.style.opacity = mine.lift.fade.toFixed(3);
   fauna.update(dt, t, mode === 'walk', avatar.position, Math.abs(P.speed), ambience.night);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   if (mode === 'walk') {
@@ -1480,6 +1570,11 @@ function frame(now) {
   ambience.update(dt, t, mode, avatar.position, camera);
   WIND.uWindT.value += dt * 0.1 * Math.max(0, WIND.uWind.value) * TUNE.herbe.vitesse;   // vent de l'herbe « Bruno » : plus il souffle, plus les rafales défilent vite (sans vent, rien ne bouge)
   beach.update(dt, ambience.night);
+  if (under) {   // la caverne : lumière violette venue des cristaux, brume sombre
+    sun.intensity = 1.15; sun.color.set('#c2a8ff'); hemi.color.set('#7d5cff'); hemi.groundColor.set('#1c1030'); hemi.intensity = 1.3;
+    ambL.color.set('#9a86ff'); ambL.intensity = 0.3; rim.intensity = 0;
+    if (scene.fog) { scene.fog.color.set('#1a0f2c'); scene.fog.near = 16; scene.fog.far = 52; }
+  }
   // van caché : on ne le traverse pas, et tout près une invite propose d'y monter
   const wasNear = nearProp; nearProp = null;
   if (mode === 'walk' && !upside.on && !egg) for (const it of PARKED) {
@@ -1503,6 +1598,11 @@ function frame(now) {
     }
     if (nearProp) { promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + nearProp.prompt; }
   }
+  if (mode === 'walk' && !upside.on && !egg && !nearProp && !aim && !mine.lift.active) {
+    if (P.ground && Math.abs(P.speed) < 2 && mine.onPad(avatar.position, under)) nearProp = liftItem;
+    else if (!under && cascade.chest.distanceTo(avatar.position) < 2.1) nearProp = cascade.item;
+    if (nearProp) { promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + nearProp.prompt; }
+  }
   if (aim) promptEl.classList.remove('on');
   else if (wasNear && !nearProp) { if (near) promptEl.textContent = (touch ? 'Ouvrir · ' : 'E · Ouvrir ') + near.label; else promptEl.classList.remove('on'); }
   nearVan = nearProp === PARKED[0];
@@ -1518,7 +1618,7 @@ function frame(now) {
       waterProbe = 0.5; let wet = 0; const c = mode === 'walk' ? P.dir : tmpA.copy(camera.position).normalize();
       const t1 = tmpB.set(0, 1, 0).cross(c).normalize(), t2 = new THREE.Vector3().crossVectors(c, t1);
       for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; if (planet.isWet(new THREE.Vector3().copy(c).addScaledVector(t1, Math.cos(a) * 3 / SEA_R).addScaledVector(t2, Math.sin(a) * 3 / SEA_R).normalize())) wet++; }
-      nearWater = mode === 'walk' ? wet / 8 : 0.35;
+      nearWater = mode === 'walk' ? (under ? 0 : Math.max(wet / 8, Math.max(0, 1 - avatar.position.distanceTo(cascade.fallPos) / 12))) : 0.35;
     }
     const bi = mode === 'walk' ? planet.bridgeAt(P.dir) : null;
     audio.update(dt,
@@ -1535,6 +1635,10 @@ function frame(now) {
   pollGamepad(dt);
   updateLabels();
   planet.cullDecor(camera.position, mode === 'walk' ? 30 : 0);   // herbe et lupins : seulement les tuiles en vue
+  if (under) {
+    const tops = new Set(); for (let o of keepUnder) { while (o.parent && o.parent !== scene) o = o.parent; tops.add(o); }   // (rangés dans un groupe de famille : on garde le groupe)
+    for (const o of scene.children) if (o.visible && !o.isLight && !tops.has(o)) { o.visible = false; underHid.add(o); }
+  }
   gateLocalLights();
   if (perfOff.post) renderer.render(scene, camera); else post.render();
   perf.end(targetFps(performance.now()));
@@ -1588,7 +1692,7 @@ sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { P, avatar, setZoom, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, et, mario, enterEgg, exitEgg, get egg() { return egg; }, get signView() { return signView; }, get zones() { return zones; } },
+  dbg: { mine, cascade, get under() { return under; }, setUnder, leaveMine, P, avatar, setZoom, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, et, mario, enterEgg, exitEgg, get egg() { return egg; }, get signView() { return signView; }, get zones() { return zones; } },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },
