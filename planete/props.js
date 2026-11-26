@@ -140,14 +140,43 @@ function letterMatcap() {
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const nx = (x + 0.5) / N * 2 - 1, ny = 1 - (y + 0.5) / N * 2, q = nx * nx + ny * ny, i = (y * N + x) * 4;
     const nz = Math.sqrt(Math.max(0, 1 - q)), d = nx * L.x + ny * L.y + nz * L.z;
-    let k = 0.58 + 0.42 * Math.max(0, d);                                   // diffus, ombres claires
-    k += 0.1 * Math.pow(Math.max(0, d), 24);                                  // petit reflet
+    let k = 0.56 + 0.4 * Math.max(0, d);                                    // diffus, ombres claires
+    k += 0.18 * Math.pow(Math.max(0, d), 10) + 0.55 * Math.pow(Math.max(0, d), 90);   // brillant : halo, puis reflet net (vernis)
+    const d2 = nx * 0.55 + ny * 0.2 + nz * 0.81; k += 0.12 * Math.pow(Math.max(0, d2), 40);   // second reflet, plus discret
     k -= 0.08 * Math.pow(Math.min(1, q), 3);                                  // bords à peine plus sombres
     const v = Math.round(255 * Math.min(1, k));
     img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = Math.round(v * 0.98 + 5); img.data[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
   MATCAP = new THREE.CanvasTexture(c); MATCAP.colorSpace = THREE.SRGBColorSpace; return MATCAP;
+}
+
+/** Paillettes des grandes lettres (comme la carrosserie de la Jeep) : chaque paillette penche à sa façon et s'allume en arc-en-ciel selon l'angle de vue. */
+const LETTER_FLAKE = { uLFlakeI: { value: 3.2 }, uLFlakeD: { value: 0.6 } };
+function letterGlitter(m) {
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, LETTER_FLAKE);
+    sh.vertexShader = 'varying vec3 vFlP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFlP = position;');
+    sh.fragmentShader = `uniform float uLFlakeI, uLFlakeD; varying vec3 vFlP;
+      float flH(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      ` + sh.fragmentShader.replace('#include <opaque_fragment>', `{
+        vec3 q = vFlP * 85.0, c = floor(q), f = fract(q) - 0.5;
+        float h = flH(c), h2 = flH(c + 17.3);
+        vec3 nf = normalize(normal + (vec3(flH(c + 3.1), flH(c + 7.7), flH(c + 11.3)) - 0.5) * 1.8);
+        vec3 V = normalize(vViewPosition), H = normalize(normalize(vec3(-0.3, 0.8, 0.5)) + V);
+        float sp = pow(max(dot(nf, H), 0.0), 10.0) * step(1.0 - uLFlakeD, h) * smoothstep(0.5, 0.2, length(f));
+        sp *= 1.0 - 0.55 * smoothstep(1.4, 3.0, length(fwidth(q)));                                // de loin, elles s'adoucissent
+        vec3 hol = mix(0.55 + 0.45 * cos(6.2832 * (h2 + vec3(0.0, 0.33, 0.67))), vec3(1.0), 0.25);   // reflets arc-en-ciel
+        // fond nacré : la teinte glisse doucement vers le rose ou le bleu selon l'angle, comme un vernis irisé
+        float fr = pow(1.0 - abs(normalize(normal).z), 2.0);
+        vec3 nacre = 0.5 + 0.5 * cos(6.2832 * (fr * 0.8 + vec3(0.0, 0.33, 0.67) + 0.15));
+        outgoingLight = mix(outgoingLight, outgoingLight * nacre * 1.25, 0.35 * fr);
+        outgoingLight += hol * sp * uLFlakeI;
+      }
+      #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'letter-flake';
+  return m;
 }
 
 export function makeCar() {
@@ -913,8 +942,8 @@ export async function buildZones(planet, sections) {
       const widths = geos.map(g => g.boundingBox.max.x - g.boundingBox.min.x), gap = 0.1;
       const total = widths.reduce((a, b) => a + b, 0) + gap * (geos.length - 1);
       // éclairage propre aux lettres (matcap) : face claire, dessus plus clair encore, côtés en douceur, quelle que soit la position du soleil
-      const letterM = new THREE.MeshMatcapMaterial({ color: CREAM, matcap: letterMatcap() });
-      const accentM = new THREE.MeshMatcapMaterial({ color, matcap: letterMatcap() });
+      const letterM = letterGlitter(new THREE.MeshMatcapMaterial({ color: CREAM, matcap: letterMatcap() }));
+      const accentM = letterGlitter(new THREE.MeshMatcapMaterial({ color, matcap: letterMatcap() }));
       for (const m of [letterM, accentM]) { m.userData.dayColor = m.color.clone(); letterMats.push(m); }
       let x = -total / 2;
       geos.forEach((g, i) => {
