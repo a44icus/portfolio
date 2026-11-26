@@ -153,11 +153,13 @@ function letterMatcap() {
 
 /** Paillettes des grandes lettres (comme la carrosserie de la Jeep) : chaque paillette penche à sa façon et s'allume en arc-en-ciel selon l'angle de vue. */
 const LETTER_FLAKE = { uLFlakeI: { value: 3.2 }, uLFlakeD: { value: 0.6 } };
-function letterGlitter(m) {
+/** tint : 0 = paillettes arc-en-ciel (lettres crème), 1 = paillettes de la couleur de la lettre (lettres de couleur). */
+function letterGlitter(m, tint = 0) {
+  const uTint = { value: tint };
   m.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, LETTER_FLAKE);
+    Object.assign(sh.uniforms, LETTER_FLAKE, { uLTint: uTint });
     sh.vertexShader = 'varying vec3 vFlP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFlP = position;');
-    sh.fragmentShader = `uniform float uLFlakeI, uLFlakeD; varying vec3 vFlP;
+    sh.fragmentShader = `uniform float uLFlakeI, uLFlakeD, uLTint; varying vec3 vFlP;
       float flH(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       ` + sh.fragmentShader.replace('#include <opaque_fragment>', `{
         vec3 q = vFlP * 85.0, c = floor(q), f = fract(q) - 0.5;
@@ -171,7 +173,9 @@ function letterGlitter(m) {
         float fr = pow(1.0 - abs(normalize(normal).z), 2.0);
         vec3 nacre = 0.5 + 0.5 * cos(6.2832 * (fr * 0.8 + vec3(0.0, 0.33, 0.67) + 0.15));
         outgoingLight = mix(outgoingLight, outgoingLight * nacre * 1.25, 0.35 * fr);
-        outgoingLight += hol * sp * uLFlakeI;
+        // lettre de couleur : paillettes de sa couleur, plus vives, plus ou moins claires d'une paillette à l'autre
+        vec3 own = mix(diffuseColor.rgb * (1.2 + 0.8 * h2), vec3(1.0), 0.15 + 0.25 * h2);
+        outgoingLight += mix(hol, own, uLTint) * sp * uLFlakeI;
       }
       #include <opaque_fragment>`);
   };
@@ -943,7 +947,7 @@ export async function buildZones(planet, sections) {
       const total = widths.reduce((a, b) => a + b, 0) + gap * (geos.length - 1);
       // éclairage propre aux lettres (matcap) : face claire, dessus plus clair encore, côtés en douceur, quelle que soit la position du soleil
       const letterM = letterGlitter(new THREE.MeshMatcapMaterial({ color: CREAM, matcap: letterMatcap() }));
-      const accentM = letterGlitter(new THREE.MeshMatcapMaterial({ color, matcap: letterMatcap() }));
+      const accentM = letterGlitter(new THREE.MeshMatcapMaterial({ color, matcap: letterMatcap() }), 1);
       for (const m of [letterM, accentM]) { m.userData.dayColor = m.color.clone(); letterMats.push(m); }
       let x = -total / 2;
       geos.forEach((g, i) => {
