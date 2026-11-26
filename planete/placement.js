@@ -20,13 +20,14 @@ import { IS_OWNER } from './owner.js';
 /** Emplacements définitifs : { clé: { dir: [x, y, z], cap, lift?, pitch?, roll?, scale? } }. */
 export const PLACES = {
   phare: { dir: [0.15324, -0.97599, -0.15478], cap: 9.7, lift: -0.135 },
-  truck: { dir: [0.29887, 0.84753, 0.43859], cap: 105, lift: 0.06, scale: 1.16 },
+  truck: { dir: [0.28098, 0.85671, 0.43255], cap: 106.1, lift: -0.009, pitch: -4.2, scale: 1.46 },
   cascade: { dir: [0.95621, 0.11179, -0.2705], cap: 168.2, lift: -0.902, pitch: 3.3, scale: 1.051 },
   coffre: { dir: [0.95581, 0.16835, -0.241], cap: -179.4, lift: -0.026, pitch: -2.6, scale: 0.799 },
   mine: { dir: [-0.11971, -0.91027, -0.39633], cap: -62.1, lift: 0.142, scale: 0.737 },
   van: { dir: [0.36701, 0.92993, 0.02329], cap: 132.1, roll: -0.1 },
   velo: { dir: [-0.18714, 0.98232, 0.00521], cap: 129 },
   tuyau: { dir: [0.23988, 0.70168, -0.67089], cap: 85, lift: 0.111 },
+  boutique: { dir: [0.34424, 0.76469, 0.54475], cap: -8.3, scale: 1.24 },
 };
 
 export const PLACING = IS_OWNER && (() => { try { return new URLSearchParams(location.search).has('placer'); } catch (e) { return false; } })();   // (réservé au propriétaire : voir owner.js)
