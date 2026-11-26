@@ -860,7 +860,8 @@ export function buildPlanet(anchors, quality = 'high') {
    */
   const cq = new THREE.Vector3();
   function crushGrass(wheels, hw, t, stride = 0) {
-    if (!grassParts.length) return;
+    if (!grassParts.length) return 0;
+    let fresh = 0;   // touffes fauchées à l'instant (pas celles déjà à terre)
     const tuftR = 0.42 * 0.6 * GRASS.uGrassW.value, reach = hw + tuftR, along = tuftR + stride; touched.clear();
     for (const { p, n } of wheels) {
       const cx = Math.floor(p.x / GC), cy = Math.floor(p.y / GC), cz = Math.floor(p.z / GC);
@@ -871,6 +872,7 @@ export function buildPlanet(anchors, quality = 'high') {
           const lat = cq.dot(n); if (Math.abs(lat) > reach || cq.lengthSq() - lat * lat > along * along) continue;
           const P = grassParts[grassOf[i]], l = grassLoc[i], arr = P.attr.array, age = t - arr[l * 4];
           const r = gaxis[i];
+          if (!(arr[l * 4] > 0 && age > 0 && age < 12)) fresh++;
           arr[l * 4] = arr[l * 4] > 0 && age > 0 && age < 12 ? t - 0.1 : t;   // déjà disparue : elle le reste, sans reclignoter
           if (GRASS_BRUNO) { arr[l * 4 + 1] = r[0] * n.x + r[1] * n.y + r[2] * n.z; arr[l * 4 + 2] = r[3] * n.x + r[4] * n.y + r[5] * n.z; arr[l * 4 + 3] = lat; }
           if (l < P.lo) P.lo = l; if (l > P.hi) P.hi = l; touched.add(P);
@@ -878,6 +880,7 @@ export function buildPlanet(anchors, quality = 'high') {
       }
     }
     for (const P of touched) { P.attr.clearUpdateRanges(); P.attr.addUpdateRange(P.lo * 4, (P.hi - P.lo + 1) * 4); P.attr.needsUpdate = true; P.lo = Infinity; P.hi = -1; }
+    return fresh;
   }
   // herbe : touffes de quatre brins effilés, du vert sombre au vert tendre, qui ondulent au vent
   {

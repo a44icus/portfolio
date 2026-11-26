@@ -21,6 +21,8 @@ import { IS_OWNER } from './owner.js';
 import { makePerf } from './perf.js';
 import { makeCascade } from './cascade.js';
 import { makeMine, CEIL_R } from './mine.js';
+import { makeHeart } from './heart.js';
+import { makeShop } from './shop.js';
 import { makeToast } from './eggkit.js';
 import { makePlacer, applyPlaces, getPlace, poseObject } from './placement.js';
 import { SAND, GRASS, TREE, BUSH, LUPIN, WIND, TILT } from './world.js';
@@ -277,6 +279,7 @@ let DATA = { settings: {}, projects: [], services: [], parcours: [], places: [],
 let openId = null;
 function openIsland(id) {
   const s = SECTIONS.find(x => x.id === id); if (!s) return;
+  shop.event('zone', 1, id);
   if (mode === 'orbit') flyTo(s.dir);
   openId = id;
   pTag.textContent = 'Zone ' + String(SECTIONS.indexOf(s) + 1).padStart(2, '0') + ' · ' + s.label;
@@ -417,8 +420,13 @@ function fellTrees(center, rU) {
   // (et les haies de buissons ornementaux qui y poussaient)
   if (planet.bushMesh) { const b = planet.bushMesh; let n = 0; for (let i = 0; i < b.instanceMatrix.count; i++) { b.getMatrixAt(i, M); p.setFromMatrixPosition(M); if (p.lengthSq() > 0 && p.normalize().dot(center) > c) { b.setMatrixAt(i, Z); n++; } } if (n) b.instanceMatrix.needsUpdate = true; }
 }
+// le sac, les missions, le glacier du food truck et la cabane des accessoires (shop.js)
+const shop = makeShop({ planet, sections: SECTIONS, R: SEA_R, scene, camera, avatar, truck: beach.groups[1], audio: () => audio, toast: (t, ms) => zoneToast(t, ms) });
+fellTrees(shop.dir, 1.7); clearDecor(shop.dir, 1.5);
 fellTrees(cascade.clearCenter, cascade.clearR + 1); fellTrees(mine.dir, mine.clearR + 1.2);
 clearDecor(cascade.clearCenter, cascade.clearR); clearDecor(mine.dir, mine.clearR);
+// le cœur de la planète : noyau d'énergie, lac, cristaux, lave, strates, course, tourbillon (heart.js)
+const heart = makeHeart({ planet, mine, audio: () => audio, cascade, getParcours: () => (DATA && DATA.parcours) || [] });
 // placement à la main des gros objets (PLACES dans placement.js ; ?placer : panneau, clic sur la planète, axes, taille, caméra libre)
 const PLACE_ITEMS = [
   { key: 'phare', label: 'Phare', obj: beach.groups[0], lift: -0.02 },
@@ -429,14 +437,21 @@ const PLACE_ITEMS = [
   { key: 'van', label: 'Van', obj: upside.van },
   { key: 'velo', label: 'Vélo E.T.', obj: et.prop },
   { key: 'tuyau', label: 'Tuyau Mario', obj: mario.prop, lift: -0.05 },
+  { key: 'portail', label: 'Tourbillon', obj: heart.surfaceWhirl },
+  { key: 'boutique', label: 'Boutique', obj: shop.cabin },
 ];
-applyPlaces(planet, PLACE_ITEMS.filter(it => it.key !== 'coffre'));
+applyPlaces(planet, PLACE_ITEMS.filter(it => it.key !== 'coffre' && it.key !== 'portail'));
 // le coffre : détaché de la grotte (une fois celle-ci posée) pour se placer tout seul ; sans emplacement choisi, il reste au fond de la grotte
 scene.attach(cascade.treasure); { const pc = getPlace('coffre'); if (pc) poseObject(planet, cascade.treasure, pc, 0); }
+// le tourbillon vers le cœur : par défaut dans la grotte de la cascade, sur le côté
+{ const pp = getPlace('portail'); heart.placeSurfaceWhirl(pp ? o => poseObject(planet, o, pp, 0) : null); }
+cascade.item.onOpen = () => shop.chest();
+{ const og = mine.onGem; mine.onGem = all => { og?.(all); shop.event('gemme'); }; }
 const placer = makePlacer({ planet, scene, camera, canvas, controls, focus: d => flyTo(d, 48), items: PLACE_ITEMS });
 let under = false;   // sous terre, dans la caverne du noyau
 scene.children.slice(-40).forEach(o => { if (o !== avatar && o !== upside.van && o !== upside.fence) stylizeTree(o); });
 let egg = null, eggHour = 12, nearProp = null;
+scene.add(heart.surface);   // (après la stylisation : le geyser et le tourbillon gardent leurs shaders)
 const ambience = makeAmbience({ scene, renderer, sun, hemi, amb: ambL, skyU, waterUniforms: planet.waterUniforms, planet, post, quality, avatar, SEA_R });
 /* ---------- objets interactifs des zones : messages, son, photo souvenir ---------- */
 const zoneToast = makeToast('top:38%; color:#fff; font-size:clamp(1.1rem, 3.6vw, 2rem); white-space:normal; width:min(86vw, 620px); line-height:1.15; -webkit-text-stroke:1.5px #1a1a40; text-shadow:0 3px 0 #1a1a40;');
@@ -536,7 +551,7 @@ const zonesReady = buildZones(planet, SECTIONS).then(z => { zones = z;
   Object.assign(z.hooks, { toast: (t, ms) => zoneToast(t, ms), sfx: k => { if (audio.started) audio.sfx(k); }, open: id => openIsland(id), data: () => DATA, img: (u, o) => IMG(u, o), photo: () => { wantShot = true; }, flash: k => {
     const fl = document.createElement('div'); fl.style.cssText = 'position:fixed;inset:0;z-index:44;pointer-events:none;background:radial-gradient(circle,rgba(200,235,255,.9),rgba(120,180,255,.35));opacity:' + (0.25 + k * 0.6) + ';transition:opacity .45s ease';
     document.body.appendChild(fl); requestAnimationFrame(() => requestAnimationFrame(() => { fl.style.opacity = '0'; })); setTimeout(() => fl.remove(), 600);
-  } }); z.bodies.onHit = (b, s) => audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
+  } }); z.bodies.onHit = (b, s) => { audio.impact(s, b.mesh.position.distanceTo(camera.position), 'bois'); if (b.mesh.userData.crate) shop.crateHit(b, s); }; world.add(z.group); stylizeTree(z.group, { cast: quality !== 'low', receive: true });   /* sur téléphone, les petits objets ne projettent pas d'ombre */ ambience.collect(z.group); });
 const P = { dir: new THREE.Vector3(), fwd: new THREE.Vector3(), mv: new THREE.Vector3(), r: 0, vr: 0, ground: true, speed: 0, steer: 0, spin: 0, hover: 0, fan: 0, t: 0, odo: 0, airT: 0, ax: 0, az: 0, wx: 0, wz: 0, sfRate: 0, srRate: 0, tumble: false, flipped: false, recover: null, lastSpeed: 0, acc: 0, boost: 0, sf: 0, sr: 0, rv: 0,
   sus: { wy: [0, 0, 0, 0], wv: [0, 0, 0, 0], y: 0, vy: 0, pitch: 0, vp: 0, roll: 0, vr: 0 } };
 /** Ressort amorti intégré en petits pas (stable même quand une image dure longtemps). */
@@ -579,7 +594,7 @@ function setHint() {
       : touch ? [['Glisser', 'tourner'], ['Pincer', 'zoomer'], ['Toucher', 'ouvrir une zone']] : [['Glisser', 'tourner'], ['Molette', 'zoomer'], ['Clic', 'ouvrir une zone']]
     : gpad.on ? [['Stick / gâchettes', 'conduire'], ['A', 'sauter'], ['B / RB', 'turbo'], ['Y', 'redresser'], ['X', 'ouvrir la zone'], ['Start', 'décoller']]
       : touch ? [['Joystick', 'conduire'], ['Turbo', 'accélérer'], ['Cercle', 'roule dedans pour ouvrir la zone']]
-        : [['ZQSD / ↑↓←→', 'conduire'], ['Maj', 'turbo'], ['Espace', 'sauter'], ['R', 'redresser'], ['Molette', 'recul'], ['E', 'ouvrir la zone']];
+        : [['ZQSD / ↑↓←→', 'conduire'], ['Maj', 'turbo'], ['Espace', 'sauter'], ['R', 'redresser'], ['Molette', 'recul'], ['K', 'klaxon'], ['E', 'ouvrir la zone']];
   let closed = false; try { closed = localStorage.getItem('planete-aide-fermee') === '1'; } catch (e) { /* rien */ }
   hintEl.innerHTML = closed ? '' : H.map(([k, t]) => `<span class="it"><span class="k">${k}</span>${t}</span>`).join('')
     + (touch ? '' : '<span class="it"><span class="k">H</span>masquer</span>') + '<button class="x" type="button" aria-label="Fermer l’aide des commandes" title="Fermer (H pour la rouvrir)">×</button>';
@@ -744,6 +759,23 @@ function stepMine(dt) {
   else if (ev === 'surface') setUnder(false);
   else if (ev === 'done') { setCarOrder(0); if (under) zoneToast('Au cœur de la planète 💎', 2200); }
 }
+/** Le tourbillon : fondu au noir, la voiture passe de la cascade au cœur (ou l'inverse), fondu. */
+let warp = null;
+heart.onWarp = toCore => { if (warp || mine.lift.active) return; warp = { t: 0, toCore, done: false }; if (audio.started) audio.sfx('pipe'); promptEl.classList.remove('on'); nearProp = null; };
+/** Pose la voiture à l'arrêt en { dir, fwd } ; la caméra suit sans traverser la planète. */
+function placeCar(a) {
+  P.dir.copy(a.dir); P.fwd.copy(a.fwd); P.mv.copy(a.fwd); camF.copy(a.fwd);
+  P.r = driveR(P.dir); P.speed = 0; P.vr = 0; P.ground = true; P.ax = P.az = P.wx = P.wz = 0; P.recover = null;
+  camera.position.copy(P.dir).multiplyScalar(P.r + TUNE.camera.hauteur).addScaledVector(P.fwd, -TUNE.camera.distance * 0.8);
+}
+function stepWarp(dt) {
+  if (!warp) return 0;
+  warp.t += dt; P.speed = 0;
+  if (warp.t > 0.6 && !warp.done) { warp.done = true; setUnder(warp.toCore); placeCar(heart.arrival(warp.toCore)); if (warp.toCore) zoneToast('Au cœur de la planète 💎', 2200); }
+  const f = warp.t < 0.6 ? warp.t / 0.6 : Math.max(0, 1 - (warp.t - 0.9) / 0.6);
+  if (warp.t > 1.5) warp = null;
+  return f;
+}
 /** Quitter la mine d'un coup (décollage) : la voiture se retrouve en surface, devant le chevalement. */
 function leaveMine() {
   mine.lift.active = false; mine.lift.under = false; mine.lift.fade = 0; setCarOrder(0); setUnder(false);
@@ -770,6 +802,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyE' && nearProp) { useIt(nearProp); return; }
   if (e.code === 'KeyE' && near) { openIsland(near.id); return; }
   if (e.code === 'KeyR') { recoverCar(); return; }
+  if (e.code === 'KeyK' && !e.repeat) { audio.start(); audio.sfx('horn'); heart.honk(avatar.position); return; }
   keys.add(e.code);
 });
 addEventListener('keyup', e => { keys.delete(e.code); if (aim && (e.code === 'Space' || e.code === 'KeyE')) releaseAim(); });
@@ -800,7 +833,7 @@ function stepWalk(dt) {
   const throttle = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0) + joy.y + gpad.y));
   P.throttle = throttle;
   const steerIn = busy ? 0 : Math.max(-1, Math.min(1, (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0) + joy.x + gpad.x));
-  if (!busy && (k('Space') || gpad.jump) && P.ground) { P.vr = Math.max(P.vr, 0) + (P.jumpV || CAR.saut); P.ground = false; takeoff(); }   // le kart saute pour de bon
+  if (!busy && (k('Space') || gpad.jump) && P.ground) { P.vr = Math.max(P.vr, 0) + (P.jumpV || CAR.saut); P.ground = false; takeoff(); shop.event('saut'); }   // le kart saute pour de bon
   const boostOn = !busy && (k('ShiftLeft') || k('ShiftRight') || boostTouch || gpad.boost) && throttle > 0;
 
   // sur l'eau la voiture devient aéroglisseur : elle file, dérive dans les virages et tourne sur place
@@ -812,7 +845,7 @@ function stepWalk(dt) {
   P.t += dt;
   const hv = P.hover;
   P.boost += ((boostOn ? 1 : 0) - P.boost) * (1 - Math.exp(-dt * 6));   // turbo : plus vite, plus nerveux
-  const vmax = (CAR.vitesse - 0.7 * hv) * (1 + CAR.turbo * P.boost) * (onIce ? 0.8 : 1) * (P.eggSpeed || 1);
+  const vmax = (CAR.vitesse - 0.7 * hv) * (1 + CAR.turbo * P.boost) * (onIce ? 0.8 : 1) * (P.eggSpeed || 1) * shop.speedK;
   if (throttle && !(throttle > 0 && P.speed >= vmax)) P.speed += throttle * (Math.sign(throttle) !== Math.sign(P.speed) && Math.abs(P.speed) > 0.2 ? 16 - 9 * hv : (CAR.acceleration - 2 * hv) * (1 + 0.9 * P.boost)) * dt * (P.ground ? 1 : 0.5);
   else if (!throttle) P.speed *= Math.exp(-dt * (P.ground ? (onIce ? 0.5 : 2.2 - 1.6 * hv) : 0.15));   // en l'air, l'élan se conserve
   if (P.speed > vmax) P.speed -= (P.speed - vmax) * (1 - Math.exp(-dt * 3));   // le turbo relâché : on ralentit en douceur
@@ -943,7 +976,8 @@ function stepWalk(dt) {
     avatar.userData.wheels.forEach((w, i) => { avatar.localToWorld(crushPts[i].set(w.side * 0.37, 0, w.along)); tyreWheels[i].p = crushPts[i]; tyreWheels[i].n = tyreSide; });
     const tNow = planet.waterUniforms.uTime.value + 0.001;
     const stride = Math.abs(P.speed) * dt;   // chemin parcouru depuis l'image d'avant : pas de trou dans la trace, même vite
-    planet.crushGrass(tyreWheels, tw, tNow, stride);
+    const mown = planet.crushGrass(tyreWheels, tw, tNow, stride);
+    if (mown) shop.event('tonte', mown * 3);   // (une touffe : trois brins sous le pneu)
     planet.crushLupins(null, 0, tNow, avatar.position, tyreWheels, tw, stride);
   }
   // l'aéroglisseur, lui, couche les lupins à l'opposé de lui
@@ -1446,7 +1480,7 @@ function setShadowBox(half, near, far) {
 // les objets garés qu'on ne traverse pas et qui proposent d'embarquer
 const PARKED = [{ obj: upside.van, half: VAN_LEN.half, front: VAN_LEN.front, rear: VAN_LEN.rear, prompt: 'Monter dans le van', go: () => enterUpside() },
   ...eggs.map(e => ({ obj: e.prop, ...e.box, prompt: e.prompt, go: () => enterEgg(e) })),
-  ...beach.solids];   // (le phare et le food truck : on bute dessus, sans invite)
+  ...beach.solids, shop.solid];   // (le phare et le food truck : on bute dessus, sans invite)
 /** Repères des clins d'œil sur la mini-carte. */
 function drawEggPin(c, q, x, y, s) {
   if (q.icon === 'bmx') {   // petit vélo rouge
@@ -1546,7 +1580,11 @@ function frame(now) {
   if (zones) zones.update(dt, t, mode === 'walk' && !upside.on ? carBody : null);
   levitate(t, dt);
   cascade.update(dt, t, camera.position, mode === 'walk' ? avatar.position : null); mine.update(dt, t, mode === 'walk' ? avatar.position : null, under);
-  mineFade.style.opacity = mine.lift.fade.toFixed(3);
+  shop.update(dt, t, { show: mode === 'walk' && !panel.classList.contains('on') && !document.body.classList.contains('placing') && !upside.on && !egg, car: mode === 'walk' ? avatar.position : null, ride: avatar.userData.ride });
+  if (zones && zones.letterMats) { const k = 1 - 0.6 * ambience.night; for (const m of zones.letterMats) m.color.copy(m.userData.dayColor).multiplyScalar(k); }
+  heart.update(dt, t, { car: mode === 'walk' ? avatar.position : null, P: mode === 'walk' ? P : null, under });
+  if (mode === 'walk' && under && !warp && !mine.lift.active) { const back = heart.lava(P); if (back) placeCar(back); }
+  mineFade.style.opacity = Math.max(mine.lift.fade, stepWarp(dt)).toFixed(3);
   fauna.update(dt, t, mode === 'walk', avatar.position, Math.abs(P.speed), ambience.night);
   // le soleil suit le regard : la face observée est toujours éclairée, de trois quarts
   if (mode === 'walk') {
@@ -1624,6 +1662,7 @@ function frame(now) {
   if (mode === 'walk' && !upside.on && !egg && !nearProp && !aim && !mine.lift.active) {
     if (P.ground && Math.abs(P.speed) < 2 && mine.onPad(avatar.position, under)) nearProp = liftItem;
     else if (!under && cascade.chest.distanceTo(avatar.position) < 2.1) nearProp = cascade.item;
+    else if (!warp) nearProp = heart.near(avatar.position, under) || (under ? null : shop.near(avatar.position));
     if (nearProp) { promptEl.classList.add('on'); promptEl.textContent = (touch ? '' : 'E · ') + nearProp.prompt; }
   }
   if (aim) promptEl.classList.remove('on');
@@ -1715,7 +1754,7 @@ sbReady.then(() => (window.loadPortfolio ? window.loadPortfolio() : DATA)).then(
 window.__planet = { open: openIsland, walk: setWalk, state: () => ({ mode, near: near && near.id, r: P.r, dir: P.dir.toArray(), hover: P.hover, speed: P.speed }),
   // tests : pose la voiture sur la côte la plus proche, face à la mer
   bridges: () => planet.bridges.length,
-  dbg: { mine, cascade, get under() { return under; }, setUnder, leaveMine, P, avatar, setZoom, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, et, mario, enterEgg, exitEgg, get egg() { return egg; }, get signView() { return signView; }, get zones() { return zones; } },
+  dbg: { mine, cascade, heart, shop, placeCar, get under() { return under; }, setUnder, leaveMine, P, avatar, setZoom, planet, driveR, keys, ambience, scene, renderer, tracks, PL, plane, fauna, camera, upside, enterUpside, exitUpside, et, mario, enterEgg, exitEgg, get egg() { return egg; }, get signView() { return signView; }, get zones() { return zones; } },
   toBridge(i = 0) { const b = planet.bridges[i]; if (!b) return false; const th = Math.max(0, b.t0 - 2 / SEA_R); P.dir.copy(b.e.point(th)); P.fwd.copy(b.e.point(th + 0.5 / SEA_R)).sub(P.dir).normalize(); P.fwd.addScaledVector(P.dir, -P.fwd.dot(P.dir)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 0; camF.copy(P.fwd); return b.len; },
   toSea() { const d = new THREE.Vector3(); let best = null, bk = 1e9; for (let i = 0; i < 6000; i++) { const y = 1 - (i + 0.5) / 3000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); const h = planet.heightDir(d); if (h < bk) { bk = h; best = d.clone(); } } P.dir.copy(best); P.fwd.crossVectors(best, new THREE.Vector3(0, 1, 0)).normalize(); P.mv.copy(P.fwd); P.r = driveR(P.dir); P.ground = true; P.speed = 0; P.hover = 1; camF.copy(P.fwd); },
   toShore() { const d = new THREE.Vector3(), best = { k: -2 }; for (let i = 0; i < 4000; i++) { const y = 1 - (i + 0.5) / 2000, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996; d.set(Math.cos(a) * r, y, Math.sin(a) * r); if (planet.isWet(d)) continue; const k = d.dot(P.dir); const o = d.clone().addScaledVector(P.fwd, 0).normalize(); if (k > best.k) { const t1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize(); for (let j = 0; j < 8; j++) { const f = t1.clone().applyAxisAngle(d, j * Math.PI / 4); if (planet.isWet(d.clone().addScaledVector(f, 1.2 / SEA_R).normalize())) { best.k = k; best.d = d.clone(); best.f = f; break; } } } } P.dir.copy(best.d); P.fwd.copy(best.f); P.mv.copy(best.f); P.r = driveR(P.dir); P.ground = true; P.speed = 0; camF.copy(P.fwd); },

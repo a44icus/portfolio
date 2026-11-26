@@ -152,8 +152,9 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
     return h + (BASE - h) * flatK(d);
   };
   const ceilH = d => CEIL_R - 1.4 * fbm(d.x * 3 - 7, d.y * 3 + 2, d.z * 3);
-  /** sol du noyau sous cette direction (unités de la scène) */
-  const heightDir = d => coreH(d);
+  /** sol du noyau sous cette direction (unités de la scène) ; les ajouts (pont, lac…) peuvent le surélever */
+  const extraH = [];
+  const heightDir = d => { let h = coreH(d); for (const f of extraH) { const e = f(d); if (e > h) h = e; } return h; };
   const botR = coreH(dir);
 
   { // le sol : facettes violettes, veines lumineuses
@@ -235,6 +236,7 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
   const crystalMesh = new THREE.InstancedMesh(cGeo, crystalM, crystals.length);
   crystals.forEach((m, i) => { crystalMesh.setMatrixAt(i, m); crystalMesh.setColorAt(i, cCols[i]); });
   crystalMesh.castShadow = true; crystalMesh.receiveShadow = true; core.add(crystalMesh);
+  const clearable = [[crystalMesh, crystals]];   // [maillage, matrices] : ce que clearArea peut retirer
 
   // stalagmites (obstacles) et stalactites
   { const sGeo = new THREE.ConeGeometry(0.5, 1, 7).translate(0, 0.5, 0), list = [];
@@ -245,7 +247,7 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
     }
     for (let n = 0; n < (low ? 120 : 220); n++) { randDir(d); list.push(orient(new THREE.Matrix4(), pos.copy(d).multiplyScalar(ceilH(d) + 0.4), d.clone().negate(), rnd() * 0.2, rnd() * 6, 0.25 + rnd() * 0.45, 1 + rnd() * 3.2)); }
     const sm = new THREE.InstancedMesh(sGeo, new THREE.MeshStandardMaterial({ color: '#5b4677', roughness: 0.95, flatShading: true }), list.length);
-    list.forEach((m, i) => sm.setMatrixAt(i, m)); sm.castShadow = sm.receiveShadow = true; core.add(sm); }
+    list.forEach((m, i) => sm.setMatrixAt(i, m)); sm.castShadow = sm.receiveShadow = true; core.add(sm); clearable.push([sm, list]); }
 
   // champignons lumineux, en petites touffes
   { const stem = new THREE.CylinderGeometry(0.04, 0.06, 0.3, 6).translate(0, 0.15, 0), cap = new THREE.SphereGeometry(0.16, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.6, 1).translate(0, 0.3, 0);
@@ -261,7 +263,7 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
     const sm = new THREE.InstancedMesh(stem, new THREE.MeshStandardMaterial({ color: '#d9d2ff', roughness: 0.8 }), stems.length);
     const cm = new THREE.InstancedMesh(cap, glowing(new THREE.MeshStandardMaterial({ roughness: 0.5 }), { inst: 1.1 }), caps.length);
     stems.forEach((m, i) => sm.setMatrixAt(i, m)); caps.forEach((m, i) => { cm.setMatrixAt(i, m); cm.setColorAt(i, new THREE.Color(i % 3 ? '#33e6ff' : '#7bff8a')); });
-    core.add(sm, cm); }
+    core.add(sm, cm); clearable.push([sm, stems], [cm, caps]); }
 
   // poussière lumineuse qui flotte dans la caverne
   const MOTES = low ? 300 : 600, motePos = new Float32Array(MOTES * 3), motes = [];
@@ -340,7 +342,7 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
   const offV = new THREE.Vector3(), nV = new THREE.Vector3();
   function collide(pdir, pr, rad = 0.42) {
     for (const o of obstacles) {
-      if (o.d.dot(pdir) < Math.cos((o.r + rad + 0.5) / CORE_R)) continue;
+      if (o.off || o.d.dot(pdir) < Math.cos((o.r + rad + 0.5) / CORE_R)) continue;
       offV.copy(pdir).sub(o.d).multiplyScalar(pr); offV.addScaledVector(pdir, -offV.dot(pdir));
       const dist = offV.length(), min = o.r + rad;
       if (dist >= min || dist < 1e-5) continue;
@@ -382,8 +384,22 @@ export function makeMine({ planet, sections, R, quality, avoid = [] }) {
   }
   cagePlace();
 
+  /** Dégage le sol autour de c (rayon r, unités) : cristaux, stalagmites et champignons retirés, obstacles levés (pour les ajouts du cœur). */
+  const zeroM = new THREE.Matrix4().makeScale(0, 0, 0), cp = new THREE.Vector3();
+  function clearArea(c, r) {
+    const cosr = Math.cos(r / CORE_R);
+    for (const [mesh, list] of clearable) {
+      let hit = false;
+      list.forEach((mm, i) => { cp.setFromMatrixPosition(mm); if (cp.length() < CORE_R + 4.5 && cp.normalize().dot(c) > cosr) { mesh.setMatrixAt(i, zeroM); hit = true; } });
+      if (hit) mesh.instanceMatrix.needsUpdate = true;
+    }
+    for (let i = obstacles.length - 1; i >= 0; i--) if (!obstacles[i].keep && obstacles[i].d.dot(c) > cosr) obstacles.splice(i, 1);
+  }
+
   const api = {
     surface, core, dir, fwd, topR, botR, heightDir, collide, lift, start, stepLift, update, onPad, hud,
+    /** pour les ajouts du cœur (heart.js) : sol nu, voûte, obstacles, gemmes, surélévations, dégagement */
+    coreH, ceilH, obstacles, gems, extraH, clearArea,
     onGem: null,
     get found() { return found; }, get total() { return gems.length; },
     /** rayon d'exclusion du décor en surface (unités) */

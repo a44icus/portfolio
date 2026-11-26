@@ -131,6 +131,25 @@ export function makeBiplane() {
   return plane;
 }
 
+/** Matcap des grandes lettres : lumière douce venue d'en haut, un peu de face et de gauche ; ombres claires (style pâte à modeler). */
+let MATCAP = null;
+function letterMatcap() {
+  if (MATCAP) return MATCAP;
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'), img = g.createImageData(N, N);
+  const L = new THREE.Vector3(-0.35, 0.75, 0.55).normalize();
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const nx = (x + 0.5) / N * 2 - 1, ny = 1 - (y + 0.5) / N * 2, q = nx * nx + ny * ny, i = (y * N + x) * 4;
+    const nz = Math.sqrt(Math.max(0, 1 - q)), d = nx * L.x + ny * L.y + nz * L.z;
+    let k = 0.58 + 0.42 * Math.max(0, d);                                   // diffus, ombres claires
+    k += 0.1 * Math.pow(Math.max(0, d), 24);                                  // petit reflet
+    k -= 0.08 * Math.pow(Math.min(1, q), 3);                                  // bords à peine plus sombres
+    const v = Math.round(255 * Math.min(1, k));
+    img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = Math.round(v * 0.98 + 5); img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  MATCAP = new THREE.CanvasTexture(c); MATCAP.colorSpace = THREE.SRGBColorSpace; return MATCAP;
+}
+
 export function makeCar() {
   const car = new THREE.Group(), body = new THREE.Group(); car.add(body);
   const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, ...o });
@@ -412,7 +431,7 @@ class Bodies {
 
 /* ---------- les zones ---------- */
 export async function buildZones(planet, sections) {
-  const group = new THREE.Group(), bodies = new Bodies(planet), glows = [];
+  const group = new THREE.Group(), bodies = new Bodies(planet), glows = [], letterMats = [];
   let font = null;
   try { font = await new FontLoader().loadAsync(FONT_URL); } catch (e) { /* sans police : pas de lettres */ }
 
@@ -871,7 +890,7 @@ export async function buildZones(planet, sections) {
     const z = planet.pavilions.find(p => p.id === s.id); if (!z) continue;
     const color = new THREE.Color(s.color);
 
-    // cercle lumineux au sol et nom de la zone imprimé devant (chacun orienté selon le sol sous lui)
+    // cercle lumineux au sol (orienté selon le sol sous lui)
     const lay = (mesh, x, y, lift) => {
       const dir = at(z, x, y);
       mesh.position.copy(dir).multiplyScalar(planet.heightDir(dir) + lift);
@@ -881,11 +900,6 @@ export async function buildZones(planet, sections) {
     const ring = lay(new THREE.Mesh(new THREE.RingGeometry(1.0, 1.18, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, toneMapped: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 })), 0, 0, 0.1);
     glows.push(ring);
     lay(new THREE.Mesh(new THREE.CircleGeometry(1.0, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 })), 0, 0, 0.1);
-    const label = canvasTex((g, w, h) => {
-      g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '800 92px Manrope, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(s.label.toUpperCase(), w / 2, h / 2 + 4);
-    }, 1024, 160);
-    lay(new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.375).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: label, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 })), 0, 1.55, 0.1);
 
     // grandes lettres en relief, alignées derrière le cercle
     if (font) {
@@ -898,8 +912,10 @@ export async function buildZones(planet, sections) {
       });
       const widths = geos.map(g => g.boundingBox.max.x - g.boundingBox.min.x), gap = 0.1;
       const total = widths.reduce((a, b) => a + b, 0) + gap * (geos.length - 1);
-      const letterM = new THREE.MeshStandardMaterial({ color: CREAM, roughness: 0.5 });
-      const accentM = new THREE.MeshStandardMaterial({ color, roughness: 0.45 });
+      // éclairage propre aux lettres (matcap) : face claire, dessus plus clair encore, côtés en douceur, quelle que soit la position du soleil
+      const letterM = new THREE.MeshMatcapMaterial({ color: CREAM, matcap: letterMatcap() });
+      const accentM = new THREE.MeshMatcapMaterial({ color, matcap: letterMatcap() });
+      for (const m of [letterM, accentM]) { m.userData.dayColor = m.color.clone(); letterMats.push(m); }
       let x = -total / 2;
       geos.forEach((g, i) => {
         const cx = x + widths[i] / 2; x += widths[i] + gap;
@@ -932,7 +948,7 @@ export async function buildZones(planet, sections) {
 
     // caisses et lanternes
     for (const [cx, cy] of [[-2.9, 0.2], [-3.3, 0.65], [-2.7, 0.75]]) {
-      const c = new THREE.Mesh(crateGeo, crateM); group.add(c);
+      const c = new THREE.Mesh(crateGeo, crateM); c.userData.crate = true; group.add(c);
       bodies.add(c, at(z, cx, cy), Math.random() * 6, { r: 0.24, topple: false });
     }
     const lampTop = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.8, roughness: 0.3 }); lampTop.userData.glow = 1.8;
@@ -1153,5 +1169,5 @@ export async function buildZones(planet, sections) {
     stepFx(dt);
     glows.forEach((g, i) => { g.material.opacity = 0.65 + 0.3 * Math.sin(t * 2.2 + i); });
   }
-  return { group, update, bodies, interactives, hooks: H };
+  return { group, update, bodies, interactives, hooks: H, letterMats };
 }

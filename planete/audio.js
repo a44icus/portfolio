@@ -13,7 +13,7 @@ const midi = n => 440 * Math.pow(2, (n - 69) / 12);
 const clamp01 = v => Math.max(0, Math.min(1, v));
 
 export function makeAudio() {
-  let ctx = null, master, bus = {}, noise, reverb;
+  let ctx = null, master, bus = {}, noise, reverb, an = null, anBuf = null;
   const S = { started: false };
 
   /* ---------- démarrage (au premier geste de l'utilisateur) ---------- */
@@ -24,6 +24,7 @@ export function makeAudio() {
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 3;
     master = ctx.createGain(); master.connect(comp); comp.connect(ctx.destination);
     for (const k of ['musique', 'ambiance', 'effets', 'vehicules']) { bus[k] = ctx.createGain(); bus[k].connect(master); }
+    an = ctx.createAnalyser(); an.fftSize = 256; anBuf = new Uint8Array(an.fftSize); bus.musique.connect(an);   // le niveau de la musique (le cœur de la planète bat avec elle)
     // réverbération douce (réponse impulsionnelle générée)
     reverb = ctx.createConvolver();
     { const len = ctx.sampleRate * 2.6, b = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -353,11 +354,27 @@ export function makeAudio() {
     else if (kind === 'pick') [69, 76, 81, 88].forEach((n, i) => beep(midi(n), t + i * 0.09, 0.6, 'sine', 0.07));
     else if (kind === 'alarm') for (let i = 0; i < 4; i++) beep(i % 2 ? 660 : 880, t + i * 0.18, 0.17, 'sawtooth', 0.035);
     else if (kind === 'fly') { const n = ctx.createBufferSource(); n.buffer = noise; const bp = filt('bandpass', 400, 0.8), g = gainNode(0); n.connect(bp); bp.connect(g); g.connect(out); g.connect(reverb); bp.frequency.exponentialRampToValueAtTime(2400, t + 3); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.12, t + 1); g.gain.linearRampToValueAtTime(0, t + 4); n.start(t); n.stop(t + 4.1); [60, 67, 72, 76, 79].forEach((m, i) => beep(midi(m + 12), t + 0.3 + i * 0.3, 1.4, 'sine', 0.04)); }
+    else if (kind === 'horn') { for (const f of [392, 494]) { const o = ctx.createOscillator(), lp = filt('lowpass', 1800), g = gainNode(0); o.type = 'square'; o.frequency.value = f; o.connect(lp); lp.connect(g); g.connect(out); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.02); g.gain.setValueAtTime(0.05, t + 0.38); g.gain.linearRampToValueAtTime(0, t + 0.45); o.start(t); o.stop(t + 0.5); } }
     else if (kind === 'boom') { const n = ctx.createBufferSource(); n.buffer = noise; const lp = filt('lowpass', 1200), g = gainNode(0); n.connect(lp); lp.connect(g); g.connect(out); g.connect(reverb); g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); lp.frequency.exponentialRampToValueAtTime(120, t + 0.8); n.start(t, Math.random()); n.stop(t + 1); }
   }
 
+  /** Niveau de la musique (0 à 1), pour faire battre les choses en rythme. */
+  function level() {
+    if (!an) return 0; an.getByteTimeDomainData(anBuf); let s2 = 0;
+    for (let i = 0; i < anBuf.length; i++) { const v = (anBuf[i] - 128) / 128; s2 += v * v; }
+    return Math.min(1, Math.sqrt(s2 / anBuf.length) * 5);
+  }
+  /** Une note de cristal (midi), claire et longue, avec de l'écho. */
+  function bell(m, v = 0.09, dur = 1.8) {
+    if (!ctx) return; const t = ctx.currentTime, f = 440 * Math.pow(2, (m - 69) / 12);
+    for (const [k, type, vol] of [[1, 'sine', v], [2, 'sine', v * 0.35], [3.01, 'triangle', v * 0.12]]) {
+      const o = ctx.createOscillator(), g = gainNode(0); o.type = type; o.frequency.value = f * k; o.connect(g); g.connect(bus.effets); g.connect(reverb);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur / k); o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+
   return {
-    start, applyVolumes, impact, thunder, radio: (dt, on, sig) => radio(dt, on, sig), click: (v, f) => ctx && click(v, f), theme, sfx,
+    start, applyVolumes, level, note: bell, impact, thunder, radio: (dt, on, sig) => radio(dt, on, sig), click: (v, f) => ctx && click(v, f), theme, sfx,
     get started() { return S.started; },
     update(dt, car, ambi) { if (!ctx) return; updateCar(dt, car); updateAmbience(dt, ambi); },
   };
