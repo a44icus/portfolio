@@ -136,5 +136,13 @@ window.PERSO_PROJECTS = [
     "url": "https://social-world-eight.vercel.app/",
     "image": "/images/perso/social-world.webp",
     "label": "Social World, réseau social dans une galaxie"
+  },
+  {
+    "title": "Atlas des Âges",
+    "tag": "Web · Histoire",
+    "meta": "L’histoire du monde sur une carte : des milliers d’événements de la Préhistoire à aujourd’hui, à parcourir sur une frise animée — 2026",
+    "url": "https://atlas-des-ages.vercel.app/",
+    "image": "/images/perso/atlas-des-ages.webp",
+    "label": "Atlas des Âges, l’histoire du monde sur une carte"
   }
 ];

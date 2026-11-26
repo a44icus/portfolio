@@ -175,6 +175,8 @@ h1,h2,h3{ font-weight:800; letter-spacing:-.03em; line-height:1.03; margin:0; }
 .proj .t{ font-weight:800; font-size:1.4rem; margin:.35rem 0 .2rem; letter-spacing:-.02em; }
 .proj .m{ font-size:.9rem; color:var(--muted); }
 .perso-grid .proj .thumb{ aspect-ratio:16/10; background-position:center top; }
+.perso-grid > .proj:last-child:nth-child(odd){ grid-column:1 / -1; }
+.perso-grid > .proj:last-child:nth-child(odd) .thumb{ aspect-ratio:21/9; }
 @media (max-width:720px){ .bento{ grid-template-columns:1fr; } }
 
 /* ---------- MÉTHODE ---------- */
