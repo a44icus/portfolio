@@ -734,7 +734,8 @@ const surfBg = scene.background.clone(), rimI = rim.intensity;
 /** Passe sous terre (on) ou revient en surface : la caverne cache tout le reste, la mini-carte disparaît, les gemmes s'affichent. */
 function setUnder(on) {
   if (on === under) return;
-  under = on; mine.core.visible = on; mine.hud.classList.toggle('on', on); document.body.classList.toggle('underground', on);
+  under = on; if (!mine.lift.active) mine.lift.under = on;   // (arrivé par le tourbillon : le monte-charge sait qu'on est en bas)
+  mine.core.visible = on; mine.hud.classList.toggle('on', on); document.body.classList.toggle('underground', on);
   if (on) scene.background = new THREE.Color('#120a20');
   else { scene.background = surfBg; rim.intensity = rimI; for (const o of underHid) o.visible = true; underHid.clear(); }
 }

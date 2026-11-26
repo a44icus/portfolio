@@ -183,6 +183,19 @@ export function makeHeart({ planet, mine, audio, cascade, getParcours }) {
     }
   }
   const obst = (d, r, extra = {}) => { const o = { d: d.clone(), r, keep: true, ...extra }; mine.obstacles.push(o); return o; };
+  /** Un panneau tenu par deux poteaux, de part et d'autre (et non un poteau planté au milieu) : posé en (a, s) du repère F, tourné de yaw ; y : hauteur de son centre. */
+  const pv = new THREE.Vector3();
+  function signBoard(F, a, s, face, w, h, y, yaw, postM) {
+    const g = new THREE.Group(); F.pose(g, a, s, 0, yaw); group.add(g);
+    face.position.y = y; g.add(face);
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(w, h), postM); back.rotation.y = Math.PI; back.position.set(0, y, -0.01); g.add(back);
+    const H = y + h / 2 + 0.25;
+    for (const x of [-(w / 2 + 0.05), w / 2 + 0.05]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.09, H, 0.09).translate(0, H / 2, 0), postM); post.position.set(x, -0.25, -0.03); g.add(post);
+      g.updateMatrixWorld(true); obst(post.getWorldPosition(pv).normalize(), 0.18);
+    }
+    return g;
+  }
 
   const stone = new THREE.MeshStandardMaterial({ color: '#4d3c70', roughness: 0.95, flatShading: true });
   const wood = new THREE.MeshStandardMaterial({ color: '#8a5a3a', roughness: 0.9 });
@@ -255,8 +268,7 @@ export function makeHeart({ planet, mine, audio, cascade, getParcours }) {
     const pilM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 1, 0.18).translate(0, 0.5, 0), woodD, pil.length); pil.forEach((mm, i) => pilM.setMatrixAt(i, mm)); group.add(pilM);
     // panneau à l'entrée du pont
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.75), new THREE.MeshStandardMaterial({ roughness: 0.8, map: signTex(256, 128, (g, w, h) => { g.fillStyle = '#3a2416'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ffcc66'; g.lineWidth = 6; g.strokeRect(5, 5, w - 10, h - 10); g.fillStyle = '#ffe2a8'; g.textAlign = 'center'; g.font = '900 34px Arial Black, sans-serif'; g.fillText('PONT CASSÉ', w / 2, 52); g.font = '700 24px Arial, sans-serif'; g.fillText('Élan… turbo (Maj) !', w / 2, 94); }) }));
-    FR.pose(sign, B.out0 + 0.8, 1.8, 1.0, Math.PI); group.add(sign);
-    const sp = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.0, 0.08).translate(0, 0.5, 0), woodD); FR.pose(sp, B.out0 + 0.8, 1.8, 0); group.add(sp); obst(FR.dir(B.out0 + 0.8, 1.8), 0.2); }
+    signBoard(FR, B.out0 + 0.8, 1.8, sign, 1.5, 0.75, 1.0, 0, woodD); }
 
   /* ---------- la salle secrète, sur l'île, derrière le noyau ---------- */
   const ROOM_A = -3.4, ROOM_R = 2.0;
@@ -325,8 +337,7 @@ export function makeHeart({ planet, mine, audio, cascade, getParcours }) {
     choir.push({ m, c, p: d.clone().multiplyScalar(G(d) + 0.4), k: 0, cd: 0 });
   }
   { const plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.6), new THREE.MeshStandardMaterial({ roughness: 0.9, map: signTex(320, 120, (g, w, h) => { g.fillStyle = '#2b2240'; g.fillRect(0, 0, w, h); g.strokeStyle = '#c9a6ff'; g.lineWidth = 5; g.strokeRect(4, 4, w - 8, h - 8); g.fillStyle = '#efe4ff'; g.textAlign = 'center'; g.font = '700 22px Arial, sans-serif'; g.fillText('Touche les cristaux…', w / 2, 44); g.font = '900 26px Arial, sans-serif'; g.fillText('♪ ' + MELODY.map(i => NOTE_NAMES[i]).join(' · ') + ' ♪', w / 2, 86); }) }));
-    FC.pose(plaque, 0.6, 0, 0.5, Math.PI); group.add(plaque);
-    const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.12).translate(0, 0.25, 0), stone); FC.pose(st, 0.62, 0, 0); group.add(st); obst(FC.dir(0.62, 0), 0.2); }
+    signBoard(FC, 0.9, 0, plaque, 1.6, 0.6, 0.6, 0, stone); }
   const heard = []; let melodyT = 0;
   // étincelles de la mélodie
   const SPK = 90, spkPos = new Float32Array(SPK * 3), spk = []; for (let i = 0; i < SPK; i++) spk.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), life: 0 });
@@ -357,8 +368,7 @@ export function makeHeart({ planet, mine, audio, cascade, getParcours }) {
     FS.pose(sl, a, s, -0.1, 0, toC); sl.rotateX(-0.08); group.add(sl); obst(d, 0.85); slabs.push(sl);
   }
   { const intro = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.55), new THREE.MeshStandardMaterial({ roughness: 0.9, map: signTex(360, 110, (g, w, h) => { g.fillStyle = '#2b2240'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ffd88a'; g.lineWidth = 5; g.strokeRect(4, 4, w - 8, h - 8); g.fillStyle = '#ffe9c2'; g.textAlign = 'center'; g.font = '900 28px Arial Black, sans-serif'; g.fillText('STRATES', w / 2, 46); g.font = '600 20px Arial, sans-serif'; g.fillText('les couches de mon parcours', w / 2, 82); }) }));
-    FS.pose(intro, 1.2, 0, 0.55, Math.PI); group.add(intro);
-    const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.12).translate(0, 0.27, 0), stone); FS.pose(st, 1.22, 0, 0); group.add(st); obst(FS.dir(1.22, 0), 0.2); }
+    signBoard(FS, 1.4, 0, intro, 1.8, 0.55, 0.6, 0, stone); }
   let parcoursKey = '';
   function refreshSlabs() {
     let list = []; try { list = (getParcours && getParcours()) || []; } catch (e) { list = []; }
@@ -611,7 +621,7 @@ export function makeHeart({ planet, mine, audio, cascade, getParcours }) {
     onWarp: null, onComplete: null,
     get done() { return done; },
     /** pour les essais */
-    dbg: { RX, LX, CX, SX, PX, gates, reactorPos, FR, B, LV, get deposited() { return deposited; }, set deposited(v) { deposited = v; setHud(); }, complete },
+    dbg: { RX, LX, CX, SX, PX, FC, FS, gates, reactorPos, FR, B, LV, get deposited() { return deposited; }, set deposited(v) { deposited = v; setHud(); }, complete },
   };
   return api;
 }

@@ -50,16 +50,17 @@ const ACCESSORIES = [
 ];
 
 const css = `
-.sacHud{position:fixed;left:max(16px,env(safe-area-inset-left));top:72px;z-index:24;display:none;gap:8px;align-items:center;padding:7px 12px;border-radius:999px;background:rgba(26,26,64,.82);color:#fff;font:800 14px/1 Manrope,Arial,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}
+.sacHud{position:fixed;left:max(16px,env(safe-area-inset-left));top:72px;z-index:24;display:none;gap:8px;align-items:center;padding:7px 12px;border-radius:999px;background:rgba(26,26,64,.82);color:#fff;font:800 14px/1 Manrope,Arial,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;border:0}
+.sacHud:hover{background:rgba(46,40,100,.9)}.sacHud .gar{font-size:11px;font-weight:800;opacity:.75;margin-left:2px}
 .sacHud.on{display:flex}
 .pc{display:inline-block;width:.95em;height:.95em;border-radius:50%;background:radial-gradient(circle at 35% 32%,#fff6b8,#ffcf2e 45%,#d68a00);box-shadow:inset 0 0 0 1.5px #b07000;vertical-align:-.14em;font-style:normal}.sacHud .coins{color:#ffd84a}.sacHud .pop{animation:sacPop .5s ease}
 @keyframes sacPop{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
-.missionBub{position:fixed;left:0;top:0;z-index:25;display:none;width:min(240px,62vw);padding:10px 12px 11px;border-radius:16px;background:#fff;color:#1a1a40;font:700 13px/1.25 Manrope,Arial,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.22);transform:translate(0,-100%);pointer-events:none}
+.missionBub{position:fixed;left:0;top:0;z-index:25;display:none;width:min(240px,62vw);padding:10px 12px 11px;border-radius:16px;background:#fff;color:#1a1a40;font:700 13px/1.25 Manrope,Arial,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.22);will-change:transform;pointer-events:none}
 .missionBub::after{content:'';position:absolute;left:-7px;bottom:12px;border:8px solid transparent;border-right-color:#fff;border-left:0}
 .missionBub .ttl{display:flex;justify-content:space-between;font:900 10px/1 Manrope,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7a5cff;margin-bottom:5px}
 .missionBub .ttl b{color:#c48a00;letter-spacing:0}
-.missionBub .bar{height:6px;border-radius:6px;background:#ece8ff;margin-top:7px;overflow:hidden}.missionBub .bar i{display:block;height:100%;background:linear-gradient(90deg,#7a5cff,#ff5fae);border-radius:6px;transition:width .25s}
-.missionBub .ct{float:right;font-weight:900;color:#7a5cff}
+.missionBub .row{display:flex;align-items:center;gap:8px;margin-top:7px}.missionBub .bar{flex:1;height:6px;border-radius:6px;background:#ece8ff;overflow:hidden}.missionBub .bar i{display:block;height:100%;background:linear-gradient(90deg,#7a5cff,#ff5fae);border-radius:6px;transition:width .25s}
+.missionBub .ct{font-weight:900;color:#7a5cff;font-variant-numeric:tabular-nums;font-size:11px}
 .missionBub.done{background:#fff8d6}.missionBub.done .ttl{color:#c48a00}
 .stall{position:fixed;left:50%;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 76px);transform:translateX(-50%) translateY(12px);z-index:27;display:none;flex-direction:column;gap:6px;width:min(380px,92vw);max-height:60vh;overflow:auto;padding:12px;border-radius:18px;background:#fffdf8;color:#1a1a40;font:700 14px/1.2 Manrope,Arial,sans-serif;box-shadow:0 14px 40px rgba(0,0,0,.3);opacity:0;transition:opacity .2s,transform .2s}
 .stall.on{display:flex}.stall.show{opacity:1;transform:translateX(-50%)}
@@ -175,10 +176,11 @@ export function makeShop({ planet, sections, R, scene, camera, avatar, truck, au
   const save = () => { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { /* rien */ } };
   const nFruits = () => Object.values(S.fruits).reduce((a, b) => a + b, 0);
 
-  const hud = document.createElement('div'); hud.className = 'sacHud'; document.body.appendChild(hud);
+  const hud = document.createElement('button'); hud.type = 'button'; hud.className = 'sacHud'; hud.title = 'Mon garage : mettre ou retirer les accessoires (touche I)'; document.body.appendChild(hud);
+  hud.addEventListener('click', e => { e.stopPropagation(); A()?.start?.(); openStall('garage'); });
   function drawHud(pop) {
     const fr = Object.entries(S.fruits).filter(([, n]) => n > 0).map(([k, n]) => `<span>${FRUITS[k]}${n}</span>`).join('');
-    hud.innerHTML = `<span class="coins${pop === 'coins' ? ' pop' : ''}"><i class="pc"></i> ${S.pieces}</span>` + (fr ? `<span${pop === 'fruit' ? ' class="pop"' : ''} style="display:flex;gap:6px">${fr}</span>` : '');
+    hud.innerHTML = `<span class="coins${pop === 'coins' ? ' pop' : ''}"><i class="pc"></i> ${S.pieces}</span>` + (fr ? `<span${pop === 'fruit' ? ' class="pop"' : ''} style="display:flex;gap:6px">${fr}</span>` : '') + (S.owned.length ? '<span class="gar">🔧 garage</span>' : '');
   }
   drawHud();
   function addCoins(n, why) {
@@ -193,10 +195,12 @@ export function makeShop({ planet, sections, R, scene, camera, avatar, truck, au
   const GAP = 5 * 60 * 1000;   // une nouvelle mission toutes les 5 minutes
   const waiting = () => Date.now() < (S.wait || 0);
   let wasWaiting = waiting();
+  const FIRST = 60 * 1000;   // la toute première mission arrive une minute après l'atterrissage
+  const bp = { x: 0, y: 0, on: false };   // position lissée de la bulle (pas de tremblement avec la suspension)
   function drawBub() {
     const M = cur(), html = doneT > 0
       ? `<div class="ttl"><span>Mission réussie !</span><b>+${missionAt(S.m - 1).gain} <i class="pc"></i></b></div>Bravo ! Voici tes pièces d’or. Prochaine mission dans 5 minutes.`
-      : `<div class="ttl"><span>Mission ${S.m + 1}</span><b>+${M.gain} <i class="pc"></i></b></div>${M.text(M.goal)}${M.goal > 1 ? `<span class="ct">${Math.min(S.p, M.goal)} / ${M.goal}</span>` : ''}<div class="bar"><i style="width:${Math.min(100, S.p / M.goal * 100).toFixed(1)}%"></i></div>`;
+      : `<div class="ttl"><span>Mission ${S.m + 1}</span><b>+${M.gain} <i class="pc"></i></b></div>${M.text(M.goal)}<div class="row"><div class="bar"><i style="width:${Math.min(100, S.p / M.goal * 100).toFixed(1)}%"></i></div>${M.goal > 1 ? `<span class="ct">${Math.min(S.p, M.goal)} / ${M.goal}</span>` : ''}</div>`;
     if (html !== lastHtml) { bub.innerHTML = html; lastHtml = html; bub.classList.toggle('done', doneT > 0); }
   }
   let saveT = 0;
@@ -277,14 +281,24 @@ export function makeShop({ planet, sections, R, scene, camera, avatar, truck, au
       ],
     };
   }
+  /** Le garage : partout, on met ou on retire ce qu'on a acheté. */
+  function rowsGarage() {
+    const own = ACCESSORIES.filter(a => S.owned.includes(a.id));
+    const nf = nFruits(), fr = Object.entries(S.fruits).filter(([, n]) => n > 0).map(([k, n]) => FRUITS[k] + ' ' + n).join('  ');
+    return {
+      title: 'Mon garage 🔧', sub: own.length ? 'Touche un accessoire pour le mettre ou le retirer.' + (nf ? ' Panier : ' + fr : '') : 'Pas encore d’accessoire : la boutique en bois en vend, près du food truck.' + (nf ? ' Panier : ' + fr : ''),
+      rows: own.map(a => { const on = S.on.includes(a.id); return { icon: a.icon, label: a.name, price: on ? 'Retirer' : 'Mettre', on, ok: true, go() { toggleAcc(a.id); } }; }),
+    };
+  }
+  function toggleAcc(id) { S.on = S.on.includes(id) ? S.on.filter(x => x !== id) : S.on.concat(id); save(); applyAcc(); sfx('pick'); }
   function rowsShop() {
     return {
       title: 'La boutique d’accessoires 🔧', sub: 'Achète une fois, puis mets ou retire l’accessoire quand tu veux.',
       rows: ACCESSORIES.map(a => {
         const own = S.owned.includes(a.id), on = S.on.includes(a.id);
         return { icon: a.icon, label: a.name, price: own ? (on ? 'Retirer' : 'Mettre') : a.price + ' <i class="pc"></i>', on, ok: own || S.pieces >= a.price, go() {
-          if (!own) { addCoins(-a.price); S.owned.push(a.id); S.on.push(a.id); save(); applyAcc(); say(a.icon + ' ' + a.name + ' : installé sur ta Jeep !', 2200); sfx('power'); event('accessoire'); return; }
-          S.on = on ? S.on.filter(x => x !== a.id) : S.on.concat(a.id); save(); applyAcc(); sfx('pick');
+          if (!own) { addCoins(-a.price); S.owned.push(a.id); S.on.push(a.id); save(); applyAcc(); drawHud(); say(a.icon + ' ' + a.name + ' : installé sur ta Jeep !', 2200); sfx('power'); event('accessoire'); return; }
+          toggleAcc(a.id);
         } };
       }),
     };
@@ -293,7 +307,7 @@ export function makeShop({ planet, sections, R, scene, camera, avatar, truck, au
   function eat(s, msg) { iceT = s; say(msg, 2600); sfx('power'); event('glace'); }
   function render() {
     if (!open) return;
-    const D = open === 'truck' ? rowsTruck() : rowsShop();
+    const D = open === 'truck' ? rowsTruck() : open === 'garage' ? rowsGarage() : rowsShop();
     stall.innerHTML = `<button class="x" type="button" aria-label="Fermer">×</button><h3>${D.title}<small><i class="pc"></i> ${S.pieces}</small></h3><div class="sub">${D.sub}</div>`;
     D.rows.forEach((r, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.disabled = !r.ok; if (r.on) b.classList.add('on');
@@ -310,6 +324,7 @@ export function makeShop({ planet, sections, R, scene, camera, avatar, truck, au
   }
   function close() { open = null; stall.classList.remove('show'); setTimeout(() => { if (!open) stall.classList.remove('on'); }, 200); }
   addEventListener('keydown', e => {
+    if (e.code === 'KeyI' && !e.repeat && hud.classList.contains('on') && !(e.target && /input|textarea/i.test(e.target.tagName))) { openStall('garage'); e.stopImmediatePropagation(); return; }
     if (!open) return;
     if (e.key === 'Escape') { close(); return; }
     const n = +e.key; if (n >= 1 && stall._rows && n <= stall._rows.length) { const r = stall._rows[n - 1]; if (r.ok) { r.go(); render(); } e.stopImmediatePropagation(); }
@@ -343,16 +358,20 @@ export function makeShop({ planet, sections, R, scene, camera, avatar, truck, au
       if (k >= 1) { scene.remove(f.m); flying.splice(i, 1); gotFruit(f.kind); }
     }
     hud.classList.toggle('on', show);
-    if (open && (!show || !car || car.distanceTo(open === 'truck' ? truckWindow() : cab.group.position) > 3.2)) close();
+    if (open && (!show || !car || (open !== 'garage' && car.distanceTo(open === 'truck' ? truckWindow() : cab.group.position) > 3.2))) close();
     // la mission suivante arrive cinq minutes après la précédente
+    if (show && car && !S.first) { S.first = 1; if (S.m === 0 && !S.p) { S.wait = Date.now() + FIRST; wasWaiting = true; } save(); }
     if (wasWaiting && !waiting()) { wasWaiting = false; sfx('pick'); say('Nouvelle mission ! ✉️', 1800); }
-    if (!show || !car || (doneT <= 0 && waiting())) { bub.style.display = 'none'; return; }
+    if (!show || !car || (doneT <= 0 && waiting())) { bub.style.display = 'none'; bp.on = false; return; }
     drawBub();
+    camera.updateMatrixWorld();   // (la caméra vient de bouger : sans cela, la bulle a une image de retard et tremble)
     up.copy(car).normalize(); v.copy(car).addScaledVector(up, 1.15).project(camera);
-    if (v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) { bub.style.display = 'none'; return; }
+    if (v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) { bub.style.display = 'none'; bp.on = false; return; }
     bub.style.display = 'block';
-    const x = (v.x + 1) / 2 * innerWidth + 70, y = (1 - v.y) / 2 * innerHeight + 40;
-    bub.style.left = Math.min(innerWidth - bub.offsetWidth - 10, x).toFixed(0) + 'px'; bub.style.top = Math.max(bub.offsetHeight + 60, y).toFixed(0) + 'px';
+    const x = Math.min(innerWidth - bub.offsetWidth - 10, (v.x + 1) / 2 * innerWidth + 70), y = Math.max(bub.offsetHeight + 60, (1 - v.y) / 2 * innerHeight + 40);
+    // la bulle suit la voiture en douceur : les petites secousses (suspension, caméra) sont gommées
+    if (!bp.on) { bp.x = x; bp.y = y; bp.on = true; } else { const k = 1 - Math.exp(-dt * 22); bp.x += (x - bp.x) * k; bp.y += (y - bp.y) * k; }
+    bub.style.transform = `translate3d(${bp.x.toFixed(1)}px, ${(bp.y - bub.offsetHeight).toFixed(1)}px, 0)`;
   }
 
   return {
