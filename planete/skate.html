@@ -22,6 +22,12 @@
   #combo .pts { font-weight: 800; font-size: 15px; color: #fff; text-shadow: 0 2px 10px rgba(40,10,60,.55); font-variant-numeric: tabular-nums; }
   #combo.bank .pts { color: var(--lime); }
   #combo.lost .pts, #combo.lost .names { color: #ffb3c7; text-decoration: line-through; }
+  #combo .style { font-weight: 800; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; text-shadow: 0 2px 10px rgba(40,10,60,.55); }
+  #combo .style.show { opacity: 1; transform: none; }
+  #combo .style.up { color: var(--lime); }
+  #combo .style.down { color: #ffb3c7; }
+  #score .bar { width: 120px; height: 6px; margin: 3px 0 2px auto; border-radius: 3px; background: rgba(255,255,255,.14); overflow: hidden; }
+  #score .bar i { display: block; height: 100%; width: 30%; border-radius: 3px; background: linear-gradient(90deg, #ff5fa8, #e4ff3a); transition: width .25s; }
   #toast { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(.9); font-weight: 800; font-size: 34px; color: #fff; text-shadow: 0 3px 14px rgba(40,10,60,.6); opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; white-space: nowrap; }
   #toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   #help { position: fixed; left: 14px; bottom: 14px; padding: 10px 14px; font-size: 12.5px; max-width: 380px; }
@@ -45,9 +51,9 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="combo"><div class="names"></div><div class="pts"></div></div>
+<div id="combo"><div class="names"></div><div class="pts"></div><div class="style"></div></div>
 <div id="toast"></div>
-<div id="score" class="pill"><small>Score</small><b id="sc">0</b><small>Meilleur combo : <span id="best">0</span></small></div>
+<div id="score" class="pill"><small>Score</small><b id="sc">0</b><small>Meilleur combo : <span id="best">0</span></small><br><small>Steez <span id="stzn">30</span></small><div class="bar"><i id="stz"></i></div></div>
 <div id="speed" class="pill">0 km/h</div>
 <canvas id="stick" width="240" height="240"></canvas>
 <div id="help" class="pill">
@@ -59,6 +65,8 @@
     <tr><td>clic gauche glissé</td><td>figures au « flick » (le stick virtuel en bas à droite)</td></tr>
     <tr><td><kbd>Espace</kbd></td><td>ollie (appuyer, relâcher)</td></tr>
     <tr><td>clic droit / <kbd>F</kbd></td><td>grab en l'air</td></tr>
+    <tr><td><kbd>Maj</kbd> (+ <kbd>Q</kbd>/<kbd>D</kbd>)</td><td>powerslide (maintenir) : la planche se met en travers et freine</td></tr>
+    <tr><td><kbd>E</kbd></td><td>revert : demi-tour à plat, juste après une réception il prolonge le combo</td></tr>
     <tr><td><kbd>R</kbd> · <kbd>T</kbd></td><td>revenir au départ · ralenti</td></tr>
   </table>
   <table class="tricks" style="margin-top:6px">
@@ -69,7 +77,8 @@
     <tr><td>↓ ← ↑ → (¾ de cercle)</td><td>360 flip</td></tr>
     <tr><td>↑ puis ↓ ↙ ↘</td><td>nollie, nollie kickflip, nollie heelflip</td></tr>
   </table>
-  <p style="margin:6px 0 0">Retombe sur un rail ou un bord de module pour glisser (50-50, boardslide). Manette : stick gauche pour tourner, stick droit pour les figures, A pousser, B freiner, gâchettes pour grab.</p>
+  <p style="margin:6px 0 0"><b>Steez</b> : la jauge de style monte avec les réceptions propres, les grabs tenus, les figures variées, les reverts et powerslides en fin de ligne ; elle multiplie les points du combo. Elle baisse quand on se répète, qu'on rattrape une réception de travers ou qu'on chute.</p>
+  <p style="margin:6px 0 0">Retombe sur un rail ou un bord de module pour glisser (50-50, boardslide). Manette : stick gauche pour tourner, stick droit pour les figures, A pousser, B freiner, X revert, LB/RB powerslide, gâchettes pour grab.</p>
   </div>
 </div>
 <script type="module" src="./skate.js"></script>

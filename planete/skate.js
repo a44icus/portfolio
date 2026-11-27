@@ -92,6 +92,15 @@ function unroll(yaw, n, out) {
   return out.set(a * _u.x + b * wx, a * _u.y, a * _u.z + b * wz);
 }
 const yawOf = (x, z) => Math.atan2(x, z);
+const wrapA = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+function slopeYaw(v, n) {   // le cap dont la direction sur la pente (unroll) suit v
+  const gl = Math.hypot(n.x, n.z);
+  if (gl < 1e-4) return yawOf(v.x, v.z);
+  const uhx = -n.x / gl, uhz = -n.z / gl, wx = uhz, wz = -uhx, d = uhx * n.x + uhz * n.z;
+  _u.set(uhx - d * n.x, -d * n.y, uhz - d * n.z).normalize();
+  const a = v.dot(_u), b = v.x * wx + v.z * wz;
+  return yawOf(a * uhx + b * wx, a * uhz + b * wz);
+}
 
 // ---------- rails et bords où l'on glisse
 const RAILS = [];
@@ -425,6 +434,9 @@ const S = {
   mode: 'ground', tAir: 0, lip: false, vy0: 1, nTake: new V3(0, 1, 0), spun: 0, grabT: 0,
   trick: null, boardOff: 0, grind: null, bailT: 0, safe: { p: new V3(0, 0, 2), yaw: Math.PI }, safeT: 0,
   squash: 0, lean: 0,
+  slide: 0, slideSide: 1, slideT: 0, rev: 0,          // powerslide (angle de la planche en travers) et revert (demi-tour à plat)
+  pendT: 0, chain: false,                             // la ligne reste ouverte un instant après la réception (revert, powerslide)
+  steez: 30, recent: [], grabVis: 0,                  // le style : propreté des réceptions, grabs, variété des figures
 };
 const f = new V3(), f2 = new V3(), n2 = new V3(), side = new V3(), vt = new V3(), tmp = new V3();
 
@@ -455,13 +467,13 @@ const $combo = document.getElementById('combo'), $names = $combo.querySelector('
 function showCombo(cls = '') {
   $combo.className = cls;
   $names.textContent = C.list.slice(-6).join(' + ');
-  $pts.textContent = C.mult ? `${Math.round(C.pts)} × ${C.mult}` : '';
+  $pts.textContent = C.mult ? `${Math.round(C.pts)} × ${C.mult}${S.steez >= 1 ? ` · steez +${Math.round(S.steez)} %` : ''}` : '';
   comboShowT = 0;
 }
 function addCombo(name, pts) { C.list.push(name); C.pts += pts; C.mult++; showCombo(); }
 function bankCombo() {
   if (!C.mult) return;
-  const tot = Math.round(C.pts * C.mult);
+  const tot = Math.round(C.pts * C.mult * (1 + S.steez / 100));
   score += tot; best = Math.max(best, tot);
   document.getElementById('sc').textContent = score; document.getElementById('best').textContent = best;
   $pts.textContent = '+' + tot; $combo.className = 'bank'; comboShowT = 0;
@@ -469,6 +481,12 @@ function bankCombo() {
 }
 function loseCombo() { if (C.mult) { $combo.className = 'lost'; comboShowT = 0; } C.list = []; C.pts = 0; C.mult = 0; }
 let toastT = 0; const $toast = document.getElementById('toast');
+const $style = $combo.querySelector('.style'), $stz = document.getElementById('stz'), $stzN = document.getElementById('stzn');
+let styleT = 0;
+function steez(v, word) {
+  S.steez = clamp(S.steez + v, 0, 100);
+  if (word) { $style.textContent = word; $style.className = 'style show ' + (v > 0 ? 'up' : 'down'); styleT = 1.2; }
+}
 function toast(t) { $toast.textContent = t; $toast.classList.add('show'); toastT = 1.1; }
 
 // ---------- son (bruit filtré : roulement, glisse ; petits chocs)
@@ -501,6 +519,7 @@ addEventListener('keydown', e => {
   keys.add(e.code);
   if (e.code === 'Space') { kbCrouch = true; e.preventDefault(); }
   if (e.code === 'KeyR') respawn();
+  if (e.code === 'KeyE') doRevert();
   if (e.code === 'KeyT') { slow = !slow; toast(slow ? 'Ralenti' : 'Vitesse normale'); }
   const quick = { Digit1: 'kickflip', Digit2: 'heelflip', Digit3: 'bsshove', Digit4: 'tre' }[e.code];
   if (quick) doTrick(quick, 1);
@@ -639,12 +658,13 @@ function readPad() {
       steer: -dz(p.axes[0] || 0), rx: dz(p.axes[2] || 0), ry: -dz(p.axes[3] || 0),
       push: p.buttons[0]?.pressed, brake: p.buttons[1]?.pressed, reset: p.buttons[3]?.pressed,
       grab: (p.buttons[6]?.value || 0) > 0.3 || (p.buttons[7]?.value || 0) > 0.3,
+      slideL: p.buttons[4]?.pressed, slideR: p.buttons[5]?.pressed, rev: p.buttons[2]?.pressed,
     };
   }
   return null;
 }
-let padReset = false;
-const input = { steer: 0, push: false, brake: false, grab: false, crouch: false };
+let padReset = false, padRev = false;
+const input = { steer: 0, push: false, brake: false, grab: false, crouch: false, slide: false, slideDir: 0 };
 function readInput(now) {
   const k = c => keys.has(c);
   const pad = readPad();
@@ -655,6 +675,9 @@ function readInput(now) {
   input.grab = mouseGrab || k('KeyF') || !!pad?.grab;
   if (pad && !ST.drag) stickFeed(pad.rx, pad.ry, now);
   if (pad?.reset && !padReset) respawn(); padReset = !!pad?.reset;
+  if (pad?.rev && !padRev) doRevert(); padRev = !!pad?.rev;
+  input.slide = k('ShiftLeft') || k('ShiftRight') || !!pad?.slideL || !!pad?.slideR;
+  input.slideDir = pad?.slideL ? 1 : pad?.slideR ? -1 : 0;
   input.crouch = kbCrouch || (ST.drag && MS.armed === 'D' && msChord() < 45) || (ST.seq.length === 1 && bottom(ST.seq[0]) && Math.hypot(ST.x, ST.y) > 0.6);
 }
 
@@ -672,11 +695,18 @@ function doTrick(key, power) {
     S.v.copy(g.rail.d).multiplyScalar(g.sa); S.v.y += T.popGrind * power;
     exitGrind(); enterAir(UP);
   }
-  S.trick = { ...t, t: 0, done: false };
+  S.trick = { ...t, t: 0 };
   addCombo(t.fr, t.pts);
+  if (key !== 'ollie') {   // varier les figures : du style ; refaire la même en boucle : moins
+    const rep = S.recent.filter(k => k === key).length;
+    S.recent.push(key); if (S.recent.length > 6) S.recent.shift();
+    if (rep >= 2) steez(-5, 'Répétitif'); else if (!rep) steez(4);
+  }
   thump(170, 0.35, 0.08);
 }
 function enterAir(nTake) {
+  if (S.pendT > 0 && !S.chain) bankCombo();
+  S.pendT = 0; S.chain = false; S.slideT = 0;
   S.mode = 'air'; S.tAir = 0; S.spun = 0; S.grabT = 0; S.nTake.copy(nTake);
   S.lip = nTake.y < 0.5 && S.v.y > 0.5;
   if (S.lip) {   // au-dessus du coping : on retombe dans la rampe, pas sur la plateforme
@@ -694,14 +724,28 @@ function finishTrick() {
 function airTricksDone() {   // rotations, grab, air de rampe : comptés à la réception
   const deg = Math.abs(S.spun) / D2R, n = Math.floor((deg + 35) / 180);   // 145° compte pour un 180
   if (n >= 1) addCombo(`${S.spun > 0 ? 'BS' : 'FS'} ${n * 180}`, 120 * n * n);
-  if (S.grabT > 0.15) addCombo('Indy', Math.round(80 + 300 * S.grabT));
+  if (S.grabT > 0.15) { addCombo('Indy', Math.round(80 + 300 * S.grabT)); steez(Math.min(12, 25 * S.grabT), 'Grab tenu'); }
   if (S.lip && S.tAir > 0.45) addCombo('Air', Math.round(60 + 120 * S.tAir));
   S.spun = 0; S.grabT = 0;
 }
 function stepGround(h) {
   const n = S.n;
   unroll(S.yaw, n, f);
-  S.yaw += input.steer * T.turn / (1 + Math.abs(S.s) * 0.06) * h;
+  // powerslide : la planche se met en travers et frotte ; on garde le cap
+  if (input.slide && Math.abs(S.s) > 1.2 && n.y > 0.85) {
+    if (Math.abs(S.slide) < 0.15) S.slideSide = input.slideDir || (input.steer ? sgn(input.steer) : S.slideSide);
+    S.slide += (S.slideSide * 1.4 - S.slide) * Math.min(1, 10 * h);
+    if (Math.abs(S.slide) > 1 && (S.slideT += h) >= 0.2 && S.slideT - h < 0.2) {
+      if (S.pendT > 0) S.chain = true;
+      addCombo('Powerslide', 80); steez(3);
+    }
+  } else if (!(input.slide && Math.abs(S.slide) > 0.5)) {
+    S.slide += (0 - S.slide) * Math.min(1, (Math.abs(S.s) > 0.3 ? 7 : 2) * h);
+    if (Math.abs(S.slide) < 0.6) S.slideT = 0;
+  }
+  const across = Math.abs(Math.sin(S.slide));
+  S.s -= sgn(S.s) * Math.min(Math.abs(S.s), 6.5 * across * h);
+  S.yaw += input.steer * T.turn * (1 - 0.85 * across) / (1 + Math.abs(S.s) * 0.06) * h;
   if (Math.abs(S.s) > 0.4) {   // la pente fait tourner la trajectoire vers le bas
     side.crossVectors(n, f);
     S.yaw += clamp(-T.g * side.y / S.s, -3, 3) * h;
@@ -769,13 +813,30 @@ function land() {
   vt.copy(S.v).addScaledVector(n, -vn);
   const st = vt.dot(f), vtl = vt.length();
   const lat = tmp.copy(vt).addScaledVector(f, -st).length();
-  if (S.trick && S.trick.t < S.trick.dur * 0.85) return bail('Figure pas finie');
-  if (vtl > 1.5 && lat > 0.5 * vtl) return bail('Mal réceptionné');
-  if (-vn > 15) return bail('Trop haut !');
+  if (S.trick && S.trick.t < S.trick.dur * 0.7) return bail('Figure pas finie');
+  if (-vn > 18) return bail('Trop haut !');
+  const off = vtl > 1.5 ? lat / vtl : 0;   // sinus de l'écart entre la planche et la trajectoire
+  if (off > 0.94) return bail('Mal réceptionné');
+  const late = !!S.trick;
   finishTrick();
-  S.s = st; S.n.copy(n); S.mode = 'ground';
+  // on se recale dans l'axe de la vitesse (en avant ou en fakie, au plus près) ; si l'écart est grand, la planche reste en travers : powerslide de rattrapage
+  if (vtl > 0.5) {
+    const y0 = S.yaw, sg = sgn(st);
+    tmp.copy(vt).multiplyScalar(sg);
+    S.yaw = slopeYaw(tmp, n);
+    const d = wrapA(y0 - S.yaw);
+    qA.setFromAxisAngle(AY, -d); rig.quaternion.multiply(qA);   // la planche ne saute pas : l'écart passe dans l'angle de glisse
+    S.slide = wrapA(S.slide + d);
+    if (off > 0.55) S.slideSide = sgn(d);
+  }
+  unroll(S.yaw, n, f);
+  S.s = vt.dot(f); S.n.copy(n); S.mode = 'ground';
   S.squash = clamp(-vn / 9, 0.2, 1);
-  airTricksDone(); bankCombo();
+  airTricksDone();
+  if (off > 0.55) { S.s *= 0.8; steez(-10, 'Rattrapé en powerslide'); }
+  else if (late || off > 0.2 || -vn > 12) steez(-3, 'Limite');
+  else if (C.mult) steez(8, 'Propre !');
+  if (C.mult) { S.pendT = 0.45; S.chain = false; }
   thump(95, 0.25 + 0.3 * S.squash, 0.14);
 }
 function tryGrind(nx, ny, nz) {
@@ -790,7 +851,7 @@ function tryGrind(nx, ny, nz) {
     const along = S.v.dot(r.d);
     if (Math.abs(along) < 1.2) continue;
     if (r.kind === 'coping' && Math.abs(nx) < CX - 0.12) continue;
-    if (S.trick && S.trick.t < S.trick.dur * 0.8) { bail('Figure pas finie'); return true; }
+    if (S.trick && S.trick.t < S.trick.dur * 0.7) { bail('Figure pas finie'); return true; }
     finishTrick();
     airTricksDone();
     // 50-50 si la planche est dans l'axe du rail, boardslide si elle est en travers
@@ -830,6 +891,7 @@ function stepGrind(h) {
 function bail(msg) {
   if (S.mode === 'ground') { unroll(S.yaw, S.n, f); S.v.copy(f).multiplyScalar(S.s * 0.5); }
   S.mode = 'bail'; S.bailT = 0; S.trick = null; S.grind = null;
+  S.pendT = 0; S.chain = false; S.slide = S.rev = 0; S.steez *= 0.5;
   loseCombo(); toast(msg); thump(70, 0.5, 0.3);
 }
 function stepBail(h) {
@@ -842,9 +904,36 @@ function stepBail(h) {
   const hg = H(S.p.x, S.p.z); if (S.p.y < hg) { S.p.y = hg; S.v.y = 0; normalAt(S.p.x, S.p.z, S.n); }
   if (S.bailT > 1.6) respawn();
 }
+// revert : demi-tour à plat qui fait passer de l'avant au fakie (ou l'inverse) ; juste après une réception, il prolonge la ligne
+function doRevert() {
+  if (S.mode !== 'ground' || Math.abs(S.s) < 1 || Math.abs(S.rev) > 0.3) return;
+  const fromSlide = Math.abs(S.slide) > 0.6, dir = fromSlide ? sgn(S.slide) : (input.steer ? sgn(input.steer) : 1);
+  S.yaw = wrapA(S.yaw + Math.PI); S.s = -S.s * 0.92;
+  qA.setFromAxisAngle(AY, Math.PI); rig.quaternion.multiply(qA);
+  S.rev = fromSlide ? wrapA(S.slide - dir * Math.PI) : -dir * Math.PI;   // la planche finit de tourner dans le même sens
+  S.slide = 0; S.slideT = 0;
+  if (S.pendT > 0) {
+    addCombo(fromSlide ? 'Powerslide revert' : 'Revert', fromSlide ? 110 : 60); steez(6);
+    S.pendT = 0.9; S.chain = true;
+  }
+  thump(140, 0.12, 0.1);
+}
+function updateLine(dt) {
+  if (S.mode === 'ground' && S.pendT > 0) {
+    if (input.slide && Math.abs(S.slide) > 0.5) S.pendT = Math.max(S.pendT, 0.6);
+    else if ((S.pendT -= dt) <= 0) { S.pendT = 0; S.chain = false; bankCombo(); }
+  }
+  if (S.mode === 'ground' && !C.mult && S.pendT <= 0) S.steez = Math.max(0, S.steez - 0.6 * dt);
+  const r = Math.abs(S.rev); if (r > 0) S.rev = sgn(S.rev) * Math.max(0, r - 13 * dt);
+  S.grabVis += ((S.mode === 'air' && input.grab && S.tAir > 0.1 ? 1 : 0) - S.grabVis) * damp(12, dt);
+  if (S.mode !== 'ground') S.slide += (0 - S.slide) * damp(8, dt);
+  $stz.style.width = S.steez.toFixed(1) + '%'; $stzN.textContent = Math.round(S.steez);
+  if (styleT > 0 && (styleT -= dt) <= 0) $style.classList.remove('show');
+}
 function respawn() {
   S.p.copy(S.safe.p); S.yaw = S.safe.yaw; S.s = 0; S.v.set(0, 0, 0); S.n.set(0, 1, 0);
   S.mode = 'ground'; S.trick = null; S.grind = null; S.spun = 0; S.grabT = 0;
+  S.pendT = 0; S.chain = false; S.slide = S.rev = 0; S.slideT = 0;
   loseCombo();
 }
 
@@ -885,13 +974,14 @@ function updateVisual(dt) {
   if (S.mode === 'grind') rig.position.y -= S.grind.type === '50-50' ? 0.055 : 0.085;
 
   // la planche : flip (autour de son axe), shove (autour de la normale), pop (le tail claque)
-  let flipA = 0, shoveA = 0, pitch = 0, lift = 0;
+  let flipA = 0, shoveA = S.slide + S.rev, pitch = 0, lift = 0;
   if (S.mode === 'air' && S.trick) {
     const k = clamp(S.trick.t / S.trick.dur), e = 1 - Math.pow(1 - k, 2);
-    flipA = S.trick.flip * TAU * e; shoveA = S.trick.shove * TAU * e;
+    flipA = S.trick.flip * TAU * e; shoveA += S.trick.shove * TAU * e;
     lift = 0.16 * Math.sin(Math.PI * k);
   }
   if (S.mode === 'air' && S.tAir < 0.28 && S.tAir > 0) pitch = (S.trick?.nose ? 0.42 : -0.42) * Math.sin(Math.PI * S.tAir / 0.28);
+  pitch -= 0.3 * S.grabVis; lift += 0.12 * S.grabVis;   // grab : la planche remonte vers la main, nose tiré
   if (S.mode === 'bail') {
     const k = clamp(S.bailT / 0.5);
     boardPivot.position.set(0.5 * k, 0.09 + 0.25 * Math.sin(Math.PI * k), 0.3 * k);
@@ -899,7 +989,7 @@ function updateVisual(dt) {
     boardPivot.quaternion.multiplyQuaternions(qA, qB);
   } else {
     boardPivot.position.set(0, 0.09 + lift * 0.5, 0);
-    qA.setFromAxisAngle(AY, S.boardOff + shoveA); qB.setFromAxisAngle(AZ, flipA); qC.setFromAxisAngle(AX, pitch);
+    qA.setFromAxisAngle(AY, S.boardOff + shoveA); qB.setFromAxisAngle(AZ, flipA + 0.25 * S.grabVis); qC.setFromAxisAngle(AX, pitch);
     boardPivot.quaternion.multiplyQuaternions(qA, qB).multiply(qC);
   }
 
@@ -957,6 +1047,7 @@ function frame(now) {
   if (slow) dt *= 0.35;
   readInput(now); stickTick(now, dt);
   physics(dt);
+  updateLine(dt);
   // un point de reprise sur du plat, propre
   if (S.mode === 'ground' && S.n.y > 0.995 && S.p.y < 0.01 && (S.safeT += dt) > 0.5) {
     S.safeT = 0; S.safe.p.copy(S.p); S.safe.yaw = S.yaw;
@@ -969,7 +1060,8 @@ function frame(now) {
   if (AC) {
     const roll = S.mode === 'ground' ? Math.min(0.22, Math.abs(S.s) / 45) : 0;
     rollG.gain.setTargetAtTime(roll, AC.currentTime, 0.05); rollF.frequency.setTargetAtTime(250 + Math.abs(S.s) * 70, AC.currentTime, 0.05);
-    grindG.gain.setTargetAtTime(S.mode === 'grind' ? 0.16 : 0, AC.currentTime, 0.03);
+    const scrape = S.mode === 'ground' ? 0.12 * Math.abs(Math.sin(S.slide)) * Math.min(1, Math.abs(S.s) / 4) : 0;
+    grindG.gain.setTargetAtTime(S.mode === 'grind' ? 0.16 : scrape, AC.currentTime, 0.03);
   }
   $speed.textContent = `${Math.round(Math.abs(S.mode === 'ground' ? S.s : Math.hypot(S.v.x, S.v.z)) * 3.6)} km/h${S.mode === 'ground' && S.s < -0.5 ? ' · fakie' : ''}`;
   drawStick();
