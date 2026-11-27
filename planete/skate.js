@@ -436,7 +436,8 @@ const S = {
   squash: 0, lean: 0,
   slide: 0, slideSide: 1, slideT: 0, rev: 0,          // powerslide (angle de la planche en travers) et revert (demi-tour à plat)
   pendT: 0, chain: false,                             // la ligne reste ouverte un instant après la réception (revert, powerslide)
-  steez: 30, recent: [], grabVis: 0,                  // le style : propreté des réceptions, grabs, variété des figures
+  steez: 30, recent: [], grabVis: 0,
+  man: null, flipBack: 0, pitchVis: 0,               // manual (équilibre sur deux roues), planche qu'on remet à l'endroit après un darkslide                  // le style : propreté des réceptions, grabs, variété des figures
 };
 const f = new V3(), f2 = new V3(), n2 = new V3(), side = new V3(), vt = new V3(), tmp = new V3();
 
@@ -481,6 +482,7 @@ function bankCombo() {
 }
 function loseCombo() { if (C.mult) { $combo.className = 'lost'; comboShowT = 0; } C.list = []; C.pts = 0; C.mult = 0; }
 let toastT = 0; const $toast = document.getElementById('toast');
+const $bal = document.getElementById('bal'), $balK = $bal.querySelector('i');
 const $style = $combo.querySelector('.style'), $stz = document.getElementById('stz'), $stzN = document.getElementById('stzn');
 let styleT = 0;
 function steez(v, word) {
@@ -658,13 +660,15 @@ function readPad() {
       steer: -dz(p.axes[0] || 0), rx: dz(p.axes[2] || 0), ry: -dz(p.axes[3] || 0),
       push: p.buttons[0]?.pressed, brake: p.buttons[1]?.pressed, reset: p.buttons[3]?.pressed,
       grab: (p.buttons[6]?.value || 0) > 0.3 || (p.buttons[7]?.value || 0) > 0.3,
+      pitch: -dz(p.axes[1] || 0),
       slideL: p.buttons[4]?.pressed, slideR: p.buttons[5]?.pressed, rev: p.buttons[2]?.pressed,
     };
   }
   return null;
 }
 let padReset = false, padRev = false;
-const input = { steer: 0, push: false, brake: false, grab: false, crouch: false, slide: false, slideDir: 0 };
+const input = { steer: 0, push: false, brake: false, grab: false, crouch: false, slide: false, slideDir: 0, nose: false, tail: false };
+const pitchIn = () => (input.nose ? 1 : 0) - (input.tail ? 1 : 0);   // +1 : poids sur le nose, -1 : sur le tail
 function readInput(now) {
   const k = c => keys.has(c);
   const pad = readPad();
@@ -678,6 +682,8 @@ function readInput(now) {
   if (pad?.rev && !padRev) doRevert(); padRev = !!pad?.rev;
   input.slide = k('ShiftLeft') || k('ShiftRight') || !!pad?.slideL || !!pad?.slideR;
   input.slideDir = pad?.slideL ? 1 : pad?.slideR ? -1 : 0;
+  input.nose = k('KeyV') || (pad?.pitch || 0) > 0.5;
+  input.tail = k('KeyC') || (pad?.pitch || 0) < -0.5;
   input.crouch = kbCrouch || (ST.drag && MS.armed === 'D' && msChord() < 45) || (ST.seq.length === 1 && bottom(ST.seq[0]) && Math.hypot(ST.x, ST.y) > 0.6);
 }
 
@@ -692,7 +698,8 @@ function doTrick(key, power) {
     enterAir(S.n);
   } else {
     const g = S.grind;
-    S.v.copy(g.rail.d).multiplyScalar(g.sa); S.v.y += T.popGrind * power;
+    if (g.stall) { S.v.copy(g.ramp).multiplyScalar(1.6); S.v.y = T.popGrind * power * 0.8; }
+    else { S.v.copy(g.rail.d).multiplyScalar(g.sa); S.v.y += T.popGrind * power; }
     exitGrind(); enterAir(UP);
   }
   S.trick = { ...t, t: 0 };
@@ -704,7 +711,8 @@ function doTrick(key, power) {
   }
   thump(170, 0.35, 0.08);
 }
-function enterAir(nTake) {
+function enterAir(nTake, roll = false) {
+  if (S.man) { S.man = null; S.chain = true; }   // on décolle d'un manual : la ligne continue
   if (S.pendT > 0 && !S.chain) bankCombo();
   S.pendT = 0; S.chain = false; S.slideT = 0;
   S.mode = 'air'; S.tAir = 0; S.spun = 0; S.grabT = 0; S.nTake.copy(nTake);
@@ -714,6 +722,7 @@ function enterAir(nTake) {
     const along = S.v.x * uhx + S.v.z * uhz + 0.45;
     S.v.x -= uhx * along; S.v.z -= uhz * along;
     S.vy0 = Math.max(1, S.v.y);
+    if (roll && input.slide) stallCoping();   // Maj en arrivant au coping : on s'y accroche
   }
 }
 function finishTrick() {
@@ -732,7 +741,7 @@ function stepGround(h) {
   const n = S.n;
   unroll(S.yaw, n, f);
   // powerslide : la planche se met en travers et frotte ; on garde le cap
-  if (input.slide && Math.abs(S.s) > 1.2 && n.y > 0.85) {
+  if (input.slide && Math.abs(S.s) > 1.2 && n.y > 0.97) {
     if (Math.abs(S.slide) < 0.15) S.slideSide = input.slideDir || (input.steer ? sgn(input.steer) : S.slideSide);
     S.slide += (S.slideSide * 1.4 - S.slide) * Math.min(1, 10 * h);
     if (Math.abs(S.slide) > 1 && (S.slideT += h) >= 0.2 && S.slideT - h < 0.2) {
@@ -742,6 +751,22 @@ function stepGround(h) {
   } else if (!(input.slide && Math.abs(S.slide) > 0.5)) {
     S.slide += (0 - S.slide) * Math.min(1, (Math.abs(S.s) > 0.3 ? 7 : 2) * h);
     if (Math.abs(S.slide) < 0.6) S.slideT = 0;
+  }
+  // manual : poids sur le tail (C) ou le nose (V) en roulant ; l'équilibre se tient avec Z / S
+  const pin = pitchIn();
+  if (!S.man && pin && Math.abs(S.s) > 1 && n.y > 0.93 && Math.abs(S.slide) < 0.3) startManual(pin);
+  if (S.man) {
+    const m = S.man;
+    if (pin !== m.dir) endManual(true);
+    else {
+      m.t += h;
+      m.bv += (m.bal * 2.4 + m.drift) * h + ((input.push ? 1 : 0) - (input.brake ? 1 : 0)) * 4 * h;
+      m.bv *= 1 - 1.2 * h; m.bal += m.bv * h;
+      if (Math.random() < h * 1.5) m.drift = (Math.random() - 0.5) * 1.6;
+      C.pts += h * (m.dir > 0 ? 110 : 90);
+      if (Math.abs(m.bal) > 1) { S.man = null; S.pendT = 0; S.chain = false; S.squash = 0.6; loseCombo(); toast('Équilibre perdu'); thump(90, 0.3, 0.12); }
+      else if (Math.abs(S.s) < 0.8) endManual(true);
+    }
   }
   const across = Math.abs(Math.sin(S.slide));
   S.s -= sgn(S.s) * Math.min(Math.abs(S.s), 6.5 * across * h);
@@ -753,13 +778,13 @@ function stepGround(h) {
   unroll(S.yaw, n, f);
   S.s += -T.g * f.y * h;
   const flat = n.y > 0.93;
-  if (input.push) {
+  if (input.push && !S.man) {
     if (flat) {
       const dir = S.s < -0.3 ? -1 : 1;
       if (Math.abs(S.s) < T.pushMax) S.s += dir * T.push * h;
     } else if (S.s * f.y < 0) S.s += sgn(S.s) * T.pump * h;   // pomper en descendant la courbe
   }
-  if (input.brake && flat) S.s -= sgn(S.s) * Math.min(Math.abs(S.s), T.brake * h);
+  if (input.brake && flat && !S.man) S.s -= sgn(S.s) * Math.min(Math.abs(S.s), T.brake * h);
   S.s -= sgn(S.s) * Math.min(Math.abs(S.s), (T.roll + T.drag * S.s * S.s) * h);
   S.s = clamp(S.s, -T.vmax, T.vmax);
 
@@ -769,7 +794,7 @@ function stepGround(h) {
   normalAt(nx, nz, n2, -vx, -vz); unroll(S.yaw, n2, f2);   // la pente juste devant
   const yb = S.p.y + vy * h;
   if (vy - S.s * f2.y > 1.2 || hg < yb - 0.12) {   // le sol se dérobe : on décolle
-    S.p.set(nx, yb, nz); S.v.set(vx, vy, vz); enterAir(n);
+    S.p.set(nx, yb, nz); S.v.set(vx, vy, vz); enterAir(n, true);
     return;
   }
   S.p.set(nx, hg, nz); normalAt(nx, nz, S.n, vx, vz);   // la pente sur laquelle on roule (côté d'où l'on vient)
@@ -839,6 +864,62 @@ function land() {
   if (C.mult) { S.pendT = 0.45; S.chain = false; }
   thump(95, 0.25 + 0.3 * S.squash, 0.14);
 }
+// le type de grind ou de slide vient de l'arrivée : angle entre la planche et le rail, endroit de la planche qui touche, côté d'où l'on vient,
+// poids sur le nose ou le tail (V / C), planche retournée (flip à moitié fait : darkslide)
+const TR = [0, -0.035, 0], TN = [0, -0.035, 0.205], TT = [0, -0.035, -0.205], MID = [0, -0.005, 0];
+const GRINDS = {
+  '50-50':           { pts: 100, rate: 120, fric: 1.0, a: 0,  pitch: 0,     roll: 0,     pc: TR },
+  '5-0':             { pts: 140, rate: 140, fric: 1.1, a: 0,  pitch: -0.22, roll: 0,     pc: TT },
+  'Nosegrind':       { pts: 160, rate: 150, fric: 1.1, a: 0,  pitch: 0.22,  roll: 0,     pc: TN },
+  'Crooked grind':   { pts: 200, rate: 160, fric: 1.3, a: 22, pitch: 0.2,   roll: 0.25,  pc: TN },
+  'Overcrook':       { pts: 230, rate: 170, fric: 1.3, a: 22, pitch: 0.2,   roll: -0.25, pc: TN },
+  'Smith grind':     { pts: 230, rate: 170, fric: 1.3, a: 18, pitch: -0.18, roll: 0.4,   pc: TT },
+  'Feeble grind':    { pts: 210, rate: 160, fric: 1.3, a: 18, pitch: -0.15, roll: -0.3,  pc: TT },
+  'Boardslide':      { pts: 120, rate: 150, fric: 1.6, a: 90, pitch: 0,     roll: 0,     pc: MID },
+  'Lipslide':        { pts: 170, rate: 160, fric: 1.6, a: 90, pitch: 0,     roll: 0,     pc: MID },
+  'Noseslide':       { pts: 160, rate: 150, fric: 1.7, a: 85, pitch: -0.15, roll: 0,     pc: [0, -0.005, 0.3] },
+  'Tailslide':       { pts: 160, rate: 150, fric: 1.7, a: 85, pitch: 0.15,  roll: 0,     pc: [0, -0.005, -0.3] },
+  'Nose bluntslide': { pts: 280, rate: 190, fric: 2.0, a: 85, pitch: 0.55,  roll: 0,     pc: [0, -0.03, 0.17] },
+  'Bluntslide':      { pts: 260, rate: 180, fric: 2.0, a: 85, pitch: -0.55, roll: 0,     pc: [0, -0.03, -0.17] },
+  'Darkslide':       { pts: 350, rate: 220, fric: 2.2, a: 90, pitch: 0,     roll: 0,     pc: [0, 0.008, 0], dark: true },
+  // stalls sur le coping (Maj en arrivant en haut de la rampe)
+  'Rock to fakie':   { pts: 120, rate: 80, stall: true, pitch: 0.25,  pc: MID },
+  'Blunt':           { pts: 200, rate: 100, stall: true, pitch: -1.3, pc: [0, -0.005, -0.36] },
+  'Nose blunt':      { pts: 220, rate: 100, stall: true, pitch: 1.3,  pc: [0, -0.005, 0.36] },
+  'Tail stall':      { pts: 130, rate: 80, stall: true, pitch: 1.2,   pc: [0, -0.005, -0.36] },
+  'Nose stall':      { pts: 140, rate: 80, stall: true, pitch: -1.2,  pc: [0, -0.005, 0.36] },
+  'Axle stall':      { pts: 120, rate: 80, stall: true, pitch: 0,     pc: TR },
+};
+function grindKind(r, nx, nz, cx, cz, along) {
+  const dl = Math.hypot(r.d.x, r.d.z), rx = r.d.x / dl * sgn(along), rz = r.d.z / dl * sgn(along);   // sens de la glisse
+  const qx = rz, qz = -rx;                                                                          // en travers du rail
+  const tk = S.trick, k = tk ? tk.t / tk.dur : 1, e = 1 - Math.pow(1 - clamp(k), 2);
+  const noseY = S.yaw + S.boardOff + (tk ? tk.shove * TAU * e : 0);                                 // où pointe vraiment le nose
+  const hx = Math.sin(noseY), hz = Math.cos(noseY);
+  const th = wrapA(noseY - yawOf(rx, rz)), noseLead = Math.abs(th) <= Math.PI / 2;
+  const fold = noseLead ? th : wrapA(th - Math.PI), A = Math.abs(fold) / D2R;
+  const c = (nx - cx) * qx + (nz - cz) * qz, vq = S.v.x * qx + S.v.z * qz;
+  const sig = Math.abs(vq) > 0.3 ? -sgn(vq) : sgn(c);         // le côté d'où l'on arrive
+  const bq = hx * qx + hz * qz, across = sgn(bq) === -sig;     // le nose pointe de l'autre côté du rail
+  const pin = pitchIn(), flipMid = tk && tk.flip && k > 0.3 && k < 0.7;
+  if (tk && k < 0.7 && !flipMid) return 'bail';
+  let type;
+  if (flipMid) { if (A < 40) return 'bail'; type = 'Darkslide'; }
+  else if (A <= 15) type = pin > 0 ? 'Nosegrind' : pin < 0 ? '5-0' : '50-50';
+  else if (A <= 50) {
+    const noseTruck = pin > 0 || (!pin && noseLead);
+    type = noseTruck ? (across ? 'Overcrook' : 'Crooked grind') : (across ? 'Feeble grind' : 'Smith grind');
+  } else {
+    const u = -c / bq, au = Math.abs(u);                       // où le rail croise la planche (vers le nose si u > 0)
+    if (au > 0.45) return null;
+    if (au < 0.12) type = across ? 'Boardslide' : 'Lipslide';
+    else if (u > 0) type = pin > 0 || au < 0.19 ? 'Nose bluntslide' : 'Noseslide';
+    else type = pin < 0 || au < 0.19 ? 'Bluntslide' : 'Tailslide';
+  }
+  if (A <= 50 && Math.hypot(nx - cx, nz - cz) > 0.32) return null;   // les grinds se posent sur le rail, pas à côté
+  const G = GRINDS[type];
+  return { type, G, th: th - fold + sgn(fold) * G.a * D2R, travel: yawOf(rx, rz), q: new V3(qx, 0, qz), sig };
+}
 function tryGrind(nx, ny, nz) {
   if (S.v.y > 1.5) return false;
   for (const r of RAILS) {
@@ -847,39 +928,71 @@ function tryGrind(nx, ny, nz) {
     if (t < 0.15 || t > r.len - 0.15) continue;
     const cx = r.a.x + r.d.x * t, cy = r.a.y + r.d.y * t, cz = r.a.z + r.d.z * t;
     const dy = ny - cy, dh = Math.hypot(nx - cx, nz - cz);
-    if (dh > 0.38 || dy < -0.25 || dy > 0.3) continue;
+    if (dh > 0.5 || dy < -0.25 || dy > 0.3) continue;
     const along = S.v.dot(r.d);
     if (Math.abs(along) < 1.2) continue;
     if (r.kind === 'coping' && Math.abs(nx) < CX - 0.12) continue;
-    if (S.trick && S.trick.t < S.trick.dur * 0.7) { bail('Figure pas finie'); return true; }
+    const kd = grindKind(r, nx, nz, cx, cz, along);
+    if (!kd) continue;
+    if (kd === 'bail') { bail('Figure pas finie'); return true; }
     finishTrick();
     airTricksDone();
-    // 50-50 si la planche est dans l'axe du rail, boardslide si elle est en travers
-    const dl = Math.hypot(r.d.x, r.d.z), rx = r.d.x / dl, rz = r.d.z / dl;
-    const hx = Math.sin(S.yaw), hz = Math.cos(S.yaw), c = hx * rx + hz * rz, cs = Math.abs(c);
-    let type;
-    if (cs > 0.88) { type = '50-50'; S.yaw = yawOf(sgn(c) * rx, sgn(c) * rz); }
-    else if (cs > 0.5) type = 'Crooked grind';
-    else { type = 'Boardslide'; const k = sgn(hx * rz - hz * rx); S.yaw = yawOf(k * rz, -k * rx); }
-    S.grind = { rail: r, t, sa: along, type, time: 0 };
+    S.yaw = kd.travel + kd.th - S.boardOff;
+    S.grind = { rail: r, t, sa: along, type: kd.type, G: kd.G, time: 0, q: kd.q, sig: kd.sig };
     S.mode = 'grind'; S.p.set(cx, cy, cz);
-    addCombo(type, 100);
+    addCombo(kd.type, kd.G.pts);
+    const rep = S.recent.filter(x => x === kd.type).length;
+    S.recent.push(kd.type); if (S.recent.length > 6) S.recent.shift();
+    if (rep >= 2) steez(-4, 'Répétitif'); else if (!rep && kd.type !== '50-50') steez(5);
     thump(220, 0.18, 0.06);
     return true;
   }
   return false;
 }
+function stallCoping() {   // lip trick : la planche s'accroche au coping au lieu de partir en air
+  const r = RAILS.find(c => c.kind === 'coping' && sgn(c.a.x) === sgn(S.p.x));
+  if (!r || S.v.y > 9) return false;
+  const t = clamp((S.p.z - r.a.z) * r.d.z, 0.3, r.len - 0.3);
+  const ramp = new V3(-sgn(r.a.x), 0, 0);                    // de la coping vers l'intérieur de la rampe
+  const noseY = S.yaw + S.boardOff, noseLead = Math.sin(noseY) * -ramp.x > 0;   // le nose part vers la plateforme
+  const pin = pitchIn();
+  let type;
+  if (input.steer) type = 'Axle stall';
+  else if (pin < 0) type = noseLead ? 'Blunt' : 'Tail stall';
+  else if (pin > 0) type = noseLead ? 'Nose stall' : 'Nose blunt';
+  else type = 'Rock to fakie';
+  const lead = noseLead ? 0 : Math.PI;                       // garder le bout qui menait vers la plateforme
+  const yaw0 = yawOf(-ramp.x, 0) + lead - S.boardOff;
+  const G = GRINDS[type];
+  S.grind = { rail: r, t, sa: 0, type, G, time: 0, stall: true, ramp, yaw0, q: ramp.clone(), sig: 1 };
+  S.yaw = type === 'Axle stall' ? yawOf(0, sgn(input.steer)) - S.boardOff : yaw0;
+  S.mode = 'grind'; S.v.set(0, 0, 0); S.lip = false;
+  S.p.copy(r.a).addScaledVector(r.d, t);
+  addCombo(type, G.pts); steez(4);
+  thump(200, 0.2, 0.07);
+  return true;
+}
 function exitGrind() {
   const g = S.grind; if (!g) return;
-  if (g.type !== '50-50') { const k = sgn(g.sa); S.yaw = yawOf(k * g.rail.d.x, k * g.rail.d.z); }   // on se remet dans l'axe
+  if (g.stall) S.yaw = g.yaw0;
+  else {   // on se remet dans l'axe du rail, en gardant le bout qui menait
+    const tr = yawOf(g.rail.d.x * sgn(g.sa), g.rail.d.z * sgn(g.sa));
+    const th = wrapA(S.yaw + S.boardOff - tr);
+    S.yaw = tr + (Math.abs(th) <= Math.PI / 2 ? 0 : Math.PI) - S.boardOff;
+  }
+  if (g.G.dark) S.flipBack = Math.PI;   // un coup de pied : la planche se remet à l'endroit
   S.grind = null;
 }
 function stepGrind(h) {
   const g = S.grind, r = g.rail;
   g.time += h;
-  g.sa += -T.g * r.d.y * h - sgn(g.sa) * (g.type === 'Boardslide' ? 1.6 : 1.0) * h;
+  C.pts += h * g.G.rate;
+  if (g.stall) {
+    if (g.time > 1.8) { S.v.copy(g.ramp).multiplyScalar(1.2); S.v.y = 0.8; exitGrind(); enterAir(UP); }
+    return;
+  }
+  g.sa += -T.g * r.d.y * h - sgn(g.sa) * g.G.fric * h;
   g.t += g.sa * h;
-  C.pts += h * (g.type === '50-50' ? 120 : 160);
   if (g.t < 0 || g.t > r.len) {   // bout du rail
     S.v.copy(r.d).multiplyScalar(g.sa); S.v.y += 0.6; exitGrind(); enterAir(UP); return;
   }
@@ -888,10 +1001,19 @@ function stepGrind(h) {
   }
   S.p.copy(r.a).addScaledVector(r.d, g.t);
 }
+function startManual(dir) {
+  S.man = { dir, bal: 0, bv: (Math.random() - 0.5) * 0.4, drift: (Math.random() - 0.5) * 1.2, t: 0 };
+  if (S.pendT > 0) S.chain = true;
+  addCombo(dir > 0 ? 'Nose manual' : 'Manual', dir > 0 ? 80 : 60);
+}
+function endManual(ok) {
+  const m = S.man; S.man = null;
+  if (ok) { S.pendT = Math.max(S.pendT, 0.45); S.chain = false; if (m.t > 1.5) steez(5, 'Long manual'); }
+}
 function bail(msg) {
   if (S.mode === 'ground') { unroll(S.yaw, S.n, f); S.v.copy(f).multiplyScalar(S.s * 0.5); }
   S.mode = 'bail'; S.bailT = 0; S.trick = null; S.grind = null;
-  S.pendT = 0; S.chain = false; S.slide = S.rev = 0; S.steez *= 0.5;
+  S.pendT = 0; S.chain = false; S.slide = S.rev = 0; S.steez *= 0.5; S.man = null; S.flipBack = 0;
   loseCombo(); toast(msg); thump(70, 0.5, 0.3);
 }
 function stepBail(h) {
@@ -919,6 +1041,11 @@ function doRevert() {
   thump(140, 0.12, 0.1);
 }
 function updateLine(dt) {
+  if (S.man) S.pendT = Math.max(S.pendT, 0.45);
+  if (S.flipBack > 0) S.flipBack = Math.max(0, S.flipBack - 14 * dt);
+  S.pitchVis += ((S.mode === 'air' ? pitchIn() : 0) - S.pitchVis) * damp(10, dt);
+  $bal.style.display = S.man ? 'block' : 'none';
+  if (S.man) $balK.style.bottom = (50 + 45 * clamp(S.man.bal, -1, 1)) + '%';
   if (S.mode === 'ground' && S.pendT > 0) {
     if (input.slide && Math.abs(S.slide) > 0.5) S.pendT = Math.max(S.pendT, 0.6);
     else if ((S.pendT -= dt) <= 0) { S.pendT = 0; S.chain = false; bankCombo(); }
@@ -933,7 +1060,7 @@ function updateLine(dt) {
 function respawn() {
   S.p.copy(S.safe.p); S.yaw = S.safe.yaw; S.s = 0; S.v.set(0, 0, 0); S.n.set(0, 1, 0);
   S.mode = 'ground'; S.trick = null; S.grind = null; S.spun = 0; S.grabT = 0;
-  S.pendT = 0; S.chain = false; S.slide = S.rev = 0; S.slideT = 0;
+  S.pendT = 0; S.chain = false; S.slide = S.rev = 0; S.slideT = 0; S.man = null; S.flipBack = 0;
   loseCombo();
 }
 
@@ -959,7 +1086,7 @@ function updateCamera(dt) {
 // ---------- dessin de la planche, du skateur, du stick
 const qT = new THREE.Quaternion(), mB = new THREE.Matrix4(), nVis = new V3(), fVis = new V3(), xVis = new V3();
 const qA = new THREE.Quaternion(), qB = new THREE.Quaternion(), qC = new THREE.Quaternion();
-const AX = new V3(1, 0, 0), AY = new V3(0, 1, 0), AZ = new V3(0, 0, 1);
+const AX = new V3(1, 0, 0), AY = new V3(0, 1, 0), AZ = new V3(0, 0, 1), _w = new V3();
 function updateVisual(dt) {
   if (S.mode === 'air') {
     const k = S.lip ? clamp(1 - Math.abs(S.v.y) / S.vy0) : clamp(S.tAir / 0.3);
@@ -971,7 +1098,6 @@ function updateVisual(dt) {
   mB.makeBasis(xVis, nVis, fVis); qT.setFromRotationMatrix(mB);
   rig.quaternion.slerp(qT, damp(S.mode === 'ground' ? 22 : 14, dt));
   rig.position.copy(S.p);
-  if (S.mode === 'grind') rig.position.y -= S.grind.type === '50-50' ? 0.055 : 0.085;
 
   // la planche : flip (autour de son axe), shove (autour de la normale), pop (le tail claque)
   let flipA = 0, shoveA = S.slide + S.rev, pitch = 0, lift = 0;
@@ -981,16 +1107,36 @@ function updateVisual(dt) {
     lift = 0.16 * Math.sin(Math.PI * k);
   }
   if (S.mode === 'air' && S.tAir < 0.28 && S.tAir > 0) pitch = (S.trick?.nose ? 0.42 : -0.42) * Math.sin(Math.PI * S.tAir / 0.28);
-  pitch -= 0.3 * S.grabVis; lift += 0.12 * S.grabVis;   // grab : la planche remonte vers la main, nose tiré
+  pitch -= 0.3 * S.grabVis; lift += 0.12 * S.grabVis;
+  pitch += 0.22 * S.pitchVis;   // en l'air : on montre sur quel bout on va se poser   // grab : la planche remonte vers la main, nose tiré
   if (S.mode === 'bail') {
     const k = clamp(S.bailT / 0.5);
     boardPivot.position.set(0.5 * k, 0.09 + 0.25 * Math.sin(Math.PI * k), 0.3 * k);
     qA.setFromAxisAngle(AY, S.boardOff + S.bailT * 9); qB.setFromAxisAngle(AZ, S.bailT * 6);
     boardPivot.quaternion.multiplyQuaternions(qA, qB);
   } else {
-    boardPivot.position.set(0, 0.09 + lift * 0.5, 0);
-    qA.setFromAxisAngle(AY, S.boardOff + shoveA); qB.setFromAxisAngle(AZ, flipA + 0.25 * S.grabVis); qC.setFromAxisAngle(AX, pitch);
+    let roll = 0.25 * S.grabVis, pc = null, base = 0.09;
+    flipA += S.flipBack;
+    if (S.mode === 'grind') {   // la pose du grind : la partie de la planche qui touche est posée sur le rail
+      const g = S.grind, G = g.G;
+      pitch = G.pitch; pc = G.pc; base = 0; flipA = G.dark ? Math.PI : 0;
+      if (G.roll) {   // incliner vers le côté d'où l'on vient (ou l'autre)
+        const ny = S.yaw + S.boardOff;
+        const xs = Math.cos(ny) * g.q.x * g.sig - Math.sin(ny) * g.q.z * g.sig;
+        roll = -G.roll * sgn(xs);
+      }
+    } else if (S.man) {          // manual : sur les deux roues arrière (ou avant)
+      const m = S.man;
+      pitch = m.dir * (0.2 + 0.09 * m.bal * m.dir); pc = [0, -0.09, m.dir * 0.205];
+    }
+    qA.setFromAxisAngle(AY, S.boardOff + shoveA); qB.setFromAxisAngle(AZ, flipA + roll); qC.setFromAxisAngle(AX, pitch);
     boardPivot.quaternion.multiplyQuaternions(qA, qB).multiply(qC);
+    if (pc) {   // tourner autour du point de contact
+      tmp.set(pc[0], pc[1], pc[2]); const cx = tmp.x, cy = tmp.y, cz = tmp.z;
+      tmp.applyQuaternion(boardPivot.quaternion);
+      if (base) { _w.set(cx, cy, cz).applyAxisAngle(AY, S.boardOff + shoveA); boardPivot.position.set(_w.x - tmp.x, base + _w.y - tmp.y, _w.z - tmp.z); }
+      else boardPivot.position.set(-tmp.x, -tmp.y, -tmp.z);
+    } else boardPivot.position.set(0, base + lift * 0.5, 0);
   }
 
   // la planche penche dans les virages

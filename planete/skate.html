@@ -28,6 +28,9 @@
   #combo .style.down { color: #ffb3c7; }
   #score .bar { width: 120px; height: 6px; margin: 3px 0 2px auto; border-radius: 3px; background: rgba(255,255,255,.14); overflow: hidden; }
   #score .bar i { display: block; height: 100%; width: 30%; border-radius: 3px; background: linear-gradient(90deg, #ff5fa8, #e4ff3a); transition: width .25s; }
+  #bal { display: none; position: fixed; right: 146px; bottom: 56px; width: 14px; height: 120px; border-radius: 7px; background: rgba(20,20,40,.82); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+  #bal::before { content: ''; position: absolute; left: 3px; right: 3px; top: 35%; bottom: 35%; border-radius: 4px; background: rgba(228,255,58,.22); }
+  #bal i { position: absolute; left: -3px; width: 20px; height: 6px; margin-bottom: -3px; border-radius: 3px; background: #e4ff3a; bottom: 50%; }
   #toast { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(.9); font-weight: 800; font-size: 34px; color: #fff; text-shadow: 0 3px 14px rgba(40,10,60,.6); opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; white-space: nowrap; }
   #toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   #help { position: fixed; left: 14px; bottom: 14px; padding: 10px 14px; font-size: 12.5px; max-width: 380px; }
@@ -55,6 +58,7 @@
 <div id="toast"></div>
 <div id="score" class="pill"><small>Score</small><b id="sc">0</b><small>Meilleur combo : <span id="best">0</span></small><br><small>Steez <span id="stzn">30</span></small><div class="bar"><i id="stz"></i></div></div>
 <div id="speed" class="pill">0 km/h</div>
+<div id="bal"><i></i></div>
 <canvas id="stick" width="240" height="240"></canvas>
 <div id="help" class="pill">
   <h1>Mini skate park (test) <button id="fold">réduire</button></h1>
@@ -66,6 +70,7 @@
     <tr><td><kbd>Espace</kbd></td><td>ollie (appuyer, relâcher)</td></tr>
     <tr><td>clic droit / <kbd>F</kbd></td><td>grab en l'air</td></tr>
     <tr><td><kbd>Maj</kbd> (+ <kbd>Q</kbd>/<kbd>D</kbd>)</td><td>powerslide (maintenir) : la planche se met en travers et freine</td></tr>
+    <tr><td><kbd>C</kbd> / <kbd>V</kbd></td><td>poids sur le tail / le nose : manual et nose manual en roulant (équilibre avec <kbd>Z</kbd> <kbd>S</kbd>) ; en l'air, choisit le bout qui se pose sur le rail</td></tr>
     <tr><td><kbd>E</kbd></td><td>revert : demi-tour à plat, juste après une réception il prolonge le combo</td></tr>
     <tr><td><kbd>R</kbd> · <kbd>T</kbd></td><td>revenir au départ · ralenti</td></tr>
   </table>
@@ -78,7 +83,11 @@
     <tr><td>↑ puis ↓ ↙ ↘</td><td>nollie, nollie kickflip, nollie heelflip</td></tr>
   </table>
   <p style="margin:6px 0 0"><b>Steez</b> : la jauge de style monte avec les réceptions propres, les grabs tenus, les figures variées, les reverts et powerslides en fin de ligne ; elle multiplie les points du combo. Elle baisse quand on se répète, qu'on rattrape une réception de travers ou qu'on chute.</p>
-  <p style="margin:6px 0 0">Retombe sur un rail ou un bord de module pour glisser (50-50, boardslide). Manette : stick gauche pour tourner, stick droit pour les figures, A pousser, B freiner, X revert, LB/RB powerslide, gâchettes pour grab.</p>
+  <p style="margin:6px 0 0"><b>Grinds et slides</b> : tout dépend de l'arrivée sur un rail ou un bord.
+    Dans l'axe : 50-50, 5-0 (<kbd>C</kbd>), nosegrind (<kbd>V</kbd>). En biais (15 à 50°) : crooked ou overcrook sur le truck avant, smith ou feeble sur le truck arrière, selon le côté où pointe le nose.
+    En travers : boardslide ou lipslide si le rail passe au milieu de la planche ; noseslide ou tailslide si c'est un bout ; nose bluntslide ou bluntslide en appuyant sur ce bout ou en arrivant plus loin. Un flip fait à moitié (planche à l'envers) : darkslide.
+    Sur le coping de la mini rampe, <kbd>Maj</kbd> en arrivant en haut : rock to fakie, blunt / tail stall (<kbd>C</kbd>), nose stall / nose blunt (<kbd>V</kbd>), axle stall (<kbd>Q</kbd>/<kbd>D</kbd>) ; ollie ou flick pour redescendre.</p>
+  <p style="margin:6px 0 0"> Manette : stick gauche pour tourner (vertical : tail / nose), stick droit pour les figures, A pousser, B freiner, X revert, LB/RB powerslide, gâchettes pour grab.</p>
   </div>
 </div>
 <script type="module" src="./skate.js"></script>
